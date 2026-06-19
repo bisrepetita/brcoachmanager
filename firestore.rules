@@ -1,0 +1,137 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── Fonctions utilitaires ────────────────────────────────────────────────
+
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return isAuth() && 'admin' in userDoc().roles;
+    }
+
+    function isCoach() {
+      return isAuth() && ('coach' in userDoc().roles || 'admin' in userDoc().roles);
+    }
+
+    function isAssignedCoach(sessionData) {
+      return isAuth() && request.auth.uid in sessionData.coachIds;
+    }
+
+    function canReadClient(clientData) {
+      return isAdmin() || (isAuth() && request.auth.uid in clientData.visibleToCoachIds);
+    }
+
+    // ─── users ────────────────────────────────────────────────────────────────
+
+    match /users/{userId} {
+      allow read: if isAdmin() || (isAuth() && request.auth.uid == userId);
+      // Coaches peuvent lire tous les profils (pour afficher les noms dans le calendrier)
+      allow read: if isCoach();
+      // Coach peut mettre à jour uniquement son token FCM
+      allow update: if isAdmin() || (
+        isAuth() && request.auth.uid == userId &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fcmToken', 'updatedAt'])
+      );
+      allow create, delete: if isAdmin();
+    }
+
+    // ─── clients ─────────────────────────────────────────────────────────────
+
+    match /clients/{clientId} {
+      allow read: if canReadClient(resource.data);
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ─── clientGroups ────────────────────────────────────────────────────────
+
+    match /clientGroups/{groupId} {
+      allow read: if isCoach();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ─── locations ───────────────────────────────────────────────────────────
+
+    match /locations/{locationId} {
+      allow read: if isAuth();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ─── services ────────────────────────────────────────────────────────────
+
+    match /services/{serviceId} {
+      allow read: if isAuth();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ─── sessions ────────────────────────────────────────────────────────────
+
+    match /sessions/{sessionId} {
+      allow read: if isAdmin() || isAssignedCoach(resource.data);
+
+      allow create: if isAdmin() || (isCoach() && request.auth.uid in request.resource.data.coachIds);
+
+      allow update: if isAdmin() || (
+        isAssignedCoach(resource.data) &&
+        !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['coachIds', 'priceSnapshot', 'roomRentalSnapshot', 'locationId', 'serviceId'])
+      );
+
+      // Coach peut supprimer ses propres séances
+      allow delete: if isAdmin() || isAssignedCoach(resource.data);
+    }
+
+    // ─── recurrences ─────────────────────────────────────────────────────────
+
+    match /recurrences/{recurrenceId} {
+      allow read: if isAdmin() || (isCoach() && request.auth.uid in resource.data.coachIds);
+      allow create: if isCoach();
+      allow update, delete: if isAdmin() || (isCoach() && request.auth.uid in resource.data.coachIds);
+    }
+
+    // ─── availabilitySlots ───────────────────────────────────────────────────
+
+    match /availabilitySlots/{slotId} {
+      // Tous les coachs voient tous les créneaux (coordination)
+      allow read: if isCoach();
+      allow create: if isCoach() && request.resource.data.coachId == request.auth.uid;
+      allow update, delete: if isAdmin() || (isCoach() && resource.data.coachId == request.auth.uid);
+    }
+
+    // ─── recurringAvailabilities ─────────────────────────────────────────────
+
+    match /recurringAvailabilities/{id} {
+      allow read: if isCoach();
+      allow create: if isCoach() && request.resource.data.coachId == request.auth.uid;
+      allow update, delete: if isAdmin() || (isCoach() && resource.data.coachId == request.auth.uid);
+    }
+
+    // ─── creditTransactions ──────────────────────────────────────────────────
+
+    match /creditTransactions/{txId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ─── roomRentalPayments ──────────────────────────────────────────────────
+
+    match /roomRentalPayments/{id} {
+      // Coach peut voir ses propres versements
+      allow read: if isAdmin() || (isAuth() && resource.data.coachId == request.auth.uid);
+      allow write: if isAdmin();
+    }
+
+    // ─── settings ────────────────────────────────────────────────────────────
+
+    match /settings/{docId} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
+    }
+
+  }
+}

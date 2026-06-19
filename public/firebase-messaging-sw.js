@@ -1,0 +1,42 @@
+importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js')
+importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js')
+
+// Les variables d'env ne sont pas disponibles ici — valeurs injectées au build
+// ou récupérées depuis la query string lors de l'enregistrement du SW.
+// On écoute le message 'FIREBASE_CONFIG' depuis le client pour configurer.
+
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'FIREBASE_CONFIG') {
+    if (!firebase.apps.length) {
+      firebase.initializeApp(event.data.config)
+    }
+    const messaging = firebase.messaging()
+
+    messaging.onBackgroundMessage((payload) => {
+      const { title = 'BRCoachManager', body = '' } = payload.notification ?? {}
+      self.registration.showNotification(title, {
+        body,
+        icon: '/icons/icon-192.png',
+        badge: '/icons/icon-192.png',
+        data: { link: payload.data?.link ?? '/' },
+      })
+    })
+  }
+})
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  const link = event.notification.data?.link ?? '/'
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      for (const client of list) {
+        if (client.url.includes(self.location.origin) && 'focus' in client) {
+          client.focus()
+          client.navigate(link)
+          return
+        }
+      }
+      return clients.openWindow(link)
+    })
+  )
+})
