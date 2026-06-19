@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo, useEffect } from 'react'
-import { orderBy, increment, serverTimestamp, doc, collection, addDoc, getDocs, query, where, orderBy as fbOrderBy, limit, startAfter, type QueryDocumentSnapshot } from 'firebase/firestore'
+import { orderBy, increment, serverTimestamp, doc, collection, addDoc, getDocs, query, where, orderBy as fbOrderBy, limit, startAfter, deleteDoc, type QueryDocumentSnapshot } from 'firebase/firestore'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { db } from '@/lib/firebase/firestore'
@@ -16,7 +16,7 @@ import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ListSkeleton } from '@/components/shared/LoadingSkeleton'
 import { useAuth } from '@/lib/hooks/useAuth'
-import { Plus, Search, Users, Pencil, CreditCard, X } from 'lucide-react'
+import { Plus, Search, Users, Pencil, CreditCard, X, Trash2 } from 'lucide-react'
 import type { Client, CreditTransaction } from '@/types'
 
 export default function ClientsPage() {
@@ -26,6 +26,8 @@ export default function ClientsPage() {
   const [sheet, setSheet] = useState<'create' | 'edit' | null>(null)
   const [editing, setEditing] = useState<Client | null>(null)
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   // Gestion crédits
@@ -107,7 +109,18 @@ export default function ClientsPage() {
     setPostalCode(c.postalCode ?? ''); setAdditionalInfo(c.additionalInfo ?? ''); setError(null); setSheet('edit')
   }
 
-  function close() { setSheet(null); setEditing(null) }
+  function close() { setSheet(null); setEditing(null); setConfirmDelete(false) }
+
+  async function handleDelete() {
+    if (!editing) return
+    setDeleting(true)
+    try {
+      await deleteDoc(doc(db, 'clients', editing.id))
+      close()
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   function openCredits(e: React.MouseEvent, c: Client) {
     e.stopPropagation()
@@ -361,6 +374,29 @@ export default function ClientsPage() {
             <Button size="lg" className="w-full" onClick={handleSave} loading={saving}>
               {sheet === 'create' ? 'Créer le client' : 'Enregistrer'}
             </Button>
+
+            {sheet === 'edit' && (
+              confirmDelete ? (
+                <div className="space-y-2 pt-1">
+                  <p className="text-[13px] text-center text-[var(--color-text-tertiary)]">Supprimer définitivement ce client ?</p>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="lg" className="flex-1" onClick={() => setConfirmDelete(false)}>Annuler</Button>
+                    <Button size="lg" className="flex-1" onClick={handleDelete} loading={deleting}
+                      style={{ background: '#C0392B', color: '#fff', borderColor: '#C0392B' }}>
+                      Confirmer
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setConfirmDelete(true)}
+                  className="w-full flex items-center justify-center gap-2 py-2 text-[13px] text-[var(--color-text-tertiary)] hover:text-[var(--color-danger)]"
+                >
+                  <Trash2 size={14} />
+                  Supprimer ce client
+                </button>
+              )
+            )}
           </div>
         </div>
       )}
