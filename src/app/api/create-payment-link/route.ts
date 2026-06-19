@@ -3,10 +3,16 @@ import { FieldValue } from 'firebase-admin/firestore'
 import Stripe from 'stripe'
 import { getAdminDb, getAdminAuth } from '@/lib/firebase/admin'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2026-05-27.dahlia' as any })
-
 export async function POST(req: NextRequest) {
+  // Initialisation lazy — pour catcher les erreurs de config dans le try/catch
+  let stripe: Stripe
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2026-05-27.dahlia' as any })
+  } catch (err) {
+    return NextResponse.json({ error: `Stripe init: ${String(err)}` }, { status: 500 })
+  }
+
   const token = req.headers.get('authorization')?.replace('Bearer ', '')
   if (!token) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
 

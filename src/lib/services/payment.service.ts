@@ -19,8 +19,10 @@ export async function requestPaymentLink(
   })
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Erreur inconnue' }))
-    throw new Error((err as { error: string }).error)
+    const text = await res.text().catch(() => '')
+    let message = `HTTP ${res.status}`
+    try { message = (JSON.parse(text) as { error: string }).error ?? message } catch { message = text || message }
+    throw new Error(message)
   }
 
   const data = (await res.json()) as { link: string }
