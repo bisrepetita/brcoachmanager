@@ -202,8 +202,9 @@ export default function SessionDetailPage() {
       // Fallback : copie toujours le lien dans le presse-papiers
       await navigator.clipboard.writeText(link).catch(() => {})
     } catch (err) {
-      console.error('handleSendPayment:', err)
-      alert('Erreur lors de la génération du lien PayRexx. Vérifie la configuration.')
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('handleSendPayment: Error:', msg)
+      alert(`Erreur : ${msg}`)
     } finally {
       setSendingFor(prev => {
         const next = new Set(prev)

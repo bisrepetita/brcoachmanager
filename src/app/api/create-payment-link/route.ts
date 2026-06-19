@@ -100,7 +100,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ link: checkoutSession.url })
   } catch (err) {
-    console.error('[create-payment-link] error:', err)
-    return NextResponse.json({ error: String(err) }, { status: 500 })
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('[create-payment-link] error:', msg)
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
