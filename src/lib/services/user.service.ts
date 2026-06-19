@@ -1,18 +1,14 @@
 import {
-  collection,
   doc,
-  setDoc,
   updateDoc,
   serverTimestamp,
-  Timestamp,
 } from 'firebase/firestore'
 import {
-  createUserWithEmailAndPassword,
   sendPasswordResetEmail,
 } from 'firebase/auth'
 import { db } from '@/lib/firebase/firestore'
 import { auth } from '@/lib/firebase/auth'
-import type { User, UserRole } from '@/types'
+import type { UserRole } from '@/types'
 
 export interface CreateCoachInput {
   firstName: string
@@ -29,28 +25,25 @@ export interface UpdateCoachInput extends Partial<Omit<CreateCoachInput, 'email'
 }
 
 export async function createCoach(input: CreateCoachInput): Promise<string> {
-  // Crée le compte Firebase Auth avec un mot de passe temporaire
-  const tempPassword = Math.random().toString(36).slice(-10) + 'A1!'
-  const cred = await createUserWithEmailAndPassword(auth, input.email, tempPassword)
-  const uid = cred.user.uid
+  const token = await auth.currentUser?.getIdToken()
+  if (!token) throw new Error('Non authentifié')
 
-  // Crée le document Firestore
-  await setDoc(doc(db, 'users', uid), {
-    firstName: input.firstName,
-    lastName: input.lastName,
-    email: input.email,
-    phone: input.phone ?? '',
-    roles: input.roles,
-    active: true,
-    color: input.color,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
+  const res = await fetch('/api/create-coach', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify(input),
   })
 
-  // Envoie un email de réinitialisation du mot de passe
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error ?? 'Erreur création coach')
+
+  // Envoie l'email de reset depuis le client (ne déconnecte pas l'admin)
   await sendPasswordResetEmail(auth, input.email)
 
-  return uid
+  return data.uid as string
 }
 
 export async function updateCoach(uid: string, input: UpdateCoachInput): Promise<void> {
