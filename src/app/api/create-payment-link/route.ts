@@ -1,25 +1,15 @@
-export const dynamic = 'force-dynamic'
-
 import { NextRequest, NextResponse } from 'next/server'
+import { FieldValue } from 'firebase-admin/firestore'
+import Stripe from 'stripe'
+import { getAdminDb, getAdminAuth } from '@/lib/firebase/admin'
+
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
 
 export async function POST(req: NextRequest) {
   try {
-    // Vérification des variables d'environnement
     const stripeKey = process.env.STRIPE_SECRET_KEY
-    const projectId = process.env.FIREBASE_ADMIN_PROJECT_ID
-    const clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL
-    const privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY
-
     if (!stripeKey) return NextResponse.json({ error: 'STRIPE_SECRET_KEY manquant' }, { status: 500 })
-    if (!projectId || !clientEmail || !privateKey) {
-      return NextResponse.json({ error: `Firebase Admin manquant: ${!projectId ? 'PROJECT_ID ' : ''}${!clientEmail ? 'CLIENT_EMAIL ' : ''}${!privateKey ? 'PRIVATE_KEY' : ''}` }, { status: 500 })
-    }
-
-    const [{ default: Stripe }, { FieldValue }, { getAdminDb, getAdminAuth }] = await Promise.all([
-      import('stripe'),
-      import('firebase-admin/firestore'),
-      import('@/lib/firebase/admin'),
-    ])
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const stripe = new Stripe(stripeKey, { apiVersion: '2026-05-27.dahlia' as any })
@@ -47,7 +37,6 @@ export async function POST(req: NextRequest) {
     const userRoles: string[] = (userSnap.data() as { roles?: string[] })?.roles ?? []
     const isAdmin = userRoles.includes('admin')
     const isAssignedCoach = (session['coachIds'] as string[]).includes(uid)
-
     if (!isAdmin && !isAssignedCoach) return NextResponse.json({ error: 'Non autorisé' }, { status: 403 })
 
     const distribution = (session['paymentDistribution'] as Array<Record<string, unknown>>) ?? []
@@ -63,7 +52,7 @@ export async function POST(req: NextRequest) {
     const returnUrl = process.env.STRIPE_RETURN_URL ?? 'https://bisrepetita.ch'
 
     const checkoutSession = await stripe.checkout.sessions.create({
-      payment_method_types: ['card', 'twint'],
+      payment_method_types: ['card'],
       mode: 'payment',
       ...(client?.email ? { customer_email: client.email } : {}),
       line_items: [{
@@ -86,7 +75,6 @@ export async function POST(req: NextRequest) {
         ? { ...p, paymentStatus: 'link_sent', twintLink: checkoutSession.url, stripeSessionId: checkoutSession.id }
         : p
     )
-
     await sessionRef.update({ paymentDistribution: updated, updatedAt: FieldValue.serverTimestamp() })
 
     return NextResponse.json({ link: checkoutSession.url })
