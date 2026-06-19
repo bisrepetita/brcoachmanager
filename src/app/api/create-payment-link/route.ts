@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
     const returnUrl = process.env.STRIPE_RETURN_URL ?? 'https://bisrepetita.ch'
 
     const checkoutSession = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
+      payment_method_types: ['card', 'twint'],
       mode: 'payment',
       ...(client?.email ? { customer_email: client.email } : {}),
       line_items: [{
