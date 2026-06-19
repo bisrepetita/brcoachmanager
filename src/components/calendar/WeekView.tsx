@@ -10,7 +10,7 @@ const START_HOUR = 6
 const TOTAL_HOURS = 16
 const HOUR_PX = 64
 const TOTAL_HEIGHT = TOTAL_HOURS * HOUR_PX
-const DAY_WIDTH = 110
+const TIME_COL = 32
 const HOURS = Array.from({ length: TOTAL_HOURS + 1 }, (_, i) => START_HOUR + i)
 
 function toTopPx(date: Date) {
@@ -60,14 +60,6 @@ export function WeekView({ anchor, sessions, coachMap, serviceMap, onSessionClic
     const now = new Date()
     const target = Math.max(0, toTopPx(now) - 80)
     scrollRef.current.scrollTop = target
-
-    // Horizontal scroll: center today
-    const todayIdx = weekDays.findIndex((d) => isToday(d))
-    if (todayIdx !== -1) {
-      const timeColWidth = 40
-      const scrollLeft = timeColWidth + todayIdx * DAY_WIDTH - window.innerWidth / 2 + DAY_WIDTH / 2
-      scrollRef.current.scrollLeft = Math.max(0, scrollLeft)
-    }
   }, [anchor]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const sessionsByDay = useMemo(() => {
@@ -78,23 +70,23 @@ export function WeekView({ anchor, sessions, coachMap, serviceMap, onSessionClic
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
-      {/* Day headers */}
+      {/* Day headers — flex, each day takes equal width */}
       <div className="flex shrink-0 border-b border-[var(--color-border)] bg-[var(--color-surface)]">
-        <div className="w-10 shrink-0" />
+        <div style={{ width: TIME_COL }} className="shrink-0" />
         {weekDays.map((day, i) => {
           const today = isToday(day)
+          const count = sessionsByDay[i]?.length ?? 0
           return (
             <button
               key={i}
               onClick={() => onDayClick(day)}
-              className="flex flex-col items-center py-2 shrink-0"
-              style={{ width: DAY_WIDTH }}
+              className="flex flex-col items-center py-1.5 flex-1 min-w-0"
             >
-              <span className="text-[10px] uppercase font-semibold" style={{ color: today ? '#1A1A18' : '#A09890' }}>
-                {format(day, 'EEE', { locale: fr })}
+              <span className="text-[9px] uppercase font-semibold" style={{ color: today ? '#1A1A18' : '#A09890' }}>
+                {format(day, 'EEEEE', { locale: fr })}
               </span>
               <span
-                className="text-[15px] font-semibold leading-tight mt-0.5 w-7 h-7 flex items-center justify-center rounded-full"
+                className="text-[14px] font-semibold leading-tight mt-0.5 w-6 h-6 flex items-center justify-center rounded-full"
                 style={{
                   background: today ? '#1A1A18' : 'transparent',
                   color: today ? '#FFFFFF' : '#1A1A18',
@@ -102,36 +94,36 @@ export function WeekView({ anchor, sessions, coachMap, serviceMap, onSessionClic
               >
                 {format(day, 'd')}
               </span>
-              <span className="text-[9px] mt-0.5" style={{ color: '#C8C4BC' }}>
-                {(sessionsByDay[i]?.length ?? 0) > 0 ? `${sessionsByDay[i]!.length} séance${sessionsByDay[i]!.length > 1 ? 's' : ''}` : ''}
-              </span>
+              {count > 0 && (
+                <div className="w-1 h-1 rounded-full mt-0.5" style={{ background: '#A09890' }} />
+              )}
             </button>
           )
         })}
       </div>
 
-      {/* Time grid */}
-      <div ref={scrollRef} className="overflow-auto flex-1">
+      {/* Time grid — vertical scroll only */}
+      <div ref={scrollRef} className="overflow-y-auto overflow-x-hidden flex-1">
         <div className="flex" style={{ height: TOTAL_HEIGHT }}>
           {/* Time column */}
-          <div className="shrink-0 w-10 relative select-none sticky left-0 z-20 bg-[var(--color-background)]" style={{ height: TOTAL_HEIGHT }}>
+          <div className="shrink-0 relative select-none" style={{ width: TIME_COL, height: TOTAL_HEIGHT }}>
             {HOURS.map((h) => (
               <div
                 key={h}
-                className="absolute right-1.5 text-[9px] leading-none"
-                style={{ top: (h - START_HOUR) * HOUR_PX - 5, color: '#A09890' }}
+                className="absolute text-[9px] leading-none"
+                style={{ top: (h - START_HOUR) * HOUR_PX - 5, right: 4, color: '#A09890' }}
               >
                 {String(h).padStart(2, '0')}
               </div>
             ))}
           </div>
 
-          {/* Day columns */}
+          {/* Day columns — flex-1 each */}
           {weekDays.map((day, dayIdx) => (
             <div
               key={dayIdx}
-              className="relative border-l border-[var(--color-border)] shrink-0"
-              style={{ width: DAY_WIDTH, height: TOTAL_HEIGHT }}
+              className="relative border-l border-[var(--color-border)] flex-1 min-w-0"
+              style={{ height: TOTAL_HEIGHT }}
             >
               {/* Hour lines */}
               {HOURS.map((h) => (
@@ -146,13 +138,13 @@ export function WeekView({ anchor, sessions, coachMap, serviceMap, onSessionClic
               {Array.from({ length: TOTAL_HOURS }, (_, i) => (
                 <button
                   key={i}
-                  className="absolute inset-x-0 hover:bg-[#F0EDE8]/50"
+                  className="absolute inset-x-0"
                   style={{ top: i * HOUR_PX, height: HOUR_PX }}
                   onClick={() => onSlotClick(day, START_HOUR + i)}
                 />
               ))}
 
-              {/* Current time (only on today's column) */}
+              {/* Current time */}
               {nowPx !== null && todayCol === dayIdx && (
                 <div className="absolute inset-x-0 z-20 flex items-center pointer-events-none" style={{ top: nowPx }}>
                   <div className="w-1.5 h-1.5 rounded-full bg-red-500 -ml-0.5 shrink-0" />
@@ -169,12 +161,12 @@ export function WeekView({ anchor, sessions, coachMap, serviceMap, onSessionClic
                 const coachColor = session.coachIds[0] ? (coachMap.get(session.coachIds[0])?.color ?? '#6366F1') : '#6366F1'
                 const serviceName = serviceMap.get(session.serviceId)?.name ?? ''
                 return (
-                  <div key={session.id} className="absolute inset-x-0.5 z-10" style={{ top, height }}>
+                  <div key={session.id} className="absolute z-10" style={{ top, height, left: 1, right: 1 }}>
                     <SessionBlock
                       session={session}
                       coachColor={coachColor}
                       serviceName={serviceName}
-                      compact={height < 44 || DAY_WIDTH < 120}
+                      compact={true}
                       onClick={() => onSessionClick(session)}
                     />
                   </div>
