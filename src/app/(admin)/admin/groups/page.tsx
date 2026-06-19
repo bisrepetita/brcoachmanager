@@ -87,7 +87,7 @@ export default function GroupsPage() {
               <button onClick={close} className="text-[13px] text-[var(--color-text-tertiary)]">Annuler</button>
             </div>
             <FormField label="Nom du groupe" required>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Groupe entreprise Addax" />
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="ex. Groupe entreprise, Club sportif..." />
             </FormField>
             <FormField label="Notes">
               <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Informations sur le groupe..." />
