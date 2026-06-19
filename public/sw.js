@@ -1,17 +1,13 @@
 const CACHE = 'br-coach-v1'
 const OFFLINE_URL = '/offline'
-
-// Assets Next.js immuables (hachés) — cache-first à vie
 const IMMUTABLE_PATTERN = /\/_next\/static\//
 
-// À l'installation : précache la page offline et la racine
 self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open(CACHE).then(c => c.addAll([OFFLINE_URL, '/'])).then(() => self.skipWaiting())
   )
 })
 
-// À l'activation : supprimer les anciens caches
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys()
@@ -20,25 +16,31 @@ self.addEventListener('activate', (e) => {
   )
 })
 
+function safePutInCache(request, response) {
+  if (!response || !response.ok) return
+  try {
+    const clone = response.clone()
+    caches.open(CACHE).then(c => c.put(request, clone)).catch(() => {})
+  } catch {}
+}
+
 self.addEventListener('fetch', (e) => {
   const { request } = e
   const url = new URL(request.url)
 
-  // Ne pas intercepter les requêtes non-GET, API, FCM, ou cross-origin
   if (request.method !== 'GET') return
   if (url.pathname.startsWith('/api/')) return
-  if (!url.origin.includes(self.location.hostname)) return
+  if (url.pathname === '/manifest.json') return  // géré par le navigateur directement
+  if (url.pathname.startsWith('/_vercel/')) return  // protection Vercel
+  if (url.origin !== self.location.origin) return
 
-  // Assets Next.js immuables → cache-first (ne changent jamais)
+  // Assets Next.js immuables → cache-first
   if (IMMUTABLE_PATTERN.test(url.pathname)) {
     e.respondWith(
       caches.match(request).then(cached => {
         if (cached) return cached
         return fetch(request).then(res => {
-          if (res.ok) {
-            const clone = res.clone()
-            caches.open(CACHE).then(c => c.put(request, clone))
-          }
+          safePutInCache(request, res)
           return res
         })
       })
@@ -46,30 +48,34 @@ self.addEventListener('fetch', (e) => {
     return
   }
 
-  // Navigation HTML → network-first, fallback offline
+  // Navigation HTML → network-first, fallback cache puis offline
   if (request.mode === 'navigate') {
     e.respondWith(
       fetch(request)
         .then(res => {
-          if (res.ok) {
-            const clone = res.clone()
-            caches.open(CACHE).then(c => c.put(request, clone))
-          }
+          safePutInCache(request, res)
           return res
         })
-        .catch(() => caches.match(request).then(cached => cached ?? caches.match(OFFLINE_URL)))
+        .catch(() =>
+          caches.match(request).then(cached =>
+            cached ?? caches.match(OFFLINE_URL)
+          )
+        )
     )
     return
   }
 
-  // Autres assets (images, fonts…) → stale-while-revalidate
+  // Autres assets → stale-while-revalidate
   e.respondWith(
     caches.match(request).then(cached => {
-      const network = fetch(request).then(res => {
-        if (res.ok) caches.open(CACHE).then(c => c.put(request, res.clone()))
-        return res
-      }).catch(() => cached)
-      return cached ?? network
+      const networkFetch = fetch(request)
+        .then(res => {
+          safePutInCache(request, res)
+          return res
+        })
+        .catch(() => cached ?? new Response('', { status: 503 }))
+
+      return cached ?? networkFetch
     })
   )
 })
