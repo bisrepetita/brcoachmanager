@@ -39,10 +39,13 @@
     "tailwind-merge": "^3.6.0",
     "tailwindcss": "^4.3.1",
     "typescript": "^6.0.3",
-    "zustand": "^5.0.14"
+    "zustand": "^5.0.14",
+    "firebase-admin": "^14.0.0"
   },
   "devDependencies": {
-    "dotenv": "^17.4.2",
-    "firebase-admin": "^14.0.0"
+    "dotenv": "^17.4.2"
+  },
+  "overrides": {
+    "jose": "4.15.9"
   }
 }
