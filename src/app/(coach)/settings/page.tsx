@@ -24,13 +24,20 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [notifStatus, setNotifStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
+  const [notifDetail, setNotifDetail] = useState('')
 
   async function testNotification() {
-    if (!user?.id) return
+    if (!user?.id) { setNotifDetail('Utilisateur non chargé'); return }
     setNotifStatus('sending')
+    setNotifDetail('Demande de permission…')
     try {
+      if (!('Notification' in window)) { setNotifDetail('Notifications non supportées'); setNotifStatus('error'); return }
+      if (Notification.permission === 'denied') { setNotifDetail('Notifications bloquées dans le navigateur'); setNotifStatus('error'); return }
+
       const token = await requestNotificationPermission(user.id)
-      if (!token) { setNotifStatus('error'); return }
+      if (!token) { setNotifDetail('Token FCM introuvable — clé VAPID manquante ou permission refusée'); setNotifStatus('error'); return }
+
+      setNotifDetail('Token OK, envoi…')
       const { getAuth } = await import('firebase/auth')
       const idToken = await getAuth().currentUser?.getIdToken()
       const res = await fetch('/api/send-notification', {
@@ -38,9 +45,19 @@ export default function SettingsPage() {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
         body: JSON.stringify({ userIds: [user.id], title: 'Test BRCoachManager', body: 'Les notifications fonctionnent !' }),
       })
-      setNotifStatus(res.ok ? 'sent' : 'error')
-    } catch { setNotifStatus('error') }
-    setTimeout(() => setNotifStatus('idle'), 3000)
+      const data = await res.json()
+      if (res.ok) {
+        setNotifDetail(`Envoyé (${data.sent ?? 0} reçu, ${data.failed ?? 0} échoué)`)
+        setNotifStatus('sent')
+      } else {
+        setNotifDetail(`Erreur API: ${data.error ?? res.status}`)
+        setNotifStatus('error')
+      }
+    } catch (e) {
+      setNotifDetail(`Exception: ${(e as Error).message}`)
+      setNotifStatus('error')
+    }
+    setTimeout(() => { setNotifStatus('idle'); setNotifDetail('') }, 6000)
   }
 
   // Génère un icalSecret si l'utilisateur n'en a pas
@@ -181,6 +198,9 @@ export default function SettingsPage() {
               {notifStatus === 'sending' ? '…' : notifStatus === 'sent' ? 'Envoyé ✓' : notifStatus === 'error' ? 'Erreur' : 'Tester'}
             </button>
           </div>
+          {notifDetail ? (
+            <p className="mt-2 text-[11px] px-1" style={{ color: notifStatus === 'error' ? '#DC2626' : '#7A7570' }}>{notifDetail}</p>
+          ) : null}
         </section>
 
         {/* Admin hub */}
