@@ -72,8 +72,20 @@ function navigate(view: CalView, anchor: Date, dir: 1 | -1): Date {
 export default function CalendarPage() {
   const router = useRouter()
   const { user } = useAuth()
-  const [view, setView] = useState<CalView>('week')
-  const [anchor, setAnchor] = useState(() => startOfDay(new Date()))
+  const [view, setView] = useState<CalView>(() => {
+    if (typeof window === 'undefined') return 'week'
+    return (sessionStorage.getItem('calView') as CalView) ?? 'week'
+  })
+  const [anchor, setAnchor] = useState(() => {
+    if (typeof window === 'undefined') return startOfDay(new Date())
+    const saved = sessionStorage.getItem('calAnchor')
+    return saved ? startOfDay(new Date(saved)) : startOfDay(new Date())
+  })
+
+  useEffect(() => {
+    sessionStorage.setItem('calAnchor', anchor.toISOString())
+    sessionStorage.setItem('calView', view)
+  }, [anchor, view])
 
   const range = useMemo(() => getRange(view, anchor), [view, anchor])
   const { sessions } = useSessions(range.start, range.end)
