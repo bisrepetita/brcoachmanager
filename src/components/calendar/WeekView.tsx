@@ -4,11 +4,11 @@ import { useMemo, useEffect, useRef, useState } from 'react'
 import { format, isSameDay, isToday, startOfWeek, addDays } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { SessionBlock } from './SessionBlock'
-import type { Session, User, Service } from '@/types'
+import type { Session, User, Service, Client } from '@/types'
 
 const START_HOUR = 6
 const TOTAL_HOURS = 16
-const HOUR_PX = 64
+const HOUR_PX = 48
 const TOTAL_HEIGHT = TOTAL_HOURS * HOUR_PX
 const TIME_COL = 32
 const HOURS = Array.from({ length: TOTAL_HOURS + 1 }, (_, i) => START_HOUR + i)
@@ -26,12 +26,13 @@ interface Props {
   sessions: Session[]
   coachMap: Map<string, User>
   serviceMap: Map<string, Service>
+  clientMap: Map<string, Client>
   onSessionClick: (session: Session) => void
   onDayClick: (date: Date) => void
   onSlotClick: (date: Date, hour: number) => void
 }
 
-export function WeekView({ anchor, sessions, coachMap, serviceMap, onSessionClick, onDayClick, onSlotClick }: Props) {
+export function WeekView({ anchor, sessions, coachMap, serviceMap, clientMap, onSessionClick, onDayClick, onSlotClick }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [nowPx, setNowPx] = useState<number | null>(null)
   const [todayCol, setTodayCol] = useState<number | null>(null)
@@ -160,12 +161,14 @@ export function WeekView({ anchor, sessions, coachMap, serviceMap, onSessionClic
                 const height = toDurationPx(start, end)
                 const coachColor = session.coachIds[0] ? (coachMap.get(session.coachIds[0])?.color ?? '#6366F1') : '#6366F1'
                 const serviceName = serviceMap.get(session.serviceId)?.name ?? ''
+                const firstClientName = session.clientIds[0] ? clientMap.get(session.clientIds[0])?.firstName : undefined
                 return (
                   <div key={session.id} className="absolute z-10" style={{ top, height, left: 1, right: 1 }}>
                     <SessionBlock
                       session={session}
                       coachColor={coachColor}
                       serviceName={serviceName}
+                      clientName={firstClientName}
                       compact={true}
                       onClick={() => onSessionClick(session)}
                     />

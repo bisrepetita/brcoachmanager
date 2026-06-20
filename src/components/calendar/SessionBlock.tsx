@@ -19,6 +19,7 @@ interface Props {
   session: Session
   coachColor: string
   serviceName: string
+  clientName?: string
   /** Number of parallel columns (for overlap layout) */
   totalCols?: number
   /** Column index (for overlap layout) */
@@ -31,6 +32,7 @@ export function SessionBlock({
   session,
   coachColor,
   serviceName,
+  clientName,
   totalCols = 1,
   colIndex = 0,
   onClick,
@@ -58,11 +60,15 @@ export function SessionBlock({
         opacity: STATUS_OPACITY[session.status],
       }}
     >
-      <div className="px-1.5 py-1 h-full flex flex-col justify-start overflow-hidden">
+      <div className="px-1.5 py-0.5 h-full flex flex-col justify-start overflow-hidden">
         <p className="text-[10px] font-semibold leading-tight truncate" style={{ color: coachColor }}>
           {format(start, 'HH:mm')}–{format(end, 'HH:mm')}
         </p>
-        {!compact && (
+        {compact ? (
+          clientName && (
+            <p className="text-[10px] font-medium text-text-primary truncate leading-tight">{clientName}</p>
+          )
+        ) : (
           <>
             <p className="text-[11px] font-medium text-text-primary truncate leading-tight mt-0.5">{serviceName}</p>
             {clientCount > 0 && (

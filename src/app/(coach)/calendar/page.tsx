@@ -20,7 +20,7 @@ import { WeekView } from '@/components/calendar/WeekView'
 import { MonthView } from '@/components/calendar/MonthView'
 import { useSessions } from '@/lib/hooks/useSessions'
 import { useCollection } from '@/lib/hooks/useCollection'
-import type { User, Service, Session } from '@/types'
+import type { User, Service, Session, Client } from '@/types'
 
 type CalView = 'day' | 'week' | 'month'
 
@@ -79,9 +79,11 @@ export default function CalendarPage() {
   const { sessions } = useSessions(range.start, range.end)
   const { data: coaches } = useCollection<User>('users', [orderBy('firstName')])
   const { data: services } = useCollection<Service>('services', [orderBy('name')])
+  const { data: clients } = useCollection<Client>('clients', [orderBy('firstName')])
 
   const coachMap = useMemo(() => new Map(coaches.map((c) => [c.id, c])), [coaches])
   const serviceMap = useMemo(() => new Map(services.map((s) => [s.id, s])), [services])
+  const clientMap = useMemo(() => new Map(clients.map((c) => [c.id, c])), [clients])
 
   // Prolonge les récurrences infinies si besoin (une fois par chargement de page)
   useEffect(() => {
@@ -229,6 +231,7 @@ export default function CalendarPage() {
             sessions={sessions}
             coachMap={coachMap}
             serviceMap={serviceMap}
+            clientMap={clientMap}
             onSessionClick={handleSessionClick}
             onDayClick={handleDayClick}
             onSlotClick={handleWeekSlotClick}
