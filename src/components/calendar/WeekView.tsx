@@ -4,7 +4,7 @@ import { useMemo, useEffect, useRef, useState } from 'react'
 import { format, isSameDay, isToday, startOfWeek, addDays } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { SessionBlock } from './SessionBlock'
-import type { Session, User, Service, Client } from '@/types'
+import type { Session, User, Service, Client, ClientGroup } from '@/types'
 
 const START_HOUR = 6
 const TOTAL_HOURS = 16
@@ -27,12 +27,13 @@ interface Props {
   coachMap: Map<string, User>
   serviceMap: Map<string, Service>
   clientMap: Map<string, Client>
+  groupMap: Map<string, ClientGroup>
   onSessionClick: (session: Session) => void
   onDayClick: (date: Date) => void
   onSlotClick: (date: Date, hour: number) => void
 }
 
-export function WeekView({ anchor, sessions, coachMap, serviceMap, clientMap, onSessionClick, onDayClick, onSlotClick }: Props) {
+export function WeekView({ anchor, sessions, coachMap, serviceMap, clientMap, groupMap, onSessionClick, onDayClick, onSlotClick }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [nowPx, setNowPx] = useState<number | null>(null)
   const [todayCol, setTodayCol] = useState<number | null>(null)
@@ -161,7 +162,9 @@ export function WeekView({ anchor, sessions, coachMap, serviceMap, clientMap, on
                 const height = toDurationPx(start, end)
                 const coachColor = session.coachIds[0] ? (coachMap.get(session.coachIds[0])?.color ?? '#6366F1') : '#6366F1'
                 const serviceName = serviceMap.get(session.serviceId)?.name ?? ''
-                const firstClientName = session.clientIds[0] ? clientMap.get(session.clientIds[0])?.firstName : undefined
+                const firstClientName = session.clientGroupId
+                  ? groupMap.get(session.clientGroupId)?.name
+                  : session.clientIds[0] ? clientMap.get(session.clientIds[0])?.firstName : undefined
                 return (
                   <div key={session.id} className="absolute z-10" style={{ top, height, left: 1, right: 1 }}>
                     <SessionBlock
