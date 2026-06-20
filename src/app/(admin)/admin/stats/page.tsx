@@ -48,13 +48,24 @@ export default function StatsPage() {
     const done = filtered.filter(s => s.status === 'done').length
     const cancelled = filtered.filter(s => s.status === 'cancelled').length
 
-    const revenue = filtered
-      .filter(s => s.status !== 'cancelled')
-      .reduce((sum, s) => sum + (s.paymentDistribution ?? []).reduce((a, p) => a + (p.amountDue ?? 0), 0), 0)
+    // Pour les séances indépendantes : CA = location (roomRentalSnapshot)
+    // Pour les séances normales : CA = service (paymentDistribution)
+    function sessionRevenue(s: Session): number {
+      if (s.isIndependent) {
+        return (s.roomRentalSnapshot ?? []).reduce((a, r) => a + (r.amountDueToCompany ?? 0), 0)
+      }
+      return (s.paymentDistribution ?? []).reduce((a, p) => a + (p.amountDue ?? 0), 0)
+    }
 
-    const paid = filtered
-      .filter(s => s.status !== 'cancelled')
-      .reduce((sum, s) => sum + (s.paymentDistribution ?? []).reduce((a, p) => a + (p.amountPaid ?? 0), 0), 0)
+    function sessionPaid(s: Session): number {
+      if (s.isIndependent) {
+        return (s.roomRentalSnapshot ?? []).filter(r => r.status === 'paid').reduce((a, r) => a + (r.amountDueToCompany ?? 0), 0)
+      }
+      return (s.paymentDistribution ?? []).reduce((a, p) => a + (p.amountPaid ?? 0), 0)
+    }
+
+    const revenue = filtered.filter(s => s.status !== 'cancelled').reduce((sum, s) => sum + sessionRevenue(s), 0)
+    const paid = filtered.filter(s => s.status !== 'cancelled').reduce((sum, s) => sum + sessionPaid(s), 0)
 
     // Par service
     const byService: Record<string, { name: string; count: number; revenue: number }> = {}
@@ -62,7 +73,7 @@ export default function StatsPage() {
       const name = services.find(sv => sv.id === s.serviceId)?.name ?? s.priceSnapshot?.serviceName ?? s.serviceId
       if (!byService[s.serviceId]) byService[s.serviceId] = { name, count: 0, revenue: 0 }
       byService[s.serviceId]!.count++
-      byService[s.serviceId]!.revenue += (s.paymentDistribution ?? []).reduce((a, p) => a + (p.amountDue ?? 0), 0)
+      byService[s.serviceId]!.revenue += sessionRevenue(s)
     })
 
     // Par coach
