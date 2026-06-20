@@ -44,8 +44,10 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   // Notifications en foreground → toast in-app
   useEffect(() => {
     const unsub = onForegroundMessage((payload) => {
-      const title = payload.notification?.title ?? 'BRCoachManager'
-      const body = payload.notification?.body
+      // Les messages sont data-only : lire payload.data
+      const data = payload.data as Record<string, string> | undefined
+      const title = data?.title ?? payload.notification?.title ?? 'BRCoachManager'
+      const body = data?.body ?? payload.notification?.body
       showToast(title, body)
     })
     return () => { if (typeof unsub === 'function') unsub() }

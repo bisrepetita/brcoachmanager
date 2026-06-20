@@ -18,7 +18,6 @@ export async function POST(req: NextRequest) {
 
     const db = getAdminDb()
 
-    // Récupérer les tokens FCM des utilisateurs ciblés
     const tokens: string[] = []
     for (const uid of userIds) {
       const snap = await db.collection('users').doc(uid).get()
@@ -32,17 +31,12 @@ export async function POST(req: NextRequest) {
 
     const messaging = getMessaging(getAdminApp())
 
+    // Data-only message : onMessage se déclenche en foreground (toast),
+    // onBackgroundMessage dans le SW se déclenche en background (notif système)
     const response = await messaging.sendEachForMulticast({
       tokens,
-      notification: { title, body },
-      data: link ? { link } : {},
-      webpush: {
-        notification: {
-          icon: '/icons/icon-192.png',
-          badge: '/icons/icon-192.png',
-        },
-        fcmOptions: link ? { link } : {},
-      },
+      data: { title, body, link: link ?? '/' },
+      webpush: { headers: { Urgency: 'high' } },
     })
 
     return NextResponse.json({ sent: response.successCount, failed: response.failureCount })

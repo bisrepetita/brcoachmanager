@@ -1,10 +1,6 @@
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js')
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js')
 
-// Les variables d'env ne sont pas disponibles ici — valeurs injectées au build
-// ou récupérées depuis la query string lors de l'enregistrement du SW.
-// On écoute le message 'FIREBASE_CONFIG' depuis le client pour configurer.
-
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'FIREBASE_CONFIG') {
     if (!firebase.apps.length) {
@@ -12,13 +8,16 @@ self.addEventListener('message', (event) => {
     }
     const messaging = firebase.messaging()
 
+    // Data-only messages en background : affichage manuel
     messaging.onBackgroundMessage((payload) => {
-      const { title = 'BRCoachManager', body = '' } = payload.notification ?? {}
+      const data = payload.data ?? {}
+      const title = data.title ?? 'BRCoachManager'
+      const body = data.body ?? ''
       self.registration.showNotification(title, {
         body,
         icon: '/icons/icon-192.png',
         badge: '/icons/icon-192.png',
-        data: { link: payload.data?.link ?? '/' },
+        data: { link: data.link ?? '/' },
       })
     })
   }
