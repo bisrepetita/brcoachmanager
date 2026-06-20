@@ -153,7 +153,7 @@ export default function CalendarPage() {
 
   const touchStartX = useRef<number | null>(null)
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX
+    touchStartX.current = e.touches[0]?.clientX ?? null
   }, [])
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
     if (touchStartX.current === null) return
