@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef, useReducer } from 'react'
 import { extendInfiniteRecurrences } from '@/lib/services/recurrence.service'
 import { sendNotification } from '@/lib/services/notification.service'
 import { useRouter } from 'next/navigation'
@@ -13,7 +13,7 @@ import { fr } from 'date-fns/locale'
 import { orderBy, where, getDocs, query, collection, doc, updateDoc, Timestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase/firestore'
 import { useAuth } from '@/lib/hooks/useAuth'
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, RefreshCw } from 'lucide-react'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { DayView } from '@/components/calendar/DayView'
 import { WeekView } from '@/components/calendar/WeekView'
@@ -98,6 +98,36 @@ export default function CalendarPage() {
   const serviceMap = useMemo(() => new Map(services.map((s) => [s.id, s])), [services])
   const clientMap = useMemo(() => new Map(clients.map((c) => [c.id, c])), [clients])
   const groupMap = useMemo(() => new Map(groups.map((g) => [g.id, g])), [groups])
+
+  // Événements Google Calendar
+  const [externalEvents, setExternalEvents] = useState<{ uid: string; title: string; start: string; end: string }[]>([])
+  const [gcalLoading, setGcalLoading] = useState(false)
+  const [, forceGcalRefresh] = useReducer(x => x + 1, 0)
+
+  useEffect(() => {
+    if (!user?.googleCalendarUrl || !user?.id) return
+    setGcalLoading(true)
+    import('firebase/auth').then(({ getAuth }) => {
+      const auth = getAuth()
+      auth.currentUser?.getIdToken().then(token =>
+        fetch('/api/ical-proxy', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ url: user.googleCalendarUrl }),
+        }).then(r => r.json()).then(data => {
+          if (data.events) setExternalEvents(data.events)
+        })
+      )
+    }).finally(() => setGcalLoading(false))
+  }, [user?.googleCalendarUrl, user?.id, forceGcalRefresh])
+
+  const visibleExternalEvents = useMemo(() => {
+    return externalEvents.filter(e => {
+      const s = new Date(e.start)
+      const en = new Date(e.end)
+      return s < range.end && en > range.start
+    })
+  }, [externalEvents, range])
 
   // Prolonge les récurrences infinies si besoin (une fois par chargement de page)
   useEffect(() => {
@@ -206,12 +236,20 @@ export default function CalendarPage() {
           </div>
         }
         right={
-          <button
-            onClick={() => router.push('/sessions/new' as never)}
-            style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: '#1A1A18', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-          >
-            <Plus size={18} />
-          </button>
+          <div className="flex items-center gap-2">
+            {user?.googleCalendarUrl && (
+              <button onClick={() => forceGcalRefresh()}
+                style={{ width: 30, height: 30, borderRadius: 8, border: '1px solid #E5E1DA', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <RefreshCw size={14} color={gcalLoading ? '#A09890' : '#7A7570'} className={gcalLoading ? 'animate-spin' : ''} />
+              </button>
+            )}
+            <button
+              onClick={() => router.push('/sessions/new' as never)}
+              style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: '#1A1A18', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+            >
+              <Plus size={18} />
+            </button>
+          </div>
         }
         noBorder
       />
@@ -249,6 +287,7 @@ export default function CalendarPage() {
           <DayView
             date={anchor}
             sessions={sessions}
+            externalEvents={visibleExternalEvents}
             coachMap={coachMap}
             serviceMap={serviceMap}
             onSessionClick={handleSessionClick}
@@ -262,6 +301,7 @@ export default function CalendarPage() {
             serviceMap={serviceMap}
             clientMap={clientMap}
             groupMap={groupMap}
+            externalEvents={visibleExternalEvents}
             onSessionClick={handleSessionClick}
             onDayClick={handleDayClick}
             onSlotClick={handleWeekSlotClick}

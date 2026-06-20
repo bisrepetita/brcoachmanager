@@ -49,16 +49,19 @@ function layoutSessions(sessions: Session[]): LayoutSession[] {
   return placed
 }
 
+interface ExternalEvent { uid: string; title: string; start: string; end: string }
+
 interface Props {
   date: Date
   sessions: Session[]
   coachMap: Map<string, User>
   serviceMap: Map<string, Service>
+  externalEvents?: ExternalEvent[]
   onSessionClick: (session: Session) => void
   onSlotClick: (hour: number) => void
 }
 
-export function DayView({ date, sessions, coachMap, serviceMap, onSessionClick, onSlotClick }: Props) {
+export function DayView({ date, sessions, coachMap, serviceMap, externalEvents = [], onSessionClick, onSlotClick }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [nowPx, setNowPx] = useState<number | null>(null)
 
@@ -148,6 +151,19 @@ export function DayView({ date, sessions, coachMap, serviceMap, onSessionClick, 
               <div className="flex-1 h-px bg-red-500" />
             </div>
           )}
+
+          {/* Événements Google Calendar */}
+          {externalEvents.filter(e => isSameDay(new Date(e.start), date)).map(e => {
+            const s = new Date(e.start), en = new Date(e.end)
+            const top = toTopPx(s), height = Math.max(24, toDurationPx(s, en))
+            return (
+              <div key={e.uid} className="absolute z-5 pointer-events-none" style={{ top, height, right: 2, left: 2 }}>
+                <div style={{ position: 'absolute', inset: 0, borderRadius: 6, background: 'rgba(66,133,244,0.10)', borderLeft: '3px solid #4285F4', padding: '2px 6px', overflow: 'hidden' }}>
+                  <p style={{ fontSize: 11, color: '#4285F4', fontWeight: 600, margin: 0, lineHeight: 1.3 }}>{e.title}</p>
+                </div>
+              </div>
+            )
+          })}
 
           {/* Sessions */}
           {laid.map(({ session, top, height, col, numCols }) => {

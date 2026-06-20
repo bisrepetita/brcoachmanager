@@ -16,6 +16,8 @@ export interface User {
   active: boolean
   color: string
   fcmToken?: string | null
+  googleCalendarUrl?: string
+  icalSecret?: string
   createdAt: Timestamp
   updatedAt: Timestamp
 }

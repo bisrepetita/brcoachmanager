@@ -21,6 +21,8 @@ function toDurationPx(start: Date, end: Date) {
   return Math.max(28, ((end.getTime() - start.getTime()) / 60000) * (HOUR_PX / 60))
 }
 
+interface ExternalEvent { uid: string; title: string; start: string; end: string }
+
 interface Props {
   anchor: Date
   sessions: Session[]
@@ -28,12 +30,13 @@ interface Props {
   serviceMap: Map<string, Service>
   clientMap: Map<string, Client>
   groupMap: Map<string, ClientGroup>
+  externalEvents?: ExternalEvent[]
   onSessionClick: (session: Session) => void
   onDayClick: (date: Date) => void
   onSlotClick: (date: Date, hour: number) => void
 }
 
-export function WeekView({ anchor, sessions, coachMap, serviceMap, clientMap, groupMap, onSessionClick, onDayClick, onSlotClick }: Props) {
+export function WeekView({ anchor, sessions, coachMap, serviceMap, clientMap, groupMap, externalEvents = [], onSessionClick, onDayClick, onSlotClick }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [nowPx, setNowPx] = useState<number | null>(null)
   const [todayCol, setTodayCol] = useState<number | null>(null)
@@ -153,6 +156,19 @@ export function WeekView({ anchor, sessions, coachMap, serviceMap, clientMap, gr
                   <div className="flex-1 h-px bg-red-500" />
                 </div>
               )}
+
+              {/* Événements Google Calendar */}
+              {externalEvents.filter(e => isSameDay(new Date(e.start), day)).map(e => {
+                const s = new Date(e.start), en = new Date(e.end)
+                const top = toTopPx(s), height = Math.max(20, toDurationPx(s, en))
+                return (
+                  <div key={e.uid} className="absolute z-5 pointer-events-none" style={{ top, height, left: 1, right: 1 }}>
+                    <div style={{ position: 'absolute', inset: 0, borderRadius: 5, background: 'rgba(66,133,244,0.12)', borderLeft: '3px solid #4285F4', padding: '1px 4px', overflow: 'hidden' }}>
+                      <p style={{ fontSize: 9, color: '#4285F4', fontWeight: 600, lineHeight: 1.2, margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.title}</p>
+                    </div>
+                  </div>
+                )
+              })}
 
               {/* Sessions */}
               {(sessionsByDay[dayIdx] ?? []).map((session) => {
