@@ -102,6 +102,7 @@ export default function CalendarPage() {
   // Événements Google Calendar
   const [externalEvents, setExternalEvents] = useState<{ uid: string; title: string; start: string; end: string }[]>([])
   const [gcalLoading, setGcalLoading] = useState(false)
+  const [showGcal, setShowGcal] = useState(true)
   const [, forceGcalRefresh] = useReducer(x => x + 1, 0)
 
   useEffect(() => {
@@ -122,12 +123,13 @@ export default function CalendarPage() {
   }, [user?.googleCalendarUrl, user?.id, forceGcalRefresh])
 
   const visibleExternalEvents = useMemo(() => {
+    if (!showGcal) return []
     return externalEvents.filter(e => {
       const s = new Date(e.start)
       const en = new Date(e.end)
       return s < range.end && en > range.start
     })
-  }, [externalEvents, range])
+  }, [externalEvents, range, showGcal])
 
   // Prolonge les récurrences infinies si besoin (une fois par chargement de page)
   useEffect(() => {
@@ -238,10 +240,19 @@ export default function CalendarPage() {
         right={
           <div className="flex items-center gap-2">
             {user?.googleCalendarUrl && (
-              <button onClick={() => forceGcalRefresh()}
-                style={{ width: 30, height: 30, borderRadius: 8, border: '1px solid #E5E1DA', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <RefreshCw size={14} color={gcalLoading ? '#A09890' : '#7A7570'} className={gcalLoading ? 'animate-spin' : ''} />
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <button onClick={() => setShowGcal(v => !v)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 4, height: 30, padding: '0 8px', borderRadius: 8, border: '1px solid', cursor: 'pointer', fontSize: 11, fontWeight: 600, background: showGcal ? 'rgba(66,133,244,0.1)' : '#fff', borderColor: showGcal ? '#4285F4' : '#E5E1DA', color: showGcal ? '#4285F4' : '#A09890' }}>
+                  <div style={{ width: 8, height: 8, borderRadius: 2, background: showGcal ? '#4285F4' : '#E5E1DA', flexShrink: 0 }} />
+                  Google
+                </button>
+                {showGcal && (
+                  <button onClick={() => forceGcalRefresh()}
+                    style={{ width: 30, height: 30, borderRadius: 8, border: '1px solid #E5E1DA', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <RefreshCw size={13} color={gcalLoading ? '#A09890' : '#7A7570'} className={gcalLoading ? 'animate-spin' : ''} />
+                  </button>
+                )}
+              </div>
             )}
             <button
               onClick={() => router.push('/sessions/new' as never)}
