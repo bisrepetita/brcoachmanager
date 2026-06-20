@@ -5,10 +5,11 @@ import Link from 'next/link'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { useAuth } from '@/lib/hooks/useAuth'
 import { AdminHub } from '@/components/layout/AdminHub'
-import { LogOut, User, BarChart2, ChevronRight, Calendar, Copy, Check, ExternalLink } from 'lucide-react'
+import { LogOut, User, BarChart2, ChevronRight, Calendar, Copy, Check, ExternalLink, Bell } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase/firestore'
+import { requestNotificationPermission } from '@/lib/firebase/messaging'
 
 function generateSecret(): string {
   const arr = new Uint8Array(18)
@@ -22,6 +23,25 @@ export default function SettingsPage() {
   const [gcalUrl, setGcalUrl] = useState('')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [notifStatus, setNotifStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
+
+  async function testNotification() {
+    if (!user?.id) return
+    setNotifStatus('sending')
+    try {
+      const token = await requestNotificationPermission(user.id)
+      if (!token) { setNotifStatus('error'); return }
+      const { getAuth } = await import('firebase/auth')
+      const idToken = await getAuth().currentUser?.getIdToken()
+      const res = await fetch('/api/send-notification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ userIds: [user.id], title: 'Test BRCoachManager', body: 'Les notifications fonctionnent !' }),
+      })
+      setNotifStatus(res.ok ? 'sent' : 'error')
+    } catch { setNotifStatus('error') }
+    setTimeout(() => setNotifStatus('idle'), 3000)
+  }
 
   // Génère un icalSecret si l'utilisateur n'en a pas
   useEffect(() => {
@@ -137,6 +157,29 @@ export default function SettingsPage() {
                 </button>
               )}
             </div>
+          </div>
+        </section>
+
+        {/* Notifications */}
+        <section>
+          <p className="section-label mb-3">Notifications</p>
+          <div className="rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <Bell size={15} style={{ color: '#7A7570', flexShrink: 0 }} />
+              <div className="min-w-0">
+                <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Tester les notifications push</p>
+                <p className="text-[11px] text-[var(--color-text-tertiary)]">
+                  {typeof window !== 'undefined' && 'Notification' in window
+                    ? Notification.permission === 'granted' ? 'Autorisées ✓' : Notification.permission === 'denied' ? 'Bloquées — modifie les réglages du navigateur' : 'Non encore acceptées'
+                    : 'Non supportées sur ce navigateur'}
+                </p>
+              </div>
+            </div>
+            <button onClick={testNotification} disabled={notifStatus === 'sending'}
+              className="shrink-0 px-3 h-8 text-[12px] font-medium rounded-[var(--radius-md)] border border-[var(--color-border)] whitespace-nowrap"
+              style={{ background: notifStatus === 'sent' ? '#E8F3EE' : notifStatus === 'error' ? '#FEE2E2' : '#fff', color: notifStatus === 'sent' ? '#2D7A4F' : notifStatus === 'error' ? '#DC2626' : '#1A1A18' }}>
+              {notifStatus === 'sending' ? '…' : notifStatus === 'sent' ? 'Envoyé ✓' : notifStatus === 'error' ? 'Erreur' : 'Tester'}
+            </button>
           </div>
         </section>
 
