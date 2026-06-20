@@ -31,12 +31,15 @@ export async function POST(req: NextRequest) {
 
     const messaging = getMessaging(getAdminApp())
 
-    // Data-only message : onMessage se déclenche en foreground (toast),
-    // onBackgroundMessage dans le SW se déclenche en background (notif système)
     const response = await messaging.sendEachForMulticast({
       tokens,
+      notification: { title, body },
       data: { title, body, link: link ?? '/' },
-      webpush: { headers: { Urgency: 'high' } },
+      webpush: {
+        notification: { icon: '/icons/icon-192.png', badge: '/icons/icon-192.png' },
+        headers: { Urgency: 'high' },
+        fcmOptions: link ? { link } : {},
+      },
     })
 
     return NextResponse.json({ sent: response.successCount, failed: response.failureCount })

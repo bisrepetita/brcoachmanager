@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react'
 import { useAuth } from '@/lib/hooks/useAuth'
-import { requestNotificationPermission, onForegroundMessage } from '@/lib/firebase/messaging'
+import { requestNotificationPermission } from '@/lib/firebase/messaging'
 import { useToast } from '@/components/ui/Toast'
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
@@ -41,16 +41,16 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     }
   }, [user?.id])
 
-  // Notifications en foreground → toast in-app
+  // Notifications foreground via postMessage du service worker → toast
   useEffect(() => {
-    const unsub = onForegroundMessage((payload) => {
-      // Les messages sont data-only : lire payload.data
-      const data = payload.data as Record<string, string> | undefined
-      const title = data?.title ?? payload.notification?.title ?? 'BRCoachManager'
-      const body = data?.body ?? payload.notification?.body
-      showToast(title, body)
-    })
-    return () => { if (typeof unsub === 'function') unsub() }
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
+    const handler = (event: MessageEvent) => {
+      if (event.data?.type === 'FCM_TOAST') {
+        showToast(event.data.title, event.data.body)
+      }
+    }
+    navigator.serviceWorker.addEventListener('message', handler)
+    return () => navigator.serviceWorker.removeEventListener('message', handler)
   }, [showToast])
 
   return <>{children}</>

@@ -8,16 +8,25 @@ self.addEventListener('message', (event) => {
     }
     const messaging = firebase.messaging()
 
-    // Data-only messages en background : affichage manuel
     messaging.onBackgroundMessage((payload) => {
       const data = payload.data ?? {}
-      const title = data.title ?? 'BRCoachManager'
-      const body = data.body ?? ''
-      self.registration.showNotification(title, {
-        body,
-        icon: '/icons/icon-192.png',
-        badge: '/icons/icon-192.png',
-        data: { link: data.link ?? '/' },
+      const title = data.title ?? payload.notification?.title ?? 'BRCoachManager'
+      const body = data.body ?? payload.notification?.body ?? ''
+      const link = data.link ?? '/'
+
+      // Notifier les onglets ouverts pour afficher un toast
+      self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+        const focused = list.some(c => c.focused)
+        list.forEach(c => c.postMessage({ type: 'FCM_TOAST', title, body }))
+        // Notification système seulement si aucune fenêtre active
+        if (!focused) {
+          self.registration.showNotification(title, {
+            body,
+            icon: '/icons/icon-192.png',
+            badge: '/icons/icon-192.png',
+            data: { link },
+          })
+        }
       })
     })
   }
