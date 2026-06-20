@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase/firestore'
 import { requestNotificationPermission } from '@/lib/firebase/messaging'
+import { useToast } from '@/components/ui/Toast'
 
 function generateSecret(): string {
   const arr = new Uint8Array(18)
@@ -19,6 +20,7 @@ function generateSecret(): string {
 
 export default function SettingsPage() {
   const { user, isAdmin, logout } = useAuth()
+  const { showToast } = useToast()
   const [copied, setCopied] = useState(false)
   const [gcalUrl, setGcalUrl] = useState('')
   const [saving, setSaving] = useState(false)
@@ -180,7 +182,15 @@ export default function SettingsPage() {
         {/* Notifications */}
         <section>
           <p className="section-label mb-3">Notifications</p>
-          <div className="rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 flex items-center justify-between gap-3">
+          <div className="rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] divide-y divide-[var(--color-border)]">
+          <div className="p-4 flex items-center justify-between gap-3">
+            <p className="text-[13px] text-[var(--color-text-secondary)]">Test toast direct</p>
+            <button onClick={() => showToast('Toast test', 'Le toast fonctionne !')}
+              className="shrink-0 px-3 h-8 text-[12px] font-medium rounded-[var(--radius-md)] border border-[var(--color-border)] bg-white whitespace-nowrap">
+              Toast
+            </button>
+          </div>
+          <div className="p-4 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 min-w-0">
               <Bell size={15} style={{ color: '#7A7570', flexShrink: 0 }} />
               <div className="min-w-0">
@@ -197,6 +207,7 @@ export default function SettingsPage() {
               style={{ background: notifStatus === 'sent' ? '#E8F3EE' : notifStatus === 'error' ? '#FEE2E2' : '#fff', color: notifStatus === 'sent' ? '#2D7A4F' : notifStatus === 'error' ? '#DC2626' : '#1A1A18' }}>
               {notifStatus === 'sending' ? '…' : notifStatus === 'sent' ? 'Envoyé ✓' : notifStatus === 'error' ? 'Erreur' : 'Tester'}
             </button>
+          </div>
           </div>
           {notifDetail ? (
             <p className="mt-2 text-[11px] px-1" style={{ color: notifStatus === 'error' ? '#DC2626' : '#7A7570' }}>{notifDetail}</p>
