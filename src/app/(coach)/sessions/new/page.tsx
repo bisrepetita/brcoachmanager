@@ -415,11 +415,12 @@ function NewSessionForm() {
           {locations.length === 0 && <p style={{ fontSize: 13, color: '#A09890', textAlign: 'center', padding: '8px 0' }}>Aucun lieu actif</p>}
           {locations.map(l => {
             const booked = locationBookings[l.id] ?? 0
-            const max = l.allowMultipleBookings ? (l.maxSimultaneous ?? 1) : 1
-            const full = booked >= max
+            const maxSim = l.maxSimultaneous ?? 1
+            const full = l.allowMultipleBookings && maxSim === 0 ? false : booked >= (l.allowMultipleBookings ? maxSim : 1)
+            const maxSim2 = l.allowMultipleBookings ? (l.maxSimultaneous ?? 1) : 1
             const sub = l.address
-              ? full ? `${l.address} · Complet (${booked}/${max})` : l.address
-              : full ? `Complet (${booked}/${max})` : undefined
+              ? full ? `${l.address} · Complet (${booked}/${maxSim2})` : l.address
+              : full ? `Complet (${booked}/${maxSim2})` : undefined
             return (
               <div key={l.id} style={{ opacity: full ? 0.45 : 1 }}>
                 <SelectItem label={l.name} sub={sub} selected={locationId === l.id} onSelect={() => !full && setLocationId(l.id)} />

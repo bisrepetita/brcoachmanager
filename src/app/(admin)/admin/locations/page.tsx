@@ -26,15 +26,18 @@ export default function LocationsPage() {
   const [address, setAddress] = useState('')
   const [notes, setNotes] = useState('')
   const [allowMultiple, setAllowMultiple] = useState(false)
-  const [maxSimultaneous, setMaxSimultaneous] = useState(2)
+  const [unlimited, setUnlimited] = useState(false)
+  const [maxSimultaneous, setMaxSimultaneous] = useState('')
   const [error, setError] = useState<string | null>(null)
 
   function openCreate() {
-    setEditing(null); setName(''); setAddress(''); setNotes(''); setAllowMultiple(false); setMaxSimultaneous(2); setError(null); setSheet('create')
+    setEditing(null); setName(''); setAddress(''); setNotes(''); setAllowMultiple(false); setUnlimited(false); setMaxSimultaneous(''); setError(null); setSheet('create')
   }
   function openEdit(l: Location) {
     setEditing(l); setName(l.name); setAddress(l.address ?? ''); setNotes(l.notes ?? '')
-    setAllowMultiple(l.allowMultipleBookings ?? false); setMaxSimultaneous(l.maxSimultaneous ?? 2)
+    setAllowMultiple(l.allowMultipleBookings ?? false)
+    setUnlimited((l.maxSimultaneous ?? 1) === 0)
+    setMaxSimultaneous((l.maxSimultaneous && l.maxSimultaneous > 0) ? String(l.maxSimultaneous) : '')
     setError(null); setSheet('edit')
   }
   function close() { setSheet(null); setEditing(null) }
@@ -42,7 +45,8 @@ export default function LocationsPage() {
   async function handleSave() {
     if (!name.trim()) { setError('Le nom est requis.'); return }
     setSaving(true); setError(null)
-    const data = { name: name.trim(), address, notes, allowMultipleBookings: allowMultiple, maxSimultaneous: allowMultiple ? maxSimultaneous : 1 }
+    const max = !allowMultiple ? 1 : unlimited ? 0 : (parseInt(maxSimultaneous) || 2)
+    const data = { name: name.trim(), address, notes, allowMultipleBookings: allowMultiple, maxSimultaneous: max }
     try {
       if (sheet === 'create') await createDoc('locations', data)
       else if (editing) await updateDocById('locations', editing.id, data)
@@ -76,7 +80,7 @@ export default function LocationsPage() {
                 <p className="text-[14px] font-medium text-[var(--color-text-primary)]">{l.name}</p>
                 <p className="text-[12px] text-[var(--color-text-tertiary)] truncate">
                   {l.address ? `${l.address} · ` : ''}
-                  {l.allowMultipleBookings ? `${l.maxSimultaneous} max simultanés` : 'Réservation unique'}
+                  {l.allowMultipleBookings ? (l.maxSimultaneous === 0 ? 'Sans limite de réservations' : `${l.maxSimultaneous} max simultanés`) : 'Réservation unique'}
                 </p>
               </div>
               <div className="flex gap-1 shrink-0">
@@ -128,14 +132,14 @@ export default function LocationsPage() {
             <div>
               <p className="text-[11px] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wide mb-2">Réservations simultanées</p>
               <div className="space-y-2">
-                {[
-                  { value: false, label: 'Réservation unique', desc: 'Un seul cours à la fois dans ce lieu' },
-                  { value: true, label: 'Multi-réservation', desc: 'Plusieurs cours peuvent avoir lieu en même temps' },
-                ].map(opt => (
-                  <button key={String(opt.value)} onClick={() => setAllowMultiple(opt.value)}
+                {([
+                  { val: false, label: 'Réservation unique', desc: 'Un seul cours à la fois dans ce lieu' },
+                  { val: true, label: 'Multi-réservation', desc: 'Plusieurs cours peuvent avoir lieu en même temps' },
+                ] as const).map(opt => (
+                  <button key={String(opt.val)} onClick={() => setAllowMultiple(opt.val)}
                     className="w-full flex items-center gap-3 px-3 py-3 rounded-[var(--radius-md)] border text-left"
-                    style={{ background: allowMultiple === opt.value ? 'var(--color-accent-subtle)' : 'var(--color-surface)', borderColor: allowMultiple === opt.value ? 'var(--color-border-strong)' : 'var(--color-border)' }}>
-                    <div className="w-4 h-4 rounded-full border-2 shrink-0" style={{ borderColor: allowMultiple === opt.value ? 'var(--color-accent)' : 'var(--color-border)', background: allowMultiple === opt.value ? 'var(--color-accent)' : 'transparent' }} />
+                    style={{ background: allowMultiple === opt.val ? 'var(--color-accent-subtle)' : 'var(--color-surface)', borderColor: allowMultiple === opt.val ? 'var(--color-border-strong)' : 'var(--color-border)' }}>
+                    <div className="w-4 h-4 rounded-full border-2 shrink-0" style={{ borderColor: allowMultiple === opt.val ? 'var(--color-accent)' : 'var(--color-border)', background: allowMultiple === opt.val ? 'var(--color-accent)' : 'transparent' }} />
                     <div>
                       <p className="text-[13px] font-medium">{opt.label}</p>
                       <p className="text-[11px] text-[var(--color-text-tertiary)]">{opt.desc}</p>
@@ -144,11 +148,30 @@ export default function LocationsPage() {
                 ))}
               </div>
               {allowMultiple && (
-                <div className="mt-3">
-                  <FormField label="Nombre maximum simultané">
-                    <Input type="number" min={2} max={20} value={maxSimultaneous}
-                      onChange={(e) => setMaxSimultaneous(Math.max(2, parseInt(e.target.value) || 2))} />
-                  </FormField>
+                <div className="mt-3 space-y-2">
+                  <div className="flex gap-2">
+                    {([
+                      { val: false, label: 'Avec limite' },
+                      { val: true, label: 'Sans limite' },
+                    ] as const).map(opt => (
+                      <button key={String(opt.val)} onClick={() => setUnlimited(opt.val)}
+                        className="flex-1 py-2 rounded-[var(--radius-md)] border text-[13px] font-medium"
+                        style={{ background: unlimited === opt.val ? '#1A1A18' : 'transparent', color: unlimited === opt.val ? '#fff' : '#1A1A18', borderColor: unlimited === opt.val ? '#1A1A18' : '#E5E1DA' }}>
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  {!unlimited && (
+                    <FormField label="Nombre maximum simultané">
+                      <Input
+                        type="number"
+                        min={2}
+                        placeholder="ex. 3"
+                        value={maxSimultaneous}
+                        onChange={(e) => setMaxSimultaneous(e.target.value)}
+                      />
+                    </FormField>
+                  )}
                 </div>
               )}
             </div>
