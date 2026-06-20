@@ -4,6 +4,8 @@ import { useEffect } from 'react'
 import { useAuth } from '@/lib/hooks/useAuth'
 import { requestNotificationPermission } from '@/lib/firebase/messaging'
 import { useToast } from '@/components/ui/Toast'
+import { db } from '@/lib/firebase/firestore'
+import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore'
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
@@ -30,28 +32,36 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     }).catch(() => {})
   }, [])
 
-  // Demande de permission + enregistrement du token quand l'utilisateur est connecté
+  // Demande de permission FCM
   useEffect(() => {
     if (!user?.id) return
     if (typeof window === 'undefined' || !('Notification' in window)) return
-    if (Notification.permission === 'granted') {
-      requestNotificationPermission(user.id).catch(() => {})
-    } else if (Notification.permission === 'default') {
+    if (Notification.permission !== 'denied') {
       requestNotificationPermission(user.id).catch(() => {})
     }
   }, [user?.id])
 
-  // Notifications foreground via postMessage du service worker → toast
+  // Écoute Firestore → toast in-app immédiat
   useEffect(() => {
-    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
-    const handler = (event: MessageEvent) => {
-      if (event.data?.type === 'FCM_TOAST') {
-        showToast(event.data.title, event.data.body)
-      }
-    }
-    navigator.serviceWorker.addEventListener('message', handler)
-    return () => navigator.serviceWorker.removeEventListener('message', handler)
-  }, [showToast])
+    if (!user?.id) return
+    const q = query(
+      collection(db, 'notifications'),
+      where('userId', '==', user.id),
+      where('shown', '==', false)
+    )
+    const unsub = onSnapshot(q, (snap) => {
+      snap.docChanges().forEach((change) => {
+        if (change.type !== 'added') return
+        const d = change.doc.data()
+        // Ignorer les docs créés il y a plus de 30s (au cas où on recharge la page)
+        const age = Date.now() - (d.createdAt?.toMillis?.() ?? 0)
+        if (age > 30000) return
+        showToast(d.title, d.body)
+        updateDoc(doc(db, 'notifications', change.doc.id), { shown: true }).catch(() => {})
+      })
+    })
+    return unsub
+  }, [user?.id, showToast])
 
   return <>{children}</>
 }
