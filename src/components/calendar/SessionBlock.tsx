@@ -61,12 +61,12 @@ export function SessionBlock({
       }}
     >
       <div className="px-1.5 py-0.5 h-full flex flex-col justify-start overflow-hidden">
-        <p className="text-[10px] font-semibold leading-tight truncate" style={{ color: coachColor }}>
+        <p className="text-[9px] font-semibold leading-tight truncate" style={{ color: coachColor }}>
           {format(start, 'HH:mm')}–{format(end, 'HH:mm')}
         </p>
         {compact ? (
           clientName && (
-            <p className="text-[10px] font-medium text-text-primary truncate leading-tight">{clientName}</p>
+            <p className="text-[9px] font-medium text-text-primary truncate leading-tight">{clientName}</p>
           )
         ) : (
           <>

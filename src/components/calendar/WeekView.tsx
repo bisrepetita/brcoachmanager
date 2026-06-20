@@ -8,7 +8,7 @@ import type { Session, User, Service, Client } from '@/types'
 
 const START_HOUR = 6
 const TOTAL_HOURS = 16
-const HOUR_PX = 48
+const HOUR_PX = 36
 const TOTAL_HEIGHT = TOTAL_HOURS * HOUR_PX
 const TIME_COL = 32
 const HOURS = Array.from({ length: TOTAL_HOURS + 1 }, (_, i) => START_HOUR + i)
