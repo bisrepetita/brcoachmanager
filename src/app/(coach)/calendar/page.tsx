@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { extendInfiniteRecurrences } from '@/lib/services/recurrence.service'
 import { sendNotification } from '@/lib/services/notification.service'
 import { useRouter } from 'next/navigation'
@@ -151,6 +151,19 @@ export default function CalendarPage() {
     setView('day')
   }, [])
 
+  const touchStartX = useRef<number | null>(null)
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX
+  }, [])
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (touchStartX.current === null) return
+    const delta = e.changedTouches[0].clientX - touchStartX.current
+    touchStartX.current = null
+    if (Math.abs(delta) < 50) return
+    const dir = delta < 0 ? 1 : -1
+    setAnchor((prev) => startOfDay(navigate(view, prev, dir)))
+  }, [view])
+
   const title = getTitle(view, anchor)
 
   // Calendar content height = viewport - topbar - switcher - bottomnav
@@ -227,7 +240,7 @@ export default function CalendarPage() {
       </div>
 
       {/* Calendar content — height calculated via CSS variables (not Tailwind arbitrary values) */}
-      <div style={calendarContentStyle}>
+      <div style={calendarContentStyle} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
         {view === 'day' ? (
           <DayView
             date={anchor}
