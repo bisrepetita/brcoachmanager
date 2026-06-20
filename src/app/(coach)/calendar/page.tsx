@@ -157,7 +157,9 @@ export default function CalendarPage() {
   }, [])
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
     if (touchStartX.current === null) return
-    const delta = e.changedTouches[0].clientX - touchStartX.current
+    const endX = e.changedTouches[0]?.clientX
+    if (endX === undefined) return
+    const delta = endX - touchStartX.current
     touchStartX.current = null
     if (Math.abs(delta) < 50) return
     const dir = delta < 0 ? 1 : -1
