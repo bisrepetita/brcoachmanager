@@ -3,13 +3,13 @@
 import { Suspense, useState, useMemo, useEffect, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { format, addMinutes } from 'date-fns'
-import { orderBy, Timestamp, writeBatch, doc, collection, serverTimestamp, addDoc } from 'firebase/firestore'
+import { orderBy, Timestamp, writeBatch, doc, collection, serverTimestamp, addDoc, getDocs, query, where } from 'firebase/firestore'
+import { db } from '@/lib/firebase/firestore'
 import { X, Check, Search, RefreshCw } from 'lucide-react'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { useCollection } from '@/lib/hooks/useCollection'
 import { useAuth } from '@/lib/hooks/useAuth'
 import { createDoc } from '@/lib/services/crud.service'
-import { db } from '@/lib/firebase/firestore'
 import { sendNotification } from '@/lib/services/notification.service'
 import { format as formatDate } from 'date-fns'
 import { fr } from 'date-fns/locale'
@@ -154,6 +154,7 @@ function NewSessionForm() {
   const [clientSearch, setClientSearch] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [locationBookings, setLocationBookings] = useState<Record<string, number>>({})
 
   const { data: allServices } = useCollection<Service>('services', [orderBy('name')])
   const { data: allLocations } = useCollection<Location>('locations', [orderBy('name')])
@@ -168,6 +169,36 @@ function NewSessionForm() {
   useEffect(() => {
     if (user?.id) setCoachIds([user.id])
   }, [user?.id])
+
+  // Vérifie la disponibilité des lieux pour le créneau sélectionné
+  useEffect(() => {
+    if (!date || !startTime) { setLocationBookings({}); return }
+    const [yr, mo, dy] = date.split('-').map(Number)
+    const dayStart = new Date(yr!, mo! - 1, dy!, 0, 0, 0)
+    const dayEnd = new Date(yr!, mo! - 1, dy!, 23, 59, 59)
+    const [hh, mm] = startTime.split(':').map(Number)
+    const slotStart = new Date(yr!, mo! - 1, dy!, hh, mm, 0).getTime()
+    const slotEnd = slotStart + duration * 60000
+
+    getDocs(query(
+      collection(db, 'sessions'),
+      where('startAt', '>=', Timestamp.fromDate(dayStart)),
+      where('startAt', '<=', Timestamp.fromDate(dayEnd)),
+      where('status', '!=', 'cancelled'),
+    )).then(snap => {
+      const bookings: Record<string, number> = {}
+      snap.docs.forEach(d => {
+        const s = d.data()
+        const sStart = s.startAt.toDate().getTime()
+        const sEnd = s.endAt.toDate().getTime()
+        if (sStart < slotEnd && sEnd > slotStart) {
+          const lid = s.locationId as string
+          bookings[lid] = (bookings[lid] ?? 0) + 1
+        }
+      })
+      setLocationBookings(bookings)
+    }).catch(() => {})
+  }, [date, startTime, duration])
 
   const selectedService = useMemo(() => services.find(s => s.id === serviceId), [services, serviceId])
 
@@ -382,9 +413,19 @@ function NewSessionForm() {
         {/* Lieu */}
         <Section title="Lieu">
           {locations.length === 0 && <p style={{ fontSize: 13, color: '#A09890', textAlign: 'center', padding: '8px 0' }}>Aucun lieu actif</p>}
-          {locations.map(l => (
-            <SelectItem key={l.id} label={l.name} sub={l.address} selected={locationId === l.id} onSelect={() => setLocationId(l.id)} />
-          ))}
+          {locations.map(l => {
+            const booked = locationBookings[l.id] ?? 0
+            const max = l.allowMultipleBookings ? (l.maxSimultaneous ?? 1) : 1
+            const full = booked >= max
+            const sub = l.address
+              ? full ? `${l.address} · Complet (${booked}/${max})` : l.address
+              : full ? `Complet (${booked}/${max})` : undefined
+            return (
+              <div key={l.id} style={{ opacity: full ? 0.45 : 1 }}>
+                <SelectItem label={l.name} sub={sub} selected={locationId === l.id} onSelect={() => !full && setLocationId(l.id)} />
+              </div>
+            )
+          })}
         </Section>
 
         {/* Clients */}

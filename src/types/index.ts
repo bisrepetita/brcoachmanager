@@ -58,6 +58,8 @@ export interface Location {
   address?: string
   notes?: string
   active: boolean
+  allowMultipleBookings: boolean
+  maxSimultaneous: number
   createdAt: Timestamp
   updatedAt: Timestamp
 }

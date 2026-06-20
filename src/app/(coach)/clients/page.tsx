@@ -16,12 +16,13 @@ import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ListSkeleton } from '@/components/shared/LoadingSkeleton'
 import { useAuth } from '@/lib/hooks/useAuth'
-import { Plus, Search, Users, Pencil, CreditCard, X, Trash2 } from 'lucide-react'
-import type { Client, CreditTransaction } from '@/types'
+import { Plus, Search, Users, Pencil, CreditCard, X, Trash2, Check } from 'lucide-react'
+import type { Client, CreditTransaction, User as UserType } from '@/types'
 
 export default function ClientsPage() {
   const { isAdmin, user } = useAuth()
   const { data: clients, loading } = useCollection<Client>('clients', [orderBy('lastName')])
+  const { data: coaches } = useCollection<UserType>('users', [orderBy('firstName')])
   const [search, setSearch] = useState('')
   const [sheet, setSheet] = useState<'create' | 'edit' | null>(null)
   const [editing, setEditing] = useState<Client | null>(null)
@@ -85,28 +86,34 @@ export default function ClientsPage() {
   const [city, setCity] = useState('')
   const [postalCode, setPostalCode] = useState('')
   const [additionalInfo, setAdditionalInfo] = useState('')
+  const [visibleCoachIds, setVisibleCoachIds] = useState<string[]>([])
 
   const filtered = useMemo(() => {
-    if (!search.trim()) return clients
-    const q = search.toLowerCase()
-    return clients.filter(
-      (c) =>
+    let result = clients
+    if (!isAdmin && user?.id) {
+      result = result.filter(c => c.visibleToCoachIds.length === 0 || c.visibleToCoachIds.includes(user.id))
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      result = result.filter(c =>
         c.firstName.toLowerCase().includes(q) ||
         c.lastName.toLowerCase().includes(q) ||
         c.email?.toLowerCase().includes(q) ||
         c.phone?.includes(q)
-    )
-  }, [clients, search])
+      )
+    }
+    return result
+  }, [clients, search, isAdmin, user])
 
   function openCreate() {
     setEditing(null); setFirstName(''); setLastName(''); setEmail(''); setPhone('')
-    setAddress(''); setCity(''); setPostalCode(''); setAdditionalInfo(''); setError(null); setSheet('create')
+    setAddress(''); setCity(''); setPostalCode(''); setAdditionalInfo(''); setVisibleCoachIds([]); setError(null); setSheet('create')
   }
 
   function openEdit(c: Client) {
     setEditing(c); setFirstName(c.firstName); setLastName(c.lastName); setEmail(c.email ?? '')
     setPhone(c.phone ?? ''); setAddress(c.address ?? ''); setCity(c.city ?? '')
-    setPostalCode(c.postalCode ?? ''); setAdditionalInfo(c.additionalInfo ?? ''); setError(null); setSheet('edit')
+    setPostalCode(c.postalCode ?? ''); setAdditionalInfo(c.additionalInfo ?? ''); setVisibleCoachIds(c.visibleToCoachIds ?? []); setError(null); setSheet('edit')
   }
 
   function close() { setSheet(null); setEditing(null); setConfirmDelete(false) }
@@ -159,7 +166,7 @@ export default function ClientsPage() {
       const data = {
         firstName: firstName.trim(), lastName: lastName.trim(),
         email, phone, address, city, postalCode, additionalInfo,
-        visibleToCoachIds: [],
+        visibleToCoachIds: visibleCoachIds,
       }
       if (sheet === 'create') {
         await createDoc('clients', { ...data, sessionCredits: 0 })
@@ -369,6 +376,29 @@ export default function ClientsPage() {
             <FormField label="Notes" hint="Visible par les coachs assignés à ce client">
               <Textarea value={additionalInfo} onChange={(e) => setAdditionalInfo(e.target.value)} placeholder="Blessures, préférences, objectifs..." />
             </FormField>
+
+            <div>
+              <p className="text-[11px] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wide mb-1">
+                Coachs assignés <span className="normal-case font-normal">(vide = tous les coachs)</span>
+              </p>
+              <div className="space-y-0.5">
+                {coaches.map(c => {
+                  const sel = visibleCoachIds.includes(c.id)
+                  return (
+                    <button key={c.id} onClick={() => setVisibleCoachIds(sel ? visibleCoachIds.filter(id => id !== c.id) : [...visibleCoachIds, c.id])}
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', textAlign: 'left', width: '100%', backgroundColor: sel ? '#F0EDE8' : 'transparent' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ width: 24, height: 24, borderRadius: '50%', background: c.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600, color: '#fff', flexShrink: 0 }}>
+                          {c.firstName[0]}{c.lastName[0]}
+                        </div>
+                        <p style={{ fontSize: 14, color: '#1A1A18', fontWeight: sel ? 500 : 400, margin: 0 }}>{c.firstName} {c.lastName}</p>
+                      </div>
+                      {sel && <div style={{ width: 18, height: 18, borderRadius: 4, backgroundColor: '#1A1A18', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Check size={11} color="#fff" /></div>}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
 
             {error && <p className="text-[13px] text-[var(--color-danger)]">{error}</p>}
             <Button size="lg" className="w-full" onClick={handleSave} loading={saving}>

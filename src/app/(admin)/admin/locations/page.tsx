@@ -25,18 +25,27 @@ export default function LocationsPage() {
   const [name, setName] = useState('')
   const [address, setAddress] = useState('')
   const [notes, setNotes] = useState('')
+  const [allowMultiple, setAllowMultiple] = useState(false)
+  const [maxSimultaneous, setMaxSimultaneous] = useState(2)
   const [error, setError] = useState<string | null>(null)
 
-  function openCreate() { setEditing(null); setName(''); setAddress(''); setNotes(''); setError(null); setSheet('create') }
-  function openEdit(l: Location) { setEditing(l); setName(l.name); setAddress(l.address ?? ''); setNotes(l.notes ?? ''); setError(null); setSheet('edit') }
+  function openCreate() {
+    setEditing(null); setName(''); setAddress(''); setNotes(''); setAllowMultiple(false); setMaxSimultaneous(2); setError(null); setSheet('create')
+  }
+  function openEdit(l: Location) {
+    setEditing(l); setName(l.name); setAddress(l.address ?? ''); setNotes(l.notes ?? '')
+    setAllowMultiple(l.allowMultipleBookings ?? false); setMaxSimultaneous(l.maxSimultaneous ?? 2)
+    setError(null); setSheet('edit')
+  }
   function close() { setSheet(null); setEditing(null) }
 
   async function handleSave() {
     if (!name.trim()) { setError('Le nom est requis.'); return }
     setSaving(true); setError(null)
+    const data = { name: name.trim(), address, notes, allowMultipleBookings: allowMultiple, maxSimultaneous: allowMultiple ? maxSimultaneous : 1 }
     try {
-      if (sheet === 'create') await createDoc('locations', { name: name.trim(), address, notes })
-      else if (editing) await updateDocById('locations', editing.id, { name: name.trim(), address, notes })
+      if (sheet === 'create') await createDoc('locations', data)
+      else if (editing) await updateDocById('locations', editing.id, data)
       close()
     } catch (err) { setError((err as Error).message) }
     finally { setSaving(false) }
@@ -65,7 +74,10 @@ export default function LocationsPage() {
               <MapPin size={18} className="shrink-0" style={{ color: '#7A7570' }} />
               <div className="flex-1 min-w-0">
                 <p className="text-[14px] font-medium text-[var(--color-text-primary)]">{l.name}</p>
-                {l.address && <p className="text-[12px] text-[var(--color-text-tertiary)] truncate">{l.address}</p>}
+                <p className="text-[12px] text-[var(--color-text-tertiary)] truncate">
+                  {l.address ? `${l.address} · ` : ''}
+                  {l.allowMultipleBookings ? `${l.maxSimultaneous} max simultanés` : 'Réservation unique'}
+                </p>
               </div>
               <div className="flex gap-1 shrink-0">
                 <button onClick={() => openEdit(l)} className="p-2 rounded-[var(--radius-md)] hover:bg-[var(--color-surface-elevated)]">
@@ -80,7 +92,6 @@ export default function LocationsPage() {
         </div>
       )}
 
-      {/* Confirm delete */}
       {confirmDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40" onClick={() => setConfirmDelete(null)} />
@@ -98,7 +109,7 @@ export default function LocationsPage() {
       {sheet && (
         <div className="fixed inset-0 z-50 flex flex-col justify-end">
           <div className="absolute inset-0 bg-black/40" onClick={close} />
-          <div className="relative bg-[var(--color-surface)] rounded-t-[20px] p-6 space-y-4" style={{ boxShadow: 'var(--shadow-sheet)' }}>
+          <div className="relative bg-[var(--color-surface)] rounded-t-[20px] p-6 space-y-4 max-h-[90dvh] overflow-y-auto" style={{ boxShadow: 'var(--shadow-sheet)' }}>
             <div className="flex items-center justify-between mb-2">
               <h2 className="text-[17px] font-semibold">{sheet === 'create' ? 'Nouveau lieu' : 'Modifier le lieu'}</h2>
               <button onClick={close} className="text-[13px] text-[var(--color-text-tertiary)]">Annuler</button>
@@ -112,6 +123,36 @@ export default function LocationsPage() {
             <FormField label="Notes">
               <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Accès, code, informations utiles..." />
             </FormField>
+
+            {/* Multi-réservation */}
+            <div>
+              <p className="text-[11px] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wide mb-2">Réservations simultanées</p>
+              <div className="space-y-2">
+                {[
+                  { value: false, label: 'Réservation unique', desc: 'Un seul cours à la fois dans ce lieu' },
+                  { value: true, label: 'Multi-réservation', desc: 'Plusieurs cours peuvent avoir lieu en même temps' },
+                ].map(opt => (
+                  <button key={String(opt.value)} onClick={() => setAllowMultiple(opt.value)}
+                    className="w-full flex items-center gap-3 px-3 py-3 rounded-[var(--radius-md)] border text-left"
+                    style={{ background: allowMultiple === opt.value ? 'var(--color-accent-subtle)' : 'var(--color-surface)', borderColor: allowMultiple === opt.value ? 'var(--color-border-strong)' : 'var(--color-border)' }}>
+                    <div className="w-4 h-4 rounded-full border-2 shrink-0" style={{ borderColor: allowMultiple === opt.value ? 'var(--color-accent)' : 'var(--color-border)', background: allowMultiple === opt.value ? 'var(--color-accent)' : 'transparent' }} />
+                    <div>
+                      <p className="text-[13px] font-medium">{opt.label}</p>
+                      <p className="text-[11px] text-[var(--color-text-tertiary)]">{opt.desc}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+              {allowMultiple && (
+                <div className="mt-3">
+                  <FormField label="Nombre maximum simultané">
+                    <Input type="number" min={2} max={20} value={maxSimultaneous}
+                      onChange={(e) => setMaxSimultaneous(Math.max(2, parseInt(e.target.value) || 2))} />
+                  </FormField>
+                </div>
+              )}
+            </div>
+
             {error && <p className="text-[13px] text-[var(--color-danger)]">{error}</p>}
             <Button size="lg" className="w-full" onClick={handleSave} loading={saving}>
               {sheet === 'create' ? 'Créer le lieu' : 'Enregistrer'}

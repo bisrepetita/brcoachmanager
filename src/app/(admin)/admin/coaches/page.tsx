@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { orderBy } from 'firebase/firestore'
 import { useCollection } from '@/lib/hooks/useCollection'
 import { createCoach, updateCoach, toggleCoachActive } from '@/lib/services/user.service'
@@ -12,7 +12,9 @@ import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ListSkeleton } from '@/components/shared/LoadingSkeleton'
 import { useRouter } from 'next/navigation'
-import { Plus, ArrowLeft, ChevronRight, UserCheck, UserX, Users } from 'lucide-react'
+import { Plus, ArrowLeft, ChevronRight, UserCheck, UserX, Users, Trash2 } from 'lucide-react'
+import { getAuth } from 'firebase/auth'
+import { firebaseApp } from '@/lib/firebase/config'
 import type { User } from '@/types'
 import { COACH_COLORS } from '@/types'
 
@@ -29,6 +31,8 @@ export default function CoachesPage() {
   const [sheet, setSheet] = useState<SheetMode>(null)
   const [editing, setEditing] = useState<User | null>(null)
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const [firstName, setFirstName] = useState('')
@@ -52,7 +56,26 @@ export default function CoachesPage() {
     setSheet('edit')
   }
 
-  function close() { setSheet(null); setEditing(null) }
+  function close() { setSheet(null); setEditing(null); setConfirmDelete(false) }
+
+  const handleDelete = useCallback(async () => {
+    if (!editing) return
+    setDeleting(true)
+    try {
+      const auth = getAuth(firebaseApp)
+      const token = await auth.currentUser?.getIdToken()
+      await fetch('/api/delete-coach', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ coachId: editing.id }),
+      })
+      close()
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setDeleting(false)
+    }
+  }, [editing])
 
   async function handleSave() {
     if (!firstName.trim() || !lastName.trim()) { setError('Prénom et nom sont requis.'); return }
@@ -166,6 +189,26 @@ export default function CoachesPage() {
             <Button size="lg" className="w-full" onClick={handleSave} loading={saving}>
               {sheet === 'create' ? 'Créer le coach' : 'Enregistrer'}
             </Button>
+
+            {sheet === 'edit' && (
+              confirmDelete ? (
+                <div className="space-y-2 pt-1">
+                  <p className="text-[13px] text-center text-[var(--color-text-tertiary)]">Supprimer définitivement ce coach ?</p>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="lg" className="flex-1" onClick={() => setConfirmDelete(false)}>Annuler</Button>
+                    <Button size="lg" className="flex-1" onClick={handleDelete} loading={deleting}
+                      style={{ background: '#C0392B', color: '#fff', borderColor: '#C0392B' }}>
+                      Confirmer
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <button onClick={() => setConfirmDelete(true)}
+                  className="w-full flex items-center justify-center gap-2 py-2 text-[13px] text-[var(--color-text-tertiary)] hover:text-[var(--color-danger)]">
+                  <Trash2 size={14} />Supprimer ce coach
+                </button>
+              )
+            )}
           </div>
         </div>
       )}

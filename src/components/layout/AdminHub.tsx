@@ -6,6 +6,7 @@ const ADMIN_LINKS = [
   { href: '/admin/locations', label: 'Lieux', description: 'Salles et espaces', icon: MapPin },
   { href: '/admin/services', label: 'Services', description: 'Types de séances et tarifs', icon: Briefcase },
   { href: '/admin/groups', label: 'Groupes clients', description: 'Groupes pour les séances', icon: UsersRound },
+  { href: '/admin/stats', label: 'Statistiques', description: 'CA, séances par service et coach', icon: BarChart2 },
   { href: '/admin/independent-tracking', label: 'Suivi indépendants', description: 'Location de salle', icon: BarChart2 },
   { href: '/admin/settings', label: 'Réglages', description: 'Template WhatsApp, configuration', icon: Settings },
 ] as const
