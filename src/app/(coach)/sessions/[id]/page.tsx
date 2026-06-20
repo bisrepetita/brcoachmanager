@@ -5,7 +5,7 @@ import { useRouter, useParams } from 'next/navigation'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { orderBy, doc, getDoc, deleteDoc, query, collection, where, getDocs, writeBatch, serverTimestamp } from 'firebase/firestore'
-import { ChevronLeft, MapPin, User, Users, Dumbbell, Clock, AlertTriangle, Send, RefreshCw } from 'lucide-react'
+import { ChevronLeft, MapPin, User, Users, Dumbbell, Clock, AlertTriangle, Send, RefreshCw, Pencil } from 'lucide-react'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { Badge } from '@/components/ui/badge'
 import { useCollection } from '@/lib/hooks/useCollection'
@@ -270,6 +270,11 @@ export default function SessionDetailPage() {
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             {isRecurring && <Badge variant="muted"><RefreshCw size={9} />Récurrente</Badge>}
             <Badge variant={statusVariant}>{session.status === 'done' ? 'Effectué' : session.status === 'cancelled' ? 'Annulé' : 'Planifié'}</Badge>
+            {session.status === 'planned' && (
+              <button onClick={() => router.push(`/sessions/${sessionId}/edit` as never)} style={{ padding: 4, background: 'none', border: 'none', cursor: 'pointer', color: '#7A7570', display: 'flex' }}>
+                <Pencil size={17} />
+              </button>
+            )}
           </div>
         }
       />

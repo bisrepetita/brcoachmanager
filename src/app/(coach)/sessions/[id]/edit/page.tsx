@@ -1,0 +1,274 @@
+'use client'
+
+import { useState, useMemo, useEffect, useCallback } from 'react'
+import { useRouter, useParams } from 'next/navigation'
+import { format, addMinutes } from 'date-fns'
+import { orderBy, Timestamp, doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
+import { Check, Search } from 'lucide-react'
+import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
+import { useCollection } from '@/lib/hooks/useCollection'
+import { useAuth } from '@/lib/hooks/useAuth'
+import { db } from '@/lib/firebase/firestore'
+import type { Service, Location, User, Client, ClientGroup, Session, ClientPayment } from '@/types'
+
+const inputStyle: React.CSSProperties = {
+  height: 36, border: '1px solid #E5E1DA', borderRadius: 8,
+  padding: '0 10px', fontSize: 14, color: '#1A1A18',
+  background: '#F9F8F6', outline: 'none', width: '100%',
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div style={{ background: '#fff', borderRadius: 10, padding: '12px 14px' }}>
+      <p style={{ fontSize: 11, fontWeight: 600, color: '#A09890', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>
+        {title}
+      </p>
+      {children}
+    </div>
+  )
+}
+
+function SelectItem({ label, sub, selected, onSelect, multi = false }: {
+  label: string; sub?: string; selected: boolean; onSelect: () => void; multi?: boolean
+}) {
+  return (
+    <button
+      onClick={onSelect}
+      style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '8px 10px', borderRadius: 8, border: 'none', cursor: 'pointer',
+        textAlign: 'left', width: '100%',
+        backgroundColor: selected ? '#F0EDE8' : 'transparent',
+      }}
+    >
+      <div style={{ minWidth: 0 }}>
+        <p style={{ fontSize: 14, color: '#1A1A18', fontWeight: selected ? 500 : 400, margin: 0 }}>{label}</p>
+        {sub && <p style={{ fontSize: 12, color: '#7A7570', margin: 0 }}>{sub}</p>}
+      </div>
+      {selected && (
+        <div style={{ width: 20, height: 20, borderRadius: multi ? 4 : 10, backgroundColor: '#1A1A18', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginLeft: 8 }}>
+          <Check size={12} color="#fff" />
+        </div>
+      )}
+    </button>
+  )
+}
+
+const DURATIONS = [30, 45, 60, 75, 90, 120] as const
+
+export default function EditSessionPage() {
+  const router = useRouter()
+  const params = useParams()
+  const sessionId = params.id as string
+  const { user } = useAuth()
+
+  const [session, setSession] = useState<Session | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  const [serviceId, setServiceId] = useState('')
+  const [locationId, setLocationId] = useState('')
+  const [coachIds, setCoachIds] = useState<string[]>([])
+  const [selectedClientIds, setSelectedClientIds] = useState<string[]>([])
+  const [date, setDate] = useState('')
+  const [startTime, setStartTime] = useState('')
+  const [duration, setDuration] = useState(60)
+  const [clientSearch, setClientSearch] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const { data: allServices } = useCollection<Service>('services', [orderBy('name')])
+  const { data: allLocations } = useCollection<Location>('locations', [orderBy('name')])
+  const { data: allCoaches } = useCollection<User>('users', [orderBy('firstName')])
+  const { data: clients } = useCollection<Client>('clients', [orderBy('firstName')])
+  const { data: groups } = useCollection<ClientGroup>('clientGroups', [orderBy('name')])
+
+  const services = useMemo(() => allServices.filter(s => s.active !== false), [allServices])
+  const locations = useMemo(() => allLocations.filter(l => l.active !== false), [allLocations])
+  const coaches = useMemo(() => allCoaches.filter(c => c.active !== false), [allCoaches])
+
+  useEffect(() => {
+    getDoc(doc(db, 'sessions', sessionId)).then(snap => {
+      if (!snap.exists()) { setLoading(false); return }
+      const s = { id: snap.id, ...snap.data() } as Session
+      setSession(s)
+      const start = s.startAt.toDate()
+      const end = s.endAt.toDate()
+      const mins = Math.round((end.getTime() - start.getTime()) / 60000)
+      setServiceId(s.serviceId)
+      setLocationId(s.locationId)
+      setCoachIds(s.coachIds)
+      setSelectedClientIds(s.clientIds)
+      setDate(format(start, 'yyyy-MM-dd'))
+      setStartTime(format(start, 'HH:mm'))
+      setDuration(DURATIONS.includes(mins as typeof DURATIONS[number]) ? mins : 60)
+      setLoading(false)
+    })
+  }, [sessionId])
+
+  const selectedService = useMemo(() => services.find(s => s.id === serviceId), [services, serviceId])
+  const filteredClients = useMemo(() =>
+    clients.filter(c => `${c.firstName} ${c.lastName}`.toLowerCase().includes(clientSearch.toLowerCase())),
+    [clients, clientSearch]
+  )
+
+  const canSubmit = !!(serviceId && locationId && coachIds.length > 0 && date && startTime && selectedClientIds.length > 0)
+
+  const handleSave = useCallback(async () => {
+    if (!canSubmit || !selectedService || !session) return
+    setSaving(true)
+    setError('')
+    try {
+      const [yr, mo, dy] = date.split('-').map(Number)
+      const [hh, mm] = startTime.split(':').map(Number)
+      const startDate = new Date(yr!, mo! - 1, dy!, hh, mm, 0)
+      const endDate = addMinutes(startDate, duration)
+
+      const pricePerClient = selectedService.pricingMode === 'per_person'
+        ? selectedService.price
+        : selectedClientIds.length > 0 ? Math.round((selectedService.price / selectedClientIds.length) * 100) / 100 : 0
+
+      const existingDist = session.paymentDistribution ?? []
+      const paymentDistribution: ClientPayment[] = selectedClientIds.map(cId => {
+        const existing = existingDist.find(p => p.clientId === cId)
+        return existing
+          ? { ...existing, amountDue: pricePerClient }
+          : { clientId: cId, amountDue: pricePerClient, amountPaid: 0, paymentStatus: 'payment_to_request' }
+      })
+
+      await updateDoc(doc(db, 'sessions', sessionId), {
+        serviceId,
+        locationId,
+        coachIds,
+        clientIds: selectedClientIds,
+        startAt: Timestamp.fromDate(startDate),
+        endAt: Timestamp.fromDate(endDate),
+        paymentDistribution,
+        priceSnapshot: {
+          serviceName: selectedService.name,
+          basePrice: selectedService.price,
+          pricingMode: selectedService.pricingMode,
+        },
+        updatedAt: serverTimestamp(),
+      })
+
+      router.back()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erreur')
+      setSaving(false)
+    }
+  }, [canSubmit, selectedService, session, date, startTime, duration, serviceId, locationId, coachIds, selectedClientIds, sessionId, router])
+
+  if (loading) return <div className="flex items-center justify-center h-screen text-sm text-text-secondary">Chargement…</div>
+  if (!session) return <div className="flex items-center justify-center h-screen text-sm text-text-secondary">Séance introuvable</div>
+
+  const isAdmin = user?.roles?.includes('admin') ?? false
+
+  return (
+    <>
+      <TopBar
+        title="Modifier la séance"
+        left={<button onClick={() => router.back()} className="p-2 -ml-1 text-text-secondary">Annuler</button>}
+        right={
+          <button
+            onClick={handleSave}
+            disabled={!canSubmit || saving}
+            style={{
+              fontSize: 14, fontWeight: 600, color: canSubmit && !saving ? '#1A1A18' : '#A09890',
+              background: 'none', border: 'none', cursor: canSubmit && !saving ? 'pointer' : 'default',
+            }}
+          >
+            {saving ? 'Enregistrement…' : 'Enregistrer'}
+          </button>
+        }
+      />
+      <TopBarSpacer />
+
+      <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {error && <p style={{ color: '#EF4444', fontSize: 13, textAlign: 'center' }}>{error}</p>}
+
+        {/* Date & heure */}
+        <Section title="Date & heure">
+          <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+            <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ ...inputStyle, flex: 2 }} />
+            <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} style={{ ...inputStyle, flex: 1 }} />
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {DURATIONS.map(d => (
+              <button
+                key={d}
+                onClick={() => setDuration(d)}
+                style={{
+                  padding: '4px 10px', borderRadius: 8, fontSize: 13, border: '1px solid',
+                  borderColor: duration === d ? '#1A1A18' : '#E5E1DA',
+                  background: duration === d ? '#1A1A18' : 'transparent',
+                  color: duration === d ? '#fff' : '#1A1A18', cursor: 'pointer',
+                }}
+              >
+                {d} min
+              </button>
+            ))}
+          </div>
+        </Section>
+
+        {/* Service */}
+        <Section title="Service">
+          {services.map(s => (
+            <SelectItem key={s.id} label={s.name} sub={`CHF ${s.price}`} selected={serviceId === s.id} onSelect={() => setServiceId(s.id)} />
+          ))}
+        </Section>
+
+        {/* Lieu */}
+        <Section title="Lieu">
+          {locations.map(l => (
+            <SelectItem key={l.id} label={l.name} selected={locationId === l.id} onSelect={() => setLocationId(l.id)} />
+          ))}
+        </Section>
+
+        {/* Coachs */}
+        {isAdmin && (
+          <Section title="Coachs">
+            {coaches.map(c => {
+              const sel = coachIds.includes(c.id)
+              return (
+                <SelectItem
+                  key={c.id}
+                  label={`${c.firstName} ${c.lastName}`}
+                  selected={sel}
+                  multi
+                  onSelect={() => setCoachIds(sel ? coachIds.filter(id => id !== c.id) : [...coachIds, c.id])}
+                />
+              )
+            })}
+          </Section>
+        )}
+
+        {/* Clients */}
+        <Section title="Clients">
+          <div style={{ position: 'relative', marginBottom: 8 }}>
+            <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#A09890' }} />
+            <input
+              placeholder="Rechercher…"
+              value={clientSearch}
+              onChange={e => setClientSearch(e.target.value)}
+              style={{ ...inputStyle, paddingLeft: 30 }}
+            />
+          </div>
+          {filteredClients.map(c => {
+            const sel = selectedClientIds.includes(c.id)
+            const groupName = groups.find(g => g.clientIds.includes(c.id))?.name
+            return (
+              <SelectItem
+                key={c.id}
+                label={`${c.firstName} ${c.lastName}`}
+                sub={groupName}
+                selected={sel}
+                multi
+                onSelect={() => setSelectedClientIds(sel ? selectedClientIds.filter(id => id !== c.id) : [...selectedClientIds, c.id])}
+              />
+            )
+          })}
+        </Section>
+      </div>
+    </>
+  )
+}
