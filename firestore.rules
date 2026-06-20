@@ -34,10 +34,11 @@ service cloud.firestore {
       allow read: if isAdmin() || (isAuth() && request.auth.uid == userId);
       // Coaches peuvent lire tous les profils (pour afficher les noms dans le calendrier)
       allow read: if isCoach();
-      // Coach peut mettre à jour uniquement son token FCM
+      // Coach peut mettre à jour ses propres champs de profil
       allow update: if isAdmin() || (
         isAuth() && request.auth.uid == userId &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fcmToken', 'updatedAt'])
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['fcmToken', 'googleCalendarUrl', 'icalSecret', 'updatedAt'])
       );
       allow create, delete: if isAdmin();
     }
@@ -131,6 +132,13 @@ service cloud.firestore {
     match /settings/{docId} {
       allow read: if isAuth();
       allow write: if isAdmin();
+    }
+
+    // ─── notifications ────────────────────────────────────────────────────────
+
+    match /notifications/{notifId} {
+      allow read, update: if isAuth() && resource.data.userId == request.auth.uid;
+      allow create: if isAdmin();
     }
 
   }
