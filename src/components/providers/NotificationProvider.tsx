@@ -3,15 +3,16 @@
 import { useEffect } from 'react'
 import { useAuth } from '@/lib/hooks/useAuth'
 import { requestNotificationPermission, onForegroundMessage } from '@/lib/firebase/messaging'
+import { useToast } from '@/components/ui/Toast'
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
+  const { showToast } = useToast()
 
   // Enregistrement du service worker FCM
   useEffect(() => {
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return
     navigator.serviceWorker.register('/firebase-messaging-sw.js').then(reg => {
-      // Passer la config Firebase au SW pour qu'il puisse initialiser firebase
       const config = {
         apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
         authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -36,22 +37,19 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     if (Notification.permission === 'granted') {
       requestNotificationPermission(user.id).catch(() => {})
     } else if (Notification.permission === 'default') {
-      // On demande seulement si jamais refusé
       requestNotificationPermission(user.id).catch(() => {})
     }
   }, [user?.id])
 
-  // Notifications en foreground → toast natif
+  // Notifications en foreground → toast in-app
   useEffect(() => {
     const unsub = onForegroundMessage((payload) => {
       const title = payload.notification?.title ?? 'BRCoachManager'
-      const body = payload.notification?.body ?? ''
-      if ('Notification' in window && Notification.permission === 'granted') {
-        new Notification(title, { body, icon: '/icons/icon-192.png' })
-      }
+      const body = payload.notification?.body
+      showToast(title, body)
     })
     return () => { if (typeof unsub === 'function') unsub() }
-  }, [])
+  }, [showToast])
 
   return <>{children}</>
 }
