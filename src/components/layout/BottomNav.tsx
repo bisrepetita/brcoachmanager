@@ -31,13 +31,13 @@ export function BottomNav() {
         {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
           const isActive = pathname === href || pathname.startsWith(href + '/')
           const showBadge = href === '/to-close' && toCloseCount > 0
-          const showNotifBadge = href === '/settings' && pendingCount > 0
+          const showNotifBadge = href === '/to-close' && pendingCount > 0
 
           return (
             <Link
               key={href}
               href={href}
-              onClick={href === '/settings' ? markAllRead : undefined}
+              onClick={href === '/to-close' ? markAllRead : undefined}
               className="relative flex flex-col items-center justify-center flex-1 h-full no-underline"
               style={{ color: isActive ? '#1A1A18' : '#7A7570' }}
             >
