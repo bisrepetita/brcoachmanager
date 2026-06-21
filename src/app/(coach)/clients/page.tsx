@@ -16,10 +16,12 @@ import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ListSkeleton } from '@/components/shared/LoadingSkeleton'
 import { useAuth } from '@/lib/hooks/useAuth'
-import { Plus, Search, Users, Pencil, CreditCard, X, Trash2, Check } from 'lucide-react'
+import { Plus, Search, Users, Pencil, CreditCard, X, Trash2, Check, ChevronRight } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 import type { Client, CreditTransaction, User as UserType } from '@/types'
 
 export default function ClientsPage() {
+  const router = useRouter()
   const { isAdmin, user } = useAuth()
   const { data: clients, loading } = useCollection<Client>('clients', [orderBy('lastName')])
   const { data: coaches } = useCollection<UserType>('users', [orderBy('firstName')])
@@ -218,7 +220,7 @@ export default function ClientsPage() {
             <div
               key={c.id}
               className="flex items-center gap-3 p-4 rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] press-effect"
-              onClick={() => isAdmin && openEdit(c)}
+              onClick={() => router.push(`/clients/${c.id}` as never)}
             >
               {/* Avatar initiales */}
               <div className="w-10 h-10 rounded-full bg-[#F0EDE8] border border-[var(--color-border)] flex items-center justify-center shrink-0 text-[13px] font-semibold text-[#7A7570]">
@@ -251,7 +253,12 @@ export default function ClientsPage() {
                     <span className="text-[12px] font-medium" style={{ color: '#2D7A4F' }}>{c.sessionCredits}</span>
                   </div>
                 )}
-                {isAdmin && <Pencil size={14} style={{ color: '#C8C4BC' }} />}
+                {isAdmin && (
+                  <button onClick={e => { e.stopPropagation(); openEdit(c) }} style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                    <Pencil size={14} style={{ color: '#C8C4BC' }} />
+                  </button>
+                )}
+                <ChevronRight size={14} style={{ color: '#C8C4BC' }} />
               </div>
             </div>
           ))}

@@ -2,16 +2,16 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { CalendarDays, AlertCircle, Clock, Users, Settings } from 'lucide-react'
+import { CalendarDays, AlertCircle, History, Users, Settings } from 'lucide-react'
 import { useToCloseCount } from '@/lib/hooks/useToCloseCount'
 import { useNotifCount } from '@/components/providers/NotificationProvider'
 
 const NAV_ITEMS = [
-  { href: '/calendar',     label: 'Calendrier', icon: CalendarDays },
-  { href: '/to-close',     label: 'À clôturer', icon: AlertCircle },
-  { href: '/availability', label: 'Dispo',       icon: Clock },
-  { href: '/clients',      label: 'Clients',     icon: Users },
-  { href: '/settings',     label: 'Réglages',    icon: Settings },
+  { href: '/calendar',  label: 'Calendrier', icon: CalendarDays },
+  { href: '/to-close', label: 'À clôturer', icon: AlertCircle },
+  { href: '/history',  label: 'Historique', icon: History },
+  { href: '/clients',  label: 'Clients',    icon: Users },
+  { href: '/settings', label: 'Réglages',   icon: Settings },
 ] as const
 
 export function BottomNav() {
