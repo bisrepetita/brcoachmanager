@@ -9,6 +9,7 @@ import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { useCollection } from '@/lib/hooks/useCollection'
 import { useAuth } from '@/lib/hooks/useAuth'
 import { db } from '@/lib/firebase/firestore'
+import { logActivity } from '@/lib/services/activity.service'
 import type { Service, Location, User, Client, ClientGroup, Session, ClientPayment } from '@/types'
 
 const inputStyle: React.CSSProperties = {
@@ -179,12 +180,14 @@ export default function EditSessionPage() {
         await batch.commit()
       }
 
+      const scopeLabel = scope === 'single' ? 'cette séance' : scope === 'following' ? 'cette séance et les suivantes' : 'toutes les séances'
+      logActivity({ userId: user!.id, userFirstName: user!.firstName, userLastName: user!.lastName, action: 'session_edited', description: `${selectedService.name} · ${scopeLabel}`, sessionId })
       router.back()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur')
       setSaving(false)
     }
-  }, [canSubmit, selectedService, session, date, startTime, duration, serviceId, locationId, coachIds, selectedClientIds, sessionId, router])
+  }, [canSubmit, selectedService, session, date, startTime, duration, serviceId, locationId, coachIds, selectedClientIds, sessionId, router, user])
 
   const handleSave = useCallback(() => {
     if (!canSubmit || !session) return

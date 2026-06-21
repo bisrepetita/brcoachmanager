@@ -12,6 +12,7 @@ import { useCollection } from '@/lib/hooks/useCollection'
 import { useAuth } from '@/lib/hooks/useAuth'
 import { requestPaymentLink } from '@/lib/services/payment.service'
 import { sendNotification } from '@/lib/services/notification.service'
+import { logActivity } from '@/lib/services/activity.service'
 import { db } from '@/lib/firebase/firestore'
 import type { Session, User as UserType, Service, Location, Client, AppSettings } from '@/types'
 
@@ -111,6 +112,7 @@ export default function SessionDetailPage() {
       await batch.commit()
       setSession(prev => prev ? { ...prev, status: 'cancelled' } : prev)
       setCancelScope('none')
+      logActivity({ userId: user!.id, userFirstName: user!.firstName, userLastName: user!.lastName, action: 'session_cancelled', description: `${session.priceSnapshot?.serviceName ?? 'Séance'} · ${format(session.startAt.toDate(), 'd MMM yyyy HH:mm', { locale: fr })}`, sessionId })
 
       // Notifier les autres coachs de l'annulation
       if (session.coachIds.length > 1) {
@@ -152,12 +154,13 @@ export default function SessionDetailPage() {
         })
         await batch.commit()
       }
+      logActivity({ userId: user!.id, userFirstName: user!.firstName, userLastName: user!.lastName, action: 'session_deleted', description: `${session.priceSnapshot?.serviceName ?? 'Séance'} · ${format(session.startAt.toDate(), 'd MMM yyyy HH:mm', { locale: fr })}`, sessionId })
       router.replace('/calendar' as never)
     } catch {
       setDeleting(false)
       setDeleteScope('none')
     }
-  }, [session, sessionId, router])
+  }, [session, sessionId, router, user])
 
   const handleSendPayment = useCallback(async (clientId: string) => {
     if (!session) return

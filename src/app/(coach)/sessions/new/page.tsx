@@ -11,6 +11,7 @@ import { useCollection } from '@/lib/hooks/useCollection'
 import { useAuth } from '@/lib/hooks/useAuth'
 import { createDoc } from '@/lib/services/crud.service'
 import { sendNotification } from '@/lib/services/notification.service'
+import { logActivity } from '@/lib/services/activity.service'
 import { format as formatDate } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import type { Service, Location, User, Client, ClientGroup, ClientPayment } from '@/types'
@@ -293,6 +294,7 @@ function NewSessionForm() {
           })
         }
 
+        logActivity({ userId: user!.id, userFirstName: user!.firstName, userLastName: user!.lastName, action: 'session_created', description: `${selectedService.name} · ${formatDate(startDate, 'd MMM yyyy HH:mm', { locale: fr })}`, sessionId })
         router.replace(`/sessions/${sessionId}` as never)
         return
       }
@@ -351,6 +353,7 @@ function NewSessionForm() {
       }
 
       await batch.commit()
+      logActivity({ userId: user!.id, userFirstName: user!.firstName, userLastName: user!.lastName, action: 'session_created', description: `${selectedService.name} · récurrence (${occurrences.length} séances)`, sessionId: firstSessionId! })
       router.replace(`/sessions/${firstSessionId}` as never)
     } catch (e) {
       console.error(e)

@@ -9,6 +9,7 @@ import { ChevronLeft, Gift, CreditCard } from 'lucide-react'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { useCollection } from '@/lib/hooks/useCollection'
 import { useAuth } from '@/lib/hooks/useAuth'
+import { logActivity } from '@/lib/services/activity.service'
 import { db } from '@/lib/firebase/firestore'
 import type { Session, Client, ClientPayment } from '@/types'
 
@@ -141,6 +142,7 @@ export default function CloseSessionPage() {
       }
 
       await batch.commit()
+      logActivity({ userId: user!.id, userFirstName: user!.firstName, userLastName: user!.lastName, action: 'session_done', description: `${session.priceSnapshot?.serviceName ?? 'Séance'} · ${format(session.startAt.toDate(), 'd MMM yyyy HH:mm', { locale: fr })}`, sessionId })
       router.replace(`/sessions/${sessionId}` as never)
     } catch {
       setSaving(false)

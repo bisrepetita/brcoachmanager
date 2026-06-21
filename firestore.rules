@@ -134,6 +134,13 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // ─── activityLogs ─────────────────────────────────────────────────────────
+
+    match /activityLogs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isCoach();
+    }
+
     // ─── notifications ────────────────────────────────────────────────────────
 
     match /notifications/{notifId} {
