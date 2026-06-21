@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { CalendarDays, AlertCircle, Clock, Users, Settings } from 'lucide-react'
 import { useToCloseCount } from '@/lib/hooks/useToCloseCount'
+import { useNotifCount } from '@/components/providers/NotificationProvider'
 
 const NAV_ITEMS = [
   { href: '/calendar',     label: 'Calendrier', icon: CalendarDays },
@@ -16,6 +17,7 @@ const NAV_ITEMS = [
 export function BottomNav() {
   const pathname = usePathname()
   const toCloseCount = useToCloseCount()
+  const { pendingCount, markAllRead } = useNotifCount()
 
   return (
     <nav
@@ -29,11 +31,13 @@ export function BottomNav() {
         {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
           const isActive = pathname === href || pathname.startsWith(href + '/')
           const showBadge = href === '/to-close' && toCloseCount > 0
+          const showNotifBadge = href === '/settings' && pendingCount > 0
 
           return (
             <Link
               key={href}
               href={href}
+              onClick={href === '/settings' ? markAllRead : undefined}
               className="relative flex flex-col items-center justify-center flex-1 h-full no-underline"
               style={{ color: isActive ? '#1A1A18' : '#7A7570' }}
             >
@@ -42,6 +46,11 @@ export function BottomNav() {
                 {showBadge && (
                   <span className="absolute -top-1 -right-1.5 min-w-[15px] h-[15px] px-[3px] rounded-full flex items-center justify-center leading-none text-[9px] font-bold text-white bg-[#C0392B]">
                     {toCloseCount > 9 ? '9+' : toCloseCount}
+                  </span>
+                )}
+                {showNotifBadge && (
+                  <span className="absolute -top-1 -right-1.5 min-w-[15px] h-[15px] px-[3px] rounded-full flex items-center justify-center leading-none text-[9px] font-bold text-white bg-[#4285F4]">
+                    {pendingCount > 9 ? '9+' : pendingCount}
                   </span>
                 )}
               </div>

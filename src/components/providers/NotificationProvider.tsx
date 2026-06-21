@@ -1,15 +1,25 @@
 'use client'
 
-import { useEffect } from 'react'
+import { createContext, useContext, useEffect, useState } from 'react'
 import { useAuth } from '@/lib/hooks/useAuth'
 import { requestNotificationPermission } from '@/lib/firebase/messaging'
 import { useToast } from '@/components/ui/Toast'
 import { db } from '@/lib/firebase/firestore'
-import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore'
+import { collection, query, where, onSnapshot, doc, updateDoc, writeBatch } from 'firebase/firestore'
+
+interface NotifContextValue {
+  pendingCount: number
+  markAllRead: () => void
+}
+
+const NotifContext = createContext<NotifContextValue>({ pendingCount: 0, markAllRead: () => {} })
+
+export function useNotifCount() { return useContext(NotifContext) }
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
   const { showToast } = useToast()
+  const [pendingIds, setPendingIds] = useState<string[]>([])
 
   // Enregistrement du service worker FCM
   useEffect(() => {
@@ -41,7 +51,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     }
   }, [user?.id])
 
-  // Écoute Firestore → toast in-app immédiat
+  // Écoute Firestore → toast temps réel + compteur de notifications en attente
   useEffect(() => {
     if (!user?.id) return
     const q = query(
@@ -50,12 +60,15 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       where('shown', '==', false)
     )
     const unsub = onSnapshot(q, (snap) => {
+      const ids = snap.docs.map(d => d.id)
+      setPendingIds(ids)
+
       snap.docChanges().forEach((change) => {
         if (change.type !== 'added') return
         const d = change.doc.data()
-        // Ignorer les docs créés il y a plus de 30s (au cas où on recharge la page)
         const age = Date.now() - (d.createdAt?.toMillis?.() ?? 0)
-        if (age > 600000) return // ignorer si > 10 min
+        // Toast seulement pour les notifications reçues en temps réel (< 10s)
+        if (age > 10000) return
         showToast(d.title, d.body)
         updateDoc(doc(db, 'notifications', change.doc.id), { shown: true }).catch(() => {})
       })
@@ -63,5 +76,16 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     return unsub
   }, [user?.id, showToast])
 
-  return <>{children}</>
+  function markAllRead() {
+    if (!pendingIds.length) return
+    const batch = writeBatch(db)
+    pendingIds.forEach(id => batch.update(doc(db, 'notifications', id), { shown: true }))
+    batch.commit().catch(() => {})
+  }
+
+  return (
+    <NotifContext.Provider value={{ pendingCount: pendingIds.length, markAllRead }}>
+      {children}
+    </NotifContext.Provider>
+  )
 }
