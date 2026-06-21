@@ -149,15 +149,17 @@ export default function EditSessionPage() {
           updatedAt: serverTimestamp(),
         })
       } else {
-        // Récupérer toutes les séances de la récurrence
-        const q = scope === 'following'
-          ? query(collection(db, 'sessions'), where('recurrenceId', '==', session.recurrenceId), where('startAt', '>=', session.startAt), where('status', '==', 'planned'))
-          : query(collection(db, 'sessions'), where('recurrenceId', '==', session.recurrenceId), where('status', '==', 'planned'))
-
+        // Récupérer toutes les séances de la récurrence (filtrage JS pour éviter les index composites)
+        const q = query(collection(db, 'sessions'), where('recurrenceId', '==', session.recurrenceId))
         const snap = await getDocs(q)
         const batch = writeBatch(db)
 
-        snap.docs.forEach(d => {
+        snap.docs.filter(d => {
+          const s = d.data() as Session
+          if (s.status !== 'planned') return false
+          if (scope === 'following') return s.startAt.seconds >= session.startAt.seconds
+          return true
+        }).forEach(d => {
           const s = d.data() as Session
           const origStart = s.startAt.toDate()
           // Garder la date d'origine, appliquer la nouvelle heure
