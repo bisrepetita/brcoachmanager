@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { doc, getDoc, collection, query, where, getDocs, orderBy } from 'firebase/firestore'
+import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { ChevronLeft, ChevronRight, Phone, Mail, MapPin, CreditCard } from 'lucide-react'
@@ -44,14 +44,18 @@ export default function ClientDetailPage() {
 
   useEffect(() => {
     if (!clientId) return
-    Promise.all([
-      getDoc(doc(db, 'clients', clientId)),
-      getDocs(query(collection(db, 'sessions'), where('clientIds', 'array-contains', clientId), orderBy('startAt', 'desc'))),
-    ]).then(([clientSnap, sessionsSnap]) => {
-      if (clientSnap.exists()) setClient({ id: clientSnap.id, ...clientSnap.data() } as Client)
-      setSessions(sessionsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Session)))
+    // Charger le client
+    getDoc(doc(db, 'clients', clientId)).then(snap => {
+      if (snap.exists()) setClient({ id: snap.id, ...snap.data() } as Client)
       setLoading(false)
     }).catch(() => setLoading(false))
+    // Charger les sessions séparément (sans orderBy pour éviter l'index composite)
+    getDocs(query(collection(db, 'sessions'), where('clientIds', 'array-contains', clientId)))
+      .then(snap => {
+        const data = snap.docs.map(d => ({ id: d.id, ...d.data() } as Session))
+        data.sort((a, b) => b.startAt.seconds - a.startAt.seconds)
+        setSessions(data)
+      }).catch(() => {})
   }, [clientId])
 
   const doneSessions = useMemo(() => sessions.filter(s => s.status === 'done'), [sessions])
