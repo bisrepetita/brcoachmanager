@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { format, addMinutes } from 'date-fns'
-import { orderBy, Timestamp, doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
+import { orderBy, Timestamp, doc, getDoc, updateDoc, getDocs, query, collection, where, writeBatch, serverTimestamp } from 'firebase/firestore'
 import { Check, Search } from 'lucide-react'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { useCollection } from '@/lib/hooks/useCollection'
@@ -54,6 +54,8 @@ function SelectItem({ label, sub, selected, onSelect, multi = false }: {
   )
 }
 
+type Scope = 'single' | 'following' | 'all'
+
 const DURATIONS = [30, 45, 60, 75, 90, 120] as const
 
 export default function EditSessionPage() {
@@ -75,6 +77,7 @@ export default function EditSessionPage() {
   const [clientSearch, setClientSearch] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [showScopeModal, setShowScopeModal] = useState(false)
 
   const { data: allServices } = useCollection<Service>('services', [orderBy('name')])
   const { data: allLocations } = useCollection<Location>('locations', [orderBy('name')])
@@ -113,10 +116,11 @@ export default function EditSessionPage() {
 
   const canSubmit = !!(serviceId && locationId && coachIds.length > 0 && date && startTime && selectedClientIds.length > 0)
 
-  const handleSave = useCallback(async () => {
+  const doSave = useCallback(async (scope: Scope) => {
     if (!canSubmit || !selectedService || !session) return
     setSaving(true)
     setError('')
+    setShowScopeModal(false)
     try {
       const [yr, mo, dy] = date.split('-').map(Number)
       const [hh, mm] = startTime.split(':').map(Number)
@@ -127,29 +131,51 @@ export default function EditSessionPage() {
         ? selectedService.price
         : selectedClientIds.length > 0 ? Math.round((selectedService.price / selectedClientIds.length) * 100) / 100 : 0
 
-      const existingDist = session.paymentDistribution ?? []
-      const paymentDistribution: ClientPayment[] = selectedClientIds.map(cId => {
-        const existing = existingDist.find(p => p.clientId === cId)
-        return existing
-          ? { ...existing, amountDue: pricePerClient }
-          : { clientId: cId, amountDue: pricePerClient, amountPaid: 0, paymentStatus: 'payment_to_request' }
-      })
+      const buildPaymentDistribution = (existingDist: ClientPayment[]): ClientPayment[] =>
+        selectedClientIds.map(cId => {
+          const existing = existingDist.find(p => p.clientId === cId)
+          return existing
+            ? { ...existing, amountDue: pricePerClient }
+            : { clientId: cId, amountDue: pricePerClient, amountPaid: 0, paymentStatus: 'payment_to_request' as const }
+        })
 
-      await updateDoc(doc(db, 'sessions', sessionId), {
-        serviceId,
-        locationId,
-        coachIds,
-        clientIds: selectedClientIds,
-        startAt: Timestamp.fromDate(startDate),
-        endAt: Timestamp.fromDate(endDate),
-        paymentDistribution,
-        priceSnapshot: {
-          serviceName: selectedService.name,
-          basePrice: selectedService.price,
-          pricingMode: selectedService.pricingMode,
-        },
-        updatedAt: serverTimestamp(),
-      })
+      if (scope === 'single' || !session.recurrenceId) {
+        await updateDoc(doc(db, 'sessions', sessionId), {
+          serviceId, locationId, coachIds, clientIds: selectedClientIds,
+          startAt: Timestamp.fromDate(startDate),
+          endAt: Timestamp.fromDate(endDate),
+          paymentDistribution: buildPaymentDistribution(session.paymentDistribution ?? []),
+          priceSnapshot: { serviceName: selectedService.name, basePrice: selectedService.price, pricingMode: selectedService.pricingMode },
+          updatedAt: serverTimestamp(),
+        })
+      } else {
+        // Récupérer toutes les séances de la récurrence
+        const q = scope === 'following'
+          ? query(collection(db, 'sessions'), where('recurrenceId', '==', session.recurrenceId), where('startAt', '>=', session.startAt), where('status', '==', 'planned'))
+          : query(collection(db, 'sessions'), where('recurrenceId', '==', session.recurrenceId), where('status', '==', 'planned'))
+
+        const snap = await getDocs(q)
+        const batch = writeBatch(db)
+
+        snap.docs.forEach(d => {
+          const s = d.data() as Session
+          const origStart = s.startAt.toDate()
+          // Garder la date d'origine, appliquer la nouvelle heure
+          const newStart = new Date(origStart.getFullYear(), origStart.getMonth(), origStart.getDate(), hh, mm, 0)
+          const newEnd = addMinutes(newStart, duration)
+
+          batch.update(doc(db, 'sessions', d.id), {
+            serviceId, locationId, coachIds, clientIds: selectedClientIds,
+            startAt: Timestamp.fromDate(newStart),
+            endAt: Timestamp.fromDate(newEnd),
+            paymentDistribution: buildPaymentDistribution(s.paymentDistribution ?? []),
+            priceSnapshot: { serviceName: selectedService.name, basePrice: selectedService.price, pricingMode: selectedService.pricingMode },
+            updatedAt: serverTimestamp(),
+          })
+        })
+
+        await batch.commit()
+      }
 
       router.back()
     } catch (e) {
@@ -157,6 +183,15 @@ export default function EditSessionPage() {
       setSaving(false)
     }
   }, [canSubmit, selectedService, session, date, startTime, duration, serviceId, locationId, coachIds, selectedClientIds, sessionId, router])
+
+  const handleSave = useCallback(() => {
+    if (!canSubmit || !session) return
+    if (session.recurrenceId) {
+      setShowScopeModal(true)
+    } else {
+      doSave('single')
+    }
+  }, [canSubmit, session, doSave])
 
   if (loading) return <div className="flex items-center justify-center h-screen text-sm text-text-secondary">Chargement…</div>
   if (!session) return <div className="flex items-center justify-center h-screen text-sm text-text-secondary">Séance introuvable</div>
@@ -269,6 +304,32 @@ export default function EditSessionPage() {
           })}
         </Section>
       </div>
+
+      {/* Modal choix de portée pour séances récurrentes */}
+      {showScopeModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
+          onClick={() => setShowScopeModal(false)}>
+          <div style={{ background: '#fff', borderRadius: '16px 16px 0 0', padding: '20px 16px', width: '100%', maxWidth: 480 }}
+            onClick={e => e.stopPropagation()}>
+            <p style={{ fontSize: 15, fontWeight: 700, color: '#1A1A18', marginBottom: 4 }}>Modifier l'événement récurrent</p>
+            <p style={{ fontSize: 13, color: '#7A7570', marginBottom: 16 }}>Quelle séance souhaitez-vous modifier ?</p>
+            {([
+              ['single', 'Cette séance uniquement'],
+              ['following', 'Cette séance et les suivantes'],
+              ['all', 'Toutes les séances'],
+            ] as [Scope, string][]).map(([scope, label]) => (
+              <button key={scope} onClick={() => doSave(scope)}
+                style={{ display: 'block', width: '100%', textAlign: 'left', padding: '13px 14px', borderRadius: 10, border: '1px solid #E5E1DA', background: '#F9F8F6', fontSize: 14, color: '#1A1A18', fontWeight: 500, marginBottom: 8, cursor: 'pointer' }}>
+                {label}
+              </button>
+            ))}
+            <button onClick={() => setShowScopeModal(false)}
+              style={{ display: 'block', width: '100%', textAlign: 'center', padding: '13px', borderRadius: 10, border: 'none', background: 'transparent', fontSize: 14, color: '#7A7570', cursor: 'pointer', marginTop: 4 }}>
+              Annuler
+            </button>
+          </div>
+        </div>
+      )}
     </>
   )
 }
