@@ -185,6 +185,31 @@ export default function CalendarPage() {
     setView('day')
   }, [])
 
+  const [slideDir, setSlideDir] = useState<'left' | 'right'>('left')
+  const [slideKey, setSlideKey] = useState(0)
+
+  const navigateTo = useCallback((dir: 1 | -1) => {
+    setSlideDir(dir === 1 ? 'left' : 'right')
+    setSlideKey(k => k + 1)
+    setAnchor(prev => startOfDay(navigate(view, prev, dir)))
+  }, [view])
+
+  const goToToday = useCallback(() => {
+    const today = startOfDay(new Date())
+    const currentRange = getRange(view, anchor)
+    if (today >= currentRange.start && today <= currentRange.end) return
+    const isFuture = today > anchor
+    setSlideDir(isFuture ? 'left' : 'right')
+    setSlideKey(k => k + 1)
+    setAnchor(today)
+  }, [view, anchor])
+
+  const isOnToday = useMemo(() => {
+    const today = startOfDay(new Date())
+    const r = getRange(view, anchor)
+    return today >= r.start && today <= r.end
+  }, [view, anchor])
+
   const touchStartX = useRef<number | null>(null)
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     touchStartX.current = e.touches[0]?.clientX ?? null
@@ -196,9 +221,8 @@ export default function CalendarPage() {
     const delta = endX - touchStartX.current
     touchStartX.current = null
     if (Math.abs(delta) < 50) return
-    const dir = delta < 0 ? 1 : -1
-    setAnchor((prev) => startOfDay(navigate(view, prev, dir)))
-  }, [view])
+    navigateTo(delta < 0 ? 1 : -1)
+  }, [navigateTo])
 
   const title = getTitle(view, anchor)
 
@@ -216,26 +240,28 @@ export default function CalendarPage() {
       <TopBar
         title={
           <div className="flex items-center gap-1">
-            <button
-              onClick={() => setAnchor(startOfDay(navigate(view, anchor, -1)))}
-              className="p-1"
-            >
+            <button onClick={() => navigateTo(-1)} className="p-1">
               <ChevronLeft size={18} style={{ color: '#7A7570' }} />
             </button>
             <button
-              onClick={() => setAnchor(startOfDay(new Date()))}
+              onClick={goToToday}
               className="text-[14px] font-semibold capitalize"
               style={{ minWidth: 150, textAlign: 'center', color: '#1A1A18' }}
             >
               {title}
             </button>
-            <button
-              onClick={() => setAnchor(startOfDay(navigate(view, anchor, 1)))}
-              className="p-1"
-            >
+            <button onClick={() => navigateTo(1)} className="p-1">
               <ChevronRight size={18} style={{ color: '#7A7570' }} />
             </button>
           </div>
+        }
+        left={
+          !isOnToday ? (
+            <button onClick={goToToday}
+              style={{ fontSize: 12, fontWeight: 600, color: '#fff', background: '#1A1A18', border: 'none', borderRadius: 6, padding: '4px 9px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              Aujourd'hui
+            </button>
+          ) : undefined
         }
         right={
           <div className="flex items-center gap-2">
@@ -292,8 +318,16 @@ export default function CalendarPage() {
         ))}
       </div>
 
+      <style>{`
+        @keyframes slideInLeft { from { transform: translateX(100%) } to { transform: translateX(0) } }
+        @keyframes slideInRight { from { transform: translateX(-100%) } to { transform: translateX(0) } }
+        .cal-slide-left { animation: slideInLeft 0.22s ease-out; }
+        .cal-slide-right { animation: slideInRight 0.22s ease-out; }
+      `}</style>
+
       {/* Calendar content — height calculated via CSS variables (not Tailwind arbitrary values) */}
-      <div style={calendarContentStyle} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+      <div style={{ ...calendarContentStyle, overflow: 'hidden' }} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+        <div key={slideKey} className={slideDir === 'left' ? 'cal-slide-left' : 'cal-slide-right'} style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
         {view === 'day' ? (
           <DayView
             date={anchor}
@@ -327,6 +361,7 @@ export default function CalendarPage() {
             onDayClick={handleDayClick}
           />
         )}
+        </div>
       </div>
     </>
   )
