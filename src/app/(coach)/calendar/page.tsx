@@ -255,14 +255,6 @@ export default function CalendarPage() {
             </button>
           </div>
         }
-        left={
-          !isOnToday ? (
-            <button onClick={goToToday}
-              style={{ fontSize: 12, fontWeight: 600, color: '#fff', background: '#1A1A18', border: 'none', borderRadius: 6, padding: '4px 9px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-              Aujourd'hui
-            </button>
-          ) : undefined
-        }
         right={
           <div className="flex items-center gap-2">
             {user?.googleCalendarUrl && (
@@ -316,6 +308,12 @@ export default function CalendarPage() {
             {v === 'day' ? 'Jour' : v === 'week' ? 'Semaine' : 'Mois'}
           </button>
         ))}
+        {!isOnToday && (
+          <button onClick={goToToday}
+            style={{ height: 30, padding: '0 10px', borderRadius: 6, border: '1px solid #E5E1DA', background: '#fff', fontSize: 12, fontWeight: 600, color: '#1A1A18', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
+            Aujourd'hui
+          </button>
+        )}
       </div>
 
       <style>{`
