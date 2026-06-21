@@ -172,7 +172,7 @@ export default function HistoryPage() {
               )}
               <button
                 onClick={() => router.push(`/sessions/${session.id}` as never)}
-                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', borderBottom: '1px solid #F5F3F0', width: '100%', background: 'none', border: 'none', borderBottom: '1px solid #F5F3F0', cursor: 'pointer', textAlign: 'left' }}
+                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', width: '100%', background: 'none', border: 'none', borderBottom: '1px solid #F5F3F0', cursor: 'pointer', textAlign: 'left' }}
               >
                 {/* Date */}
                 <div style={{ width: 40, flexShrink: 0, textAlign: 'center' }}>
