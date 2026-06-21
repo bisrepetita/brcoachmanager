@@ -55,7 +55,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         const d = change.doc.data()
         // Ignorer les docs créés il y a plus de 30s (au cas où on recharge la page)
         const age = Date.now() - (d.createdAt?.toMillis?.() ?? 0)
-        if (age > 30000) return
+        if (age > 600000) return // ignorer si > 10 min
         showToast(d.title, d.body)
         updateDoc(doc(db, 'notifications', change.doc.id), { shown: true }).catch(() => {})
       })
