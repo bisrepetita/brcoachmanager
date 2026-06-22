@@ -64,6 +64,7 @@ export default function EditSessionPage() {
   const params = useParams()
   const sessionId = params.id as string
   const { user } = useAuth()
+  const isAdmin = user?.roles?.includes('admin') ?? false
 
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
@@ -205,8 +206,6 @@ export default function EditSessionPage() {
 
   if (loading) return <div className="flex items-center justify-center h-screen text-sm text-text-secondary">Chargement…</div>
   if (!session) return <div className="flex items-center justify-center h-screen text-sm text-text-secondary">Séance introuvable</div>
-
-  const isAdmin = user?.roles?.includes('admin') ?? false
 
   return (
     <>
