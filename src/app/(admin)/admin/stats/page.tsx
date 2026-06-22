@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { format, startOfMonth, endOfMonth, subMonths, addMonths } from 'date-fns'
+import { format, startOfMonth, endOfMonth, subMonths, addMonths, eachDayOfInterval, isSameDay } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { collection, query, where, getDocs, orderBy, Timestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase/firestore'
@@ -18,6 +18,7 @@ export default function StatsPage() {
   const [loading, setLoading] = useState(false)
   const [filterCoachId, setFilterCoachId] = useState('')
   const [filterServiceId, setFilterServiceId] = useState('')
+  const [view, setView] = useState<'summary' | 'daily'>('summary')
 
   const { data: coaches } = useCollection<User>('users', [orderBy('firstName')])
   const { data: services } = useCollection<Service>('services', [orderBy('name')])
@@ -87,8 +88,17 @@ export default function StatsPage() {
       })
     })
 
-    return { planned, done, cancelled, revenue, paid, byService, byCoach }
-  }, [filtered, services, coaches])
+    // Par jour
+    const days = eachDayOfInterval({ start: startOfMonth(monthAnchor), end: endOfMonth(monthAnchor) })
+    const byDay = days.map(day => {
+      const daySessions = filtered.filter(s => s.status !== 'cancelled' && isSameDay(s.startAt?.toDate?.() ?? new Date(0), day))
+      const dayRevenue = daySessions.reduce((a, s) => a + sessionRevenue(s), 0)
+      const dayPaid = daySessions.reduce((a, s) => a + sessionPaid(s), 0)
+      return { day, sessions: daySessions, count: daySessions.length, revenue: dayRevenue, paid: dayPaid }
+    }).filter(d => d.count > 0)
+
+    return { planned, done, cancelled, revenue, paid, byService, byCoach, byDay }
+  }, [filtered, services, coaches, monthAnchor])
 
   const selectStyle: React.CSSProperties = {
     height: 36, border: '1px solid #E5E1DA', borderRadius: 8,
@@ -131,10 +141,66 @@ export default function StatsPage() {
           </select>
         </div>
 
+        {/* Toggle vue */}
+        <div style={{ display: 'flex', gap: 4, background: '#F0EDE8', borderRadius: 8, padding: 3 }}>
+          {(['summary', 'daily'] as const).map(v => (
+            <button key={v} onClick={() => setView(v)}
+              style={{ flex: 1, height: 30, borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, background: view === v ? '#fff' : 'transparent', color: view === v ? '#1A1A18' : '#7A7570' }}>
+              {v === 'summary' ? 'Résumé' : 'Par jour'}
+            </button>
+          ))}
+        </div>
+
         {loading ? (
           <p style={{ textAlign: 'center', color: '#A09890', fontSize: 14, padding: 20 }}>Chargement…</p>
         ) : (
           <>
+            {view === 'daily' ? (
+              <div style={{ background: '#fff', borderRadius: 10, overflow: 'hidden' }}>
+                <div style={{ padding: '12px 14px', borderBottom: '1px solid #F0EDE8', display: 'flex', justifyContent: 'space-between' }}>
+                  <p style={{ fontSize: 11, fontWeight: 600, color: '#A09890', textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>Jour</p>
+                  <div style={{ display: 'flex', gap: 32 }}>
+                    <p style={{ fontSize: 11, fontWeight: 600, color: '#A09890', textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>Séances</p>
+                    <p style={{ fontSize: 11, fontWeight: 600, color: '#A09890', textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>CA</p>
+                  </div>
+                </div>
+                {stats.byDay.length === 0 && (
+                  <p style={{ textAlign: 'center', color: '#A09890', fontSize: 14, padding: '20px 0' }}>Aucune séance ce mois-ci</p>
+                )}
+                {stats.byDay.map(({ day, count, revenue, paid: dayPaid, sessions: daySessions }) => {
+                  const serviceNames = [...new Set(daySessions.map(s => services.find(sv => sv.id === s.serviceId)?.name ?? s.priceSnapshot?.serviceName ?? '—'))].join(', ')
+                  return (
+                    <div key={day.toISOString()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderBottom: '1px solid #F5F3F0' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#1A1A18', textTransform: 'capitalize' }}>
+                          {format(day, 'EEEE d', { locale: fr })}
+                        </p>
+                        <p style={{ margin: '2px 0 0', fontSize: 11, color: '#A09890', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{serviceNames}</p>
+                      </div>
+                      <div style={{ display: 'flex', gap: 24, alignItems: 'center', flexShrink: 0 }}>
+                        <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#1A1A18', textAlign: 'center', minWidth: 32 }}>{count}</p>
+                        <div style={{ textAlign: 'right', minWidth: 80 }}>
+                          <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#1A1A18' }}>CHF {revenue.toFixed(0)}</p>
+                          {dayPaid > 0 && dayPaid < revenue && (
+                            <p style={{ margin: 0, fontSize: 11, color: '#F59E0B' }}>encaissé {dayPaid.toFixed(0)}</p>
+                          )}
+                          {dayPaid >= revenue && revenue > 0 && (
+                            <p style={{ margin: 0, fontSize: 11, color: '#2D7A4F' }}>✓ encaissé</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+                {stats.byDay.length > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', background: '#F9F8F6' }}>
+                    <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#1A1A18' }}>Total</p>
+                    <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#1A1A18' }}>CHF {stats.revenue.toFixed(2)}</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+            <>
             {/* KPIs */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
               {[
@@ -191,6 +257,8 @@ export default function StatsPage() {
 
             {filtered.length === 0 && (
               <p style={{ textAlign: 'center', color: '#A09890', fontSize: 14, padding: 20 }}>Aucune séance ce mois-ci.</p>
+            )}
+            </>
             )}
           </>
         )}
