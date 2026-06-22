@@ -63,7 +63,7 @@ export default function EditSessionPage() {
   const router = useRouter()
   const params = useParams()
   const sessionId = params.id as string
-  const { user } = useAuth()
+  const { user, isAdmin } = useAuth()
 
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
@@ -86,7 +86,12 @@ export default function EditSessionPage() {
   const { data: clients } = useCollection<Client>('clients', [orderBy('firstName')])
   const { data: groups } = useCollection<ClientGroup>('clientGroups', [orderBy('name')])
 
-  const services = useMemo(() => allServices.filter(s => s.active !== false), [allServices])
+  const services = useMemo(() => allServices.filter(s => {
+    if (s.active === false) return false
+    if (!s.assignedCoachIds || s.assignedCoachIds.length === 0) return true
+    if (isAdmin) return true
+    return user?.id ? s.assignedCoachIds.includes(user.id) : false
+  }), [allServices, isAdmin, user?.id])
   const locations = useMemo(() => allLocations.filter(l => l.active !== false), [allLocations])
   const coaches = useMemo(() => allCoaches.filter(c => c.active !== false), [allCoaches])
 

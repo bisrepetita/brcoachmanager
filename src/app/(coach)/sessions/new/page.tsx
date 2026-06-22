@@ -129,7 +129,7 @@ type RecurrenceEndType = 'infinite' | '3months' | '6months' | '1year' | 'count'
 function NewSessionForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { user, loading: authLoading } = useAuth()
+  const { user, isAdmin, loading: authLoading } = useAuth()
   const isAdmin = user?.roles?.includes('admin') ?? false
 
   const dateParam = searchParams.get('date')
@@ -163,7 +163,12 @@ function NewSessionForm() {
   const { data: clients } = useCollection<Client>('clients', [orderBy('firstName')])
   const { data: groups } = useCollection<ClientGroup>('clientGroups', [orderBy('name')])
 
-  const services = useMemo(() => allServices.filter(s => s.active !== false), [allServices])
+  const services = useMemo(() => allServices.filter(s => {
+    if (s.active === false) return false
+    if (!s.assignedCoachIds || s.assignedCoachIds.length === 0) return true
+    if (isAdmin) return true
+    return user?.id ? s.assignedCoachIds.includes(user.id) : false
+  }), [allServices, isAdmin, user?.id])
   const locations = useMemo(() => allLocations.filter(l => l.active !== false), [allLocations])
   const coaches = useMemo(() => allCoaches.filter(c => c.active !== false), [allCoaches])
 

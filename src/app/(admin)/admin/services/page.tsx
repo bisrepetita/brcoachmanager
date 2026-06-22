@@ -13,7 +13,7 @@ import { EmptyState } from '@/components/shared/EmptyState'
 import { ListSkeleton } from '@/components/shared/LoadingSkeleton'
 import { useRouter } from 'next/navigation'
 import { Plus, ArrowLeft, Briefcase, Pencil, Trash2 } from 'lucide-react'
-import type { Service, PricingMode } from '@/types'
+import type { Service, PricingMode, User } from '@/types'
 
 const PRICING_OPTIONS: { value: PricingMode; label: string; description: string }[] = [
   { value: 'per_person', label: 'Par personne', description: 'Chaque client paie le prix défini' },
@@ -23,6 +23,7 @@ const PRICING_OPTIONS: { value: PricingMode; label: string; description: string 
 export default function ServicesPage() {
   const router = useRouter()
   const { data: services, loading } = useCollection<Service>('services', [orderBy('name')])
+  const { data: coaches } = useCollection<User>('users', [orderBy('firstName')])
   const [sheet, setSheet] = useState<'create' | 'edit' | null>(null)
   const [editing, setEditing] = useState<Service | null>(null)
   const [saving, setSaving] = useState(false)
@@ -30,14 +31,25 @@ export default function ServicesPage() {
   const [price, setPrice] = useState('')
   const [pricingMode, setPricingMode] = useState<PricingMode>('per_person')
   const [rentalPrice, setRentalPrice] = useState('')
+  const [assignedCoachIds, setAssignedCoachIds] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
 
-  function openCreate() { setEditing(null); setName(''); setPrice(''); setPricingMode('per_person'); setRentalPrice(''); setError(null); setSheet('create') }
+  function openCreate() {
+    setEditing(null); setName(''); setPrice(''); setPricingMode('per_person')
+    setRentalPrice(''); setAssignedCoachIds([]); setError(null); setSheet('create')
+  }
   function openEdit(s: Service) {
     setEditing(s); setName(s.name); setPrice(String(s.price)); setPricingMode(s.pricingMode)
-    setRentalPrice(String(s.independentRoomRentalPrice)); setError(null); setSheet('edit')
+    setRentalPrice(String(s.independentRoomRentalPrice))
+    setAssignedCoachIds(s.assignedCoachIds ?? []); setError(null); setSheet('edit')
   }
   function close() { setSheet(null); setEditing(null) }
+
+  function toggleCoach(coachId: string) {
+    setAssignedCoachIds(prev =>
+      prev.includes(coachId) ? prev.filter(id => id !== coachId) : [...prev, coachId]
+    )
+  }
 
   async function handleSave() {
     if (!name.trim() || !price) { setError('Nom et prix sont requis.'); return }
@@ -46,6 +58,7 @@ export default function ServicesPage() {
       const data = {
         name: name.trim(), price: parseFloat(price), pricingMode,
         independentRoomRentalPrice: parseFloat(rentalPrice) || 0, active: true,
+        assignedCoachIds,
       }
       if (sheet === 'create') await createDoc('services', data)
       else if (editing) await updateDocById('services', editing.id, data)
@@ -84,6 +97,15 @@ export default function ServicesPage() {
                   <Badge variant="muted">{s.pricingMode === 'per_person' ? 'Par personne' : 'Partagé'}</Badge>
                   {s.independentRoomRentalPrice > 0 && (
                     <span className="text-[12px] text-[var(--color-text-tertiary)]">Location CHF {s.independentRoomRentalPrice.toFixed(2)}</span>
+                  )}
+                </div>
+                <div className="mt-1">
+                  {!s.assignedCoachIds || s.assignedCoachIds.length === 0 ? (
+                    <span className="text-[11px] text-[var(--color-text-tertiary)]">Tous les coachs</span>
+                  ) : (
+                    <span className="text-[11px] text-[var(--color-text-tertiary)]">
+                      {s.assignedCoachIds.map(id => coaches.find(c => c.id === id)?.firstName ?? '').filter(Boolean).join(', ')}
+                    </span>
                   )}
                 </div>
               </div>
@@ -132,6 +154,21 @@ export default function ServicesPage() {
             </FormField>
             <FormField label="Location salle indépendant (CHF)" hint="Montant dû à Bis Repetita par un coach indépendant">
               <Input type="number" value={rentalPrice} onChange={(e) => setRentalPrice(e.target.value)} placeholder="30" min="0" step="0.50" />
+            </FormField>
+            <FormField label="Coachs autorisés" hint="Laisser vide = tous les coachs peuvent proposer ce service">
+              <div className="space-y-1">
+                {coaches.map(c => (
+                  <button key={c.id} type="button" onClick={() => toggleCoach(c.id)}
+                    className="w-full flex items-center gap-3 p-2.5 rounded-[var(--radius-md)] border text-left"
+                    style={{ background: assignedCoachIds.includes(c.id) ? 'var(--color-accent-subtle)' : 'var(--color-surface)', borderColor: assignedCoachIds.includes(c.id) ? 'var(--color-border-strong)' : 'var(--color-border)' }}>
+                    <div className="w-4 h-4 rounded flex items-center justify-center shrink-0"
+                      style={{ background: assignedCoachIds.includes(c.id) ? 'var(--color-accent)' : 'transparent', border: `2px solid ${assignedCoachIds.includes(c.id) ? 'var(--color-accent)' : 'var(--color-border)'}` }}>
+                      {assignedCoachIds.includes(c.id) && <span style={{ color: '#fff', fontSize: 10, fontWeight: 700 }}>✓</span>}
+                    </div>
+                    <span className="text-[13px] text-[var(--color-text-primary)]">{c.firstName} {c.lastName}</span>
+                  </button>
+                ))}
+              </div>
             </FormField>
             {error && <p className="text-[13px] text-[var(--color-danger)]">{error}</p>}
             <Button size="lg" className="w-full" onClick={handleSave} loading={saving}>

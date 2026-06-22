@@ -77,6 +77,7 @@ export interface Service {
   pricingMode: PricingMode
   independentRoomRentalPrice: number
   active: boolean
+  assignedCoachIds?: string[]
   createdAt: Timestamp
   updatedAt: Timestamp
 }
