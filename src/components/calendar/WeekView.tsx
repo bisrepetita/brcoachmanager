@@ -176,7 +176,7 @@ export function WeekView({ anchor, sessions, coachMap, serviceMap, clientMap, gr
                   ? groupMap.get(session.clientGroupId)?.name
                   : session.clientIds[0] ? clientMap.get(session.clientIds[0])?.firstName : undefined
                 return (
-                  <div key={session.id} className="absolute z-10" style={{ top, height, left: 1, right: 1 }}>
+                  <div key={session.id} className="absolute z-10 pointer-events-none" style={{ top, height, left: 1, right: 1 }}>
                     <SessionBlock
                       session={session}
                       coachColor={coachColor}

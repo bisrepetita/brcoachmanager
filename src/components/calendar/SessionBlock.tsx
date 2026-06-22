@@ -54,6 +54,7 @@ export function SessionBlock({
         width: `calc(${widthPct}% - 4px)`,
         top: 0,
         bottom: 0,
+        pointerEvents: 'auto',
         background: STATUS_BG[session.status],
         borderColor: coachColor,
         borderLeftWidth: 3,

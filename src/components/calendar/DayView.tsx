@@ -137,7 +137,7 @@ export function DayView({ date, sessions, coachMap, serviceMap, externalEvents =
             const coachColor = session.coachIds[0] ? (coachMap.get(session.coachIds[0])?.color ?? '#6366F1') : '#6366F1'
             const serviceName = serviceMap.get(session.serviceId)?.name ?? ''
             return (
-              <div key={session.id} className="absolute inset-x-1 z-10" style={{ top, height }}>
+              <div key={session.id} className="absolute inset-x-1 z-10 pointer-events-none" style={{ top, height }}>
                 <SessionBlock
                   session={session}
                   coachColor={coachColor}
