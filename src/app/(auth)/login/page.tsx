@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { useRouter } from 'next/navigation'
-import { signInWithEmailAndPassword, type AuthError } from 'firebase/auth'
+import { signInWithEmailAndPassword, sendPasswordResetEmail, type AuthError } from 'firebase/auth'
 import { auth } from '@/lib/firebase/auth'
 import { Button } from '@/components/ui/button'
 import { Eye, EyeOff } from 'lucide-react'
@@ -23,6 +23,24 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [loading, setLoading] = React.useState(false)
+  const [resetMode, setResetMode] = React.useState(false)
+  const [resetSent, setResetSent] = React.useState(false)
+  const [resetLoading, setResetLoading] = React.useState(false)
+
+  async function handleReset(e: React.FormEvent) {
+    e.preventDefault()
+    if (!email.trim()) { setError('Entre ton adresse email.'); return }
+    setResetLoading(true); setError(null)
+    try {
+      await sendPasswordResetEmail(auth, email.trim())
+      setResetSent(true)
+    } catch (err) {
+      const code = (err as AuthError).code
+      setError(code === 'auth/user-not-found' ? 'Aucun compte avec cet email.' : 'Erreur lors de l\'envoi. Réessaie.')
+    } finally {
+      setResetLoading(false)
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -64,7 +82,49 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {/* Formulaire */}
+        {/* Formulaire reset */}
+        {resetMode ? (
+          <form onSubmit={handleReset} className="space-y-4">
+            {resetSent ? (
+              <div className="px-4 py-4 text-center" style={{ borderRadius: 'var(--radius-md)', background: '#E8F3EE', border: '1px solid #A8D5B8' }}>
+                <p className="text-[14px] font-medium" style={{ color: '#2D7A4F' }}>Email envoyé ✓</p>
+                <p className="text-[13px] mt-1" style={{ color: '#4A9A6A' }}>Vérifie ta boîte mail et suis le lien pour réinitialiser ton mot de passe.</p>
+              </div>
+            ) : (
+              <>
+                <p className="text-[13px]" style={{ color: 'var(--color-text-secondary)' }}>
+                  Entre ton adresse email pour recevoir un lien de réinitialisation.
+                </p>
+                <div className="space-y-1.5">
+                  <label htmlFor="reset-email" className="block text-[13px] font-medium" style={{ color: 'var(--color-text-secondary)' }}>Email</label>
+                  <input
+                    id="reset-email"
+                    type="email"
+                    autoComplete="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="coach@bisrepetita.ch"
+                    style={{ borderRadius: 'var(--radius-input)', borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}
+                    className="w-full h-12 px-4 border text-[14px] outline-none transition-colors focus:border-[var(--color-border-strong)] placeholder:text-[var(--color-text-disabled)]"
+                  />
+                </div>
+                {error && (
+                  <div className="px-4 py-3" style={{ borderRadius: 'var(--radius-md)', background: 'var(--color-danger-bg)', border: '1px solid #FBBCB8' }}>
+                    <p className="text-[13px]" style={{ color: 'var(--color-danger)' }}>{error}</p>
+                  </div>
+                )}
+                <Button type="submit" size="lg" loading={resetLoading} className="w-full">Envoyer le lien</Button>
+              </>
+            )}
+            <button type="button" onClick={() => { setResetMode(false); setResetSent(false); setError(null) }}
+              className="w-full text-center text-[13px] mt-2" style={{ color: 'var(--color-text-tertiary)', background: 'none', border: 'none', cursor: 'pointer' }}>
+              ← Retour à la connexion
+            </button>
+          </form>
+        ) : (
+
+        /* Formulaire login */
         <form onSubmit={handleSubmit} className="space-y-4">
 
           <div className="space-y-1.5">
@@ -138,7 +198,13 @@ export default function LoginPage() {
           <Button type="submit" size="lg" loading={loading} className="w-full mt-2">
             Se connecter
           </Button>
+
+          <button type="button" onClick={() => { setResetMode(true); setError(null) }}
+            className="w-full text-center text-[13px] mt-1" style={{ color: 'var(--color-text-tertiary)', background: 'none', border: 'none', cursor: 'pointer' }}>
+            Mot de passe oublié ?
+          </button>
         </form>
+        )}
 
         <p className="mt-8 text-center text-[12px]" style={{ color: 'var(--color-text-disabled)' }}>
           Accès réservé aux coachs Bis Repetita
