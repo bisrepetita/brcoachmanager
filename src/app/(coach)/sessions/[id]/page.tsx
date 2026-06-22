@@ -218,6 +218,33 @@ export default function SessionDetailPage() {
     }
   }, [session, sessionId, clients, whatsappTemplate])
 
+  const handleMarkPaid = useCallback(async (clientId: string) => {
+    if (!session) return
+    setMarkingPaidFor(prev => new Set(prev).add(clientId))
+    try {
+      const updated = session.paymentDistribution.map(p =>
+        p.clientId === clientId
+          ? { ...p, paymentStatus: 'paid' as const, amountPaid: p.amountDue }
+          : p
+      )
+      const allSettled = updated.every(p => p.paymentStatus === 'paid' || p.paymentStatus === 'offered' || p.paymentStatus === 'credits')
+      await updateDoc(doc(db, 'sessions', sessionId), {
+        paymentDistribution: updated,
+        paymentStatus: allSettled ? 'paid' : session.paymentStatus,
+        updatedAt: serverTimestamp(),
+      })
+      setSession(prev => prev ? {
+        ...prev,
+        paymentDistribution: updated,
+        paymentStatus: (allSettled ? 'paid' : prev.paymentStatus) as Session['paymentStatus'],
+      } : prev)
+    } catch (err) {
+      alert('Erreur : ' + String(err))
+    } finally {
+      setMarkingPaidFor(prev => { const n = new Set(prev); n.delete(clientId); return n })
+    }
+  }, [session, sessionId])
+
   if (loading) {
     return (
       <>
@@ -259,33 +286,6 @@ export default function SessionDetailPage() {
   const statusVariant = session.status === 'done' ? 'done' : session.status === 'cancelled' ? 'cancelled' : 'planned'
 
   const showPaymentActions = session.status === 'done'
-
-  const handleMarkPaid = useCallback(async (clientId: string) => {
-    if (!session) return
-    setMarkingPaidFor(prev => new Set(prev).add(clientId))
-    try {
-      const updated = session.paymentDistribution.map(p =>
-        p.clientId === clientId
-          ? { ...p, paymentStatus: 'paid' as const, amountPaid: p.amountDue }
-          : p
-      )
-      const allSettled = updated.every(p => p.paymentStatus === 'paid' || p.paymentStatus === 'offered' || p.paymentStatus === 'credits')
-      await updateDoc(doc(db, 'sessions', sessionId), {
-        paymentDistribution: updated,
-        paymentStatus: allSettled ? 'paid' : session.paymentStatus,
-        updatedAt: serverTimestamp(),
-      })
-      setSession(prev => prev ? {
-        ...prev,
-        paymentDistribution: updated,
-        paymentStatus: (allSettled ? 'paid' : prev.paymentStatus) as Session['paymentStatus'],
-      } : prev)
-    } catch (err) {
-      alert('Erreur : ' + String(err))
-    } finally {
-      setMarkingPaidFor(prev => { const n = new Set(prev); n.delete(clientId); return n })
-    }
-  }, [session, sessionId])
 
   return (
     <>
