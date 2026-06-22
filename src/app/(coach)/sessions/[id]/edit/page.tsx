@@ -63,7 +63,7 @@ export default function EditSessionPage() {
   const router = useRouter()
   const params = useParams()
   const sessionId = params.id as string
-  const { user, isAdmin } = useAuth()
+  const { user } = useAuth()
 
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)

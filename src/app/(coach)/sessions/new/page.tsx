@@ -129,7 +129,7 @@ type RecurrenceEndType = 'infinite' | '3months' | '6months' | '1year' | 'count'
 function NewSessionForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { user, isAdmin, loading: authLoading } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   const isAdmin = user?.roles?.includes('admin') ?? false
 
   const dateParam = searchParams.get('date')
