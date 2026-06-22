@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
 
     const updated = distribution.map((p) =>
       p['clientId'] === clientId
-        ? { ...p, paymentStatus: 'paid', amountPaid, paidAt: FieldValue.serverTimestamp(), stripeSessionId: checkoutSession.id }
+        ? { ...p, paymentStatus: 'paid', amountPaid, paidAt: new Date(), stripeSessionId: checkoutSession.id }
         : p
     )
 
