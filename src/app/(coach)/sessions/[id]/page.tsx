@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { orderBy, doc, getDoc, deleteDoc, query, collection, where, getDocs, writeBatch, serverTimestamp } from 'firebase/firestore'
+import { orderBy, doc, getDoc, updateDoc, deleteDoc, query, collection, where, getDocs, writeBatch, serverTimestamp } from 'firebase/firestore'
 import { ChevronLeft, MapPin, User, Users, Dumbbell, Clock, AlertTriangle, Send, RefreshCw, Pencil } from 'lucide-react'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { Badge } from '@/components/ui/badge'
@@ -52,6 +52,7 @@ export default function SessionDetailPage() {
   const [deleteScope, setDeleteScope] = useState<'none' | 'pending'>('none')
   const [deleting, setDeleting] = useState(false)
   const [sendingFor, setSendingFor] = useState<Set<string>>(new Set())
+  const [markingPaidFor, setMarkingPaidFor] = useState<Set<string>>(new Set())
   const [whatsappTemplate, setWhatsappTemplate] = useState(DEFAULT_WHATSAPP_TEMPLATE)
 
   const { data: coaches } = useCollection<UserType>('users', [orderBy('firstName')])
@@ -259,6 +260,31 @@ export default function SessionDetailPage() {
 
   const showPaymentActions = session.status === 'done'
 
+  const handleMarkPaid = useCallback(async (clientId: string) => {
+    if (!session) return
+    setMarkingPaidFor(prev => new Set(prev).add(clientId))
+    try {
+      const updated = session.paymentDistribution.map(p =>
+        p.clientId === clientId ? { ...p, paymentStatus: 'paid', amountPaid: p.amountDue, paidAt: new Date() } : p
+      )
+      const allSettled = updated.every(p => p.paymentStatus === 'paid' || p.paymentStatus === 'offered' || p.paymentStatus === 'credits')
+      await updateDoc(doc(db, 'sessions', sessionId), {
+        paymentDistribution: updated,
+        paymentStatus: allSettled ? 'paid' : session.paymentStatus,
+        updatedAt: serverTimestamp(),
+      })
+      setSession(prev => prev ? {
+        ...prev,
+        paymentDistribution: updated,
+        paymentStatus: allSettled ? 'paid' : prev.paymentStatus,
+      } : prev)
+    } catch (err) {
+      alert('Erreur : ' + String(err))
+    } finally {
+      setMarkingPaidFor(prev => { const n = new Set(prev); n.delete(clientId); return n })
+    }
+  }, [session, sessionId])
+
   return (
     <>
       <TopBar
@@ -320,8 +346,12 @@ export default function SessionDetailPage() {
             {session.paymentDistribution.map((p, i) => {
               const client = clients.find(c => c.id === p.clientId)
               const isSending = sendingFor.has(p.clientId)
+              const isMarkingPaid = markingPaidFor.has(p.clientId)
               const canSendLink =
                 showPaymentActions &&
+                (p.paymentStatus === 'payment_to_request' || p.paymentStatus === 'link_sent')
+              const canMarkPaid =
+                showPaymentActions && isAdmin &&
                 (p.paymentStatus === 'payment_to_request' || p.paymentStatus === 'link_sent')
 
               return (
@@ -343,7 +373,23 @@ export default function SessionDetailPage() {
                     </p>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                    {canMarkPaid && (
+                      <button
+                        onClick={() => handleMarkPaid(p.clientId)}
+                        disabled={isMarkingPaid}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 4,
+                          padding: '5px 10px', borderRadius: 6, border: 'none',
+                          cursor: isMarkingPaid ? 'default' : 'pointer',
+                          fontSize: 12, fontWeight: 600,
+                          backgroundColor: '#E8F3EE', color: '#2D7A4F',
+                          opacity: isMarkingPaid ? 0.6 : 1,
+                        }}
+                      >
+                        {isMarkingPaid ? '…' : '✓ Payé'}
+                      </button>
+                    )}
                     {canSendLink && (
                       <button
                         onClick={() => handleSendPayment(p.clientId)}
