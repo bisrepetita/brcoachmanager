@@ -351,7 +351,7 @@ export default function SessionDetailPage() {
                 showPaymentActions &&
                 (p.paymentStatus === 'payment_to_request' || p.paymentStatus === 'link_sent')
               const canMarkPaid =
-                showPaymentActions && isAdmin &&
+                showPaymentActions &&
                 (p.paymentStatus === 'payment_to_request' || p.paymentStatus === 'link_sent')
 
               return (
