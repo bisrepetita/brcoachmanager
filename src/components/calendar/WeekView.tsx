@@ -4,6 +4,7 @@ import { useMemo, useEffect, useRef, useState } from 'react'
 import { format, isSameDay, isToday, startOfWeek, addDays } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { SessionBlock } from './SessionBlock'
+import { layoutSessions } from './layoutSessions'
 import type { Session, User, Service, Client, ClientGroup } from '@/types'
 
 const START_HOUR = 6
@@ -15,10 +16,6 @@ const HOURS = Array.from({ length: TOTAL_HOURS + 1 }, (_, i) => START_HOUR + i)
 
 function toTopPx(date: Date) {
   return (date.getHours() * 60 + date.getMinutes() - START_HOUR * 60) * (HOUR_PX / 60)
-}
-
-function toDurationPx(start: Date, end: Date) {
-  return Math.max(28, ((end.getTime() - start.getTime()) / 60000) * (HOUR_PX / 60))
 }
 
 interface ExternalEvent { uid: string; title: string; start: string; end: string }
@@ -67,10 +64,11 @@ export function WeekView({ anchor, sessions, coachMap, serviceMap, clientMap, gr
     scrollRef.current.scrollTop = target
   }, [anchor]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const sessionsByDay = useMemo(() => {
-    return weekDays.map((day) =>
-      sessions.filter((s) => isSameDay(s.startAt.toDate(), day))
-    )
+  const laidByDay = useMemo(() => {
+    return weekDays.map((day) => {
+      const daySessions = sessions.filter((s) => isSameDay(s.startAt.toDate(), day))
+      return layoutSessions(daySessions, 'week')
+    })
   }, [sessions, anchor]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
@@ -80,7 +78,7 @@ export function WeekView({ anchor, sessions, coachMap, serviceMap, clientMap, gr
         <div style={{ width: TIME_COL }} className="shrink-0" />
         {weekDays.map((day, i) => {
           const today = isToday(day)
-          const count = sessionsByDay[i]?.length ?? 0
+          const count = laidByDay[i]?.length ?? 0
           return (
             <button
               key={i}
@@ -160,7 +158,7 @@ export function WeekView({ anchor, sessions, coachMap, serviceMap, clientMap, gr
               {/* Événements Google Calendar */}
               {externalEvents.filter(e => isSameDay(new Date(e.start), day)).map(e => {
                 const s = new Date(e.start), en = new Date(e.end)
-                const top = toTopPx(s), height = Math.max(20, toDurationPx(s, en))
+                const top = toTopPx(s), height = Math.max(20, (en.getTime() - s.getTime()) / 60000 * (HOUR_PX / 60))
                 return (
                   <div key={e.uid} className="absolute z-5 pointer-events-none" style={{ top, height, left: 1, right: 1 }}>
                     <div style={{ position: 'absolute', inset: 0, borderRadius: 5, background: 'rgba(66,133,244,0.12)', borderLeft: '3px solid #4285F4', padding: '1px 4px', overflow: 'hidden' }}>
@@ -171,11 +169,7 @@ export function WeekView({ anchor, sessions, coachMap, serviceMap, clientMap, gr
               })}
 
               {/* Sessions */}
-              {(sessionsByDay[dayIdx] ?? []).map((session) => {
-                const start = session.startAt.toDate()
-                const end = session.endAt.toDate()
-                const top = toTopPx(start)
-                const height = toDurationPx(start, end)
+              {(laidByDay[dayIdx] ?? []).map(({ session, top, height, col, numCols }) => {
                 const coachColor = session.coachIds[0] ? (coachMap.get(session.coachIds[0])?.color ?? '#6366F1') : '#6366F1'
                 const serviceName = serviceMap.get(session.serviceId)?.name ?? ''
                 const firstClientName = session.clientGroupId
@@ -188,6 +182,8 @@ export function WeekView({ anchor, sessions, coachMap, serviceMap, clientMap, gr
                       coachColor={coachColor}
                       serviceName={serviceName}
                       clientName={firstClientName}
+                      totalCols={numCols}
+                      colIndex={col}
                       compact={true}
                       onClick={() => onSessionClick(session)}
                     />

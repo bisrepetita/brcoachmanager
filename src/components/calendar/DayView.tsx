@@ -3,6 +3,7 @@
 import { useMemo, useEffect, useState, useRef } from 'react'
 import { isSameDay } from 'date-fns'
 import { SessionBlock } from './SessionBlock'
+import { layoutSessions } from './layoutSessions'
 import type { Session, User, Service } from '@/types'
 
 const START_HOUR = 6
@@ -13,40 +14,6 @@ const HOURS = Array.from({ length: TOTAL_HOURS + 1 }, (_, i) => START_HOUR + i)
 
 function toTopPx(date: Date): number {
   return (date.getHours() * 60 + date.getMinutes() - START_HOUR * 60) * (HOUR_PX / 60)
-}
-
-function toDurationPx(start: Date, end: Date): number {
-  const mins = (end.getTime() - start.getTime()) / 60000
-  return Math.max(32, mins * (HOUR_PX / 60))
-}
-
-interface LayoutSession {
-  session: Session
-  top: number
-  height: number
-  col: number
-  numCols: number
-}
-
-function layoutSessions(sessions: Session[]): LayoutSession[] {
-  const sorted = [...sessions].sort((a, b) => a.startAt.seconds - b.startAt.seconds)
-  const cols: number[] = [] // end time (seconds) per column
-
-  const placed = sorted.map((session) => {
-    const startSec = session.startAt.seconds
-    const endSec = session.endAt.seconds
-    let col = cols.findIndex((endTime) => endTime <= startSec)
-    if (col === -1) { col = cols.length; cols.push(endSec) }
-    else cols[col] = endSec
-
-    const start = session.startAt.toDate()
-    const end = session.endAt.toDate()
-    return { session, top: toTopPx(start), height: toDurationPx(start, end), col, numCols: 0 }
-  })
-
-  const total = cols.length || 1
-  placed.forEach((p) => (p.numCols = total))
-  return placed
 }
 
 interface ExternalEvent { uid: string; title: string; start: string; end: string }
@@ -70,7 +37,7 @@ export function DayView({ date, sessions, coachMap, serviceMap, externalEvents =
     [sessions, date]
   )
 
-  const laid = useMemo(() => layoutSessions(daySessions), [daySessions])
+  const laid = useMemo(() => layoutSessions(daySessions, 'day'), [daySessions])
 
   // Current time indicator
   useEffect(() => {
@@ -155,7 +122,7 @@ export function DayView({ date, sessions, coachMap, serviceMap, externalEvents =
           {/* Événements Google Calendar */}
           {externalEvents.filter(e => isSameDay(new Date(e.start), date)).map(e => {
             const s = new Date(e.start), en = new Date(e.end)
-            const top = toTopPx(s), height = Math.max(24, toDurationPx(s, en))
+            const top = toTopPx(s), height = Math.max(24, (en.getTime() - s.getTime()) / 60000 * (HOUR_PX / 60))
             return (
               <div key={e.uid} className="absolute z-5 pointer-events-none" style={{ top, height, right: 2, left: 2 }}>
                 <div style={{ position: 'absolute', inset: 0, borderRadius: 6, background: 'rgba(66,133,244,0.10)', borderLeft: '3px solid #4285F4', padding: '2px 6px', overflow: 'hidden' }}>
