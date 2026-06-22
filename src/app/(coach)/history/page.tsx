@@ -30,8 +30,10 @@ const PAYMENT_STATUS_COLORS: Record<string, string> = {
   cancelled: '#A09890',
 }
 
-// Calcule le statut de paiement effectif depuis paymentDistribution
+// Calcule le statut de paiement effectif
+// Le champ session.paymentStatus est la source de vérité quand il est 'paid'
 function effectivePaymentStatus(session: Session): string {
+  if (session.paymentStatus === 'paid') return 'paid'
   const dist = session.paymentDistribution ?? []
   if (dist.length === 0) return session.paymentStatus ?? 'payment_to_request'
   const statuses = dist.map(p => p.paymentStatus ?? session.paymentStatus ?? 'payment_to_request')
