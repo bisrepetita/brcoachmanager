@@ -13,7 +13,7 @@ import { fr } from 'date-fns/locale'
 import { orderBy, where, getDocs, query, collection, doc, updateDoc, Timestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase/firestore'
 import { useAuth } from '@/lib/hooks/useAuth'
-import { ChevronLeft, ChevronRight, Plus, RefreshCw } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, RefreshCw, Users } from 'lucide-react'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { DayView } from '@/components/calendar/DayView'
 import { WeekView } from '@/components/calendar/WeekView'
@@ -71,7 +71,7 @@ function navigate(view: CalView, anchor: Date, dir: 1 | -1): Date {
 
 export default function CalendarPage() {
   const router = useRouter()
-  const { user } = useAuth()
+  const { user, isAdmin } = useAuth()
   const [view, setView] = useState<CalView>(() => {
     if (typeof window === 'undefined') return 'week'
     return (sessionStorage.getItem('calView') as CalView) ?? 'week'
@@ -184,6 +184,15 @@ export default function CalendarPage() {
     setAnchor(startOfDay(day))
     setView('day')
   }, [])
+
+  // Filtre coachs (admin uniquement)
+  const [visibleCoachIds, setVisibleCoachIds] = useState<Set<string> | null>(null) // null = tous
+  const [showCoachFilter, setShowCoachFilter] = useState(false)
+
+  const filteredSessions = useMemo(() => {
+    if (!isAdmin || !visibleCoachIds) return sessions
+    return sessions.filter(s => s.coachIds?.some(id => visibleCoachIds.has(id)))
+  }, [sessions, isAdmin, visibleCoachIds])
 
   const [slideDir, setSlideDir] = useState<'left' | 'right'>('left')
   const [slideKey, setSlideKey] = useState(0)
@@ -314,7 +323,42 @@ export default function CalendarPage() {
             Aujourd'hui
           </button>
         )}
+        {isAdmin && (
+          <button onClick={() => setShowCoachFilter(v => !v)}
+            style={{ height: 30, width: 30, borderRadius: 6, border: '1px solid', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: showCoachFilter || visibleCoachIds ? '#1A1A18' : '#fff', borderColor: showCoachFilter || visibleCoachIds ? '#1A1A18' : '#E5E1DA' }}>
+            <Users size={13} color={showCoachFilter || visibleCoachIds ? '#fff' : '#7A7570'} />
+          </button>
+        )}
       </div>
+
+      {/* Panneau filtre coachs */}
+      {isAdmin && showCoachFilter && (
+        <div style={{ position: 'sticky', top: `calc(var(--top-bar-height) + ${SWITCHER_H}px)`, zIndex: 29, background: '#fff', borderBottom: '1px solid #E5E1DA', padding: '8px 12px', display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+          <button
+            onClick={() => setVisibleCoachIds(null)}
+            style={{ height: 26, padding: '0 10px', borderRadius: 6, border: '1px solid', fontSize: 11, fontWeight: 600, cursor: 'pointer', background: !visibleCoachIds ? '#1A1A18' : '#fff', borderColor: !visibleCoachIds ? '#1A1A18' : '#E5E1DA', color: !visibleCoachIds ? '#fff' : '#7A7570' }}>
+            Tous
+          </button>
+          {coaches.map(c => {
+            const checked = visibleCoachIds ? visibleCoachIds.has(c.id) : true
+            return (
+              <button key={c.id}
+                onClick={() => {
+                  setVisibleCoachIds(prev => {
+                    const base = prev ?? new Set(coaches.map(x => x.id))
+                    const next = new Set(base)
+                    if (next.has(c.id)) { next.delete(c.id) } else { next.add(c.id) }
+                    return next.size === coaches.length ? null : next
+                  })
+                }}
+                style={{ height: 26, padding: '0 10px', borderRadius: 6, border: '1px solid', fontSize: 11, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, background: checked ? `${c.color}22` : '#fff', borderColor: checked ? c.color : '#E5E1DA', color: checked ? c.color : '#A09890' }}>
+                <div style={{ width: 8, height: 8, borderRadius: '50%', background: checked ? c.color : '#E5E1DA', flexShrink: 0 }} />
+                {c.firstName}
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       <style>{`
         @keyframes slideInLeft { from { transform: translateX(100%) } to { transform: translateX(0) } }
@@ -329,7 +373,7 @@ export default function CalendarPage() {
         {view === 'day' ? (
           <DayView
             date={anchor}
-            sessions={sessions}
+            sessions={filteredSessions}
             externalEvents={visibleExternalEvents}
             coachMap={coachMap}
             serviceMap={serviceMap}
@@ -339,7 +383,7 @@ export default function CalendarPage() {
         ) : view === 'week' ? (
           <WeekView
             anchor={anchor}
-            sessions={sessions}
+            sessions={filteredSessions}
             coachMap={coachMap}
             serviceMap={serviceMap}
             clientMap={clientMap}
@@ -352,7 +396,7 @@ export default function CalendarPage() {
         ) : (
           <MonthView
             anchor={anchor}
-            sessions={sessions}
+            sessions={filteredSessions}
             coachMap={coachMap}
             serviceMap={serviceMap}
             onSessionClick={handleSessionClick}
