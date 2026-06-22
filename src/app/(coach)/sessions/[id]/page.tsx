@@ -265,7 +265,9 @@ export default function SessionDetailPage() {
     setMarkingPaidFor(prev => new Set(prev).add(clientId))
     try {
       const updated = session.paymentDistribution.map(p =>
-        p.clientId === clientId ? { ...p, paymentStatus: 'paid', amountPaid: p.amountDue, paidAt: new Date() } : p
+        p.clientId === clientId
+          ? { ...p, paymentStatus: 'paid' as const, amountPaid: p.amountDue }
+          : p
       )
       const allSettled = updated.every(p => p.paymentStatus === 'paid' || p.paymentStatus === 'offered' || p.paymentStatus === 'credits')
       await updateDoc(doc(db, 'sessions', sessionId), {
@@ -276,7 +278,7 @@ export default function SessionDetailPage() {
       setSession(prev => prev ? {
         ...prev,
         paymentDistribution: updated,
-        paymentStatus: allSettled ? 'paid' : prev.paymentStatus,
+        paymentStatus: (allSettled ? 'paid' : prev.paymentStatus) as Session['paymentStatus'],
       } : prev)
     } catch (err) {
       alert('Erreur : ' + String(err))
