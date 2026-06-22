@@ -103,14 +103,14 @@ export default function CalendarPage() {
   const [externalEvents, setExternalEvents] = useState<{ uid: string; title: string; start: string; end: string }[]>([])
   const [gcalLoading, setGcalLoading] = useState(false)
   const [showGcal, setShowGcal] = useState(true)
-  const [, forceGcalRefresh] = useReducer(x => x + 1, 0)
+  const [gcalRefreshCount, forceGcalRefresh] = useReducer(x => x + 1, 0)
 
   useEffect(() => {
     if (!user?.googleCalendarUrl || !user?.id) return
     setGcalLoading(true)
     import('firebase/auth').then(({ getAuth }) => {
       const auth = getAuth()
-      auth.currentUser?.getIdToken().then(token =>
+      return auth.currentUser?.getIdToken().then(token =>
         fetch('/api/ical-proxy', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -120,7 +120,7 @@ export default function CalendarPage() {
         })
       )
     }).finally(() => setGcalLoading(false))
-  }, [user?.googleCalendarUrl, user?.id, forceGcalRefresh])
+  }, [user?.googleCalendarUrl, user?.id, gcalRefreshCount])
 
   const visibleExternalEvents = useMemo(() => {
     if (!showGcal) return []
