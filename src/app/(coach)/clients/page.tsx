@@ -242,24 +242,16 @@ export default function ClientsPage() {
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
-                {isAdmin && (
-                  <button
-                    onClick={(e) => openCredits(e, c)}
-                    className="flex items-center gap-1 px-2 py-1 rounded-[var(--radius-badge)]"
-                    style={{ background: c.sessionCredits > 0 ? '#E8F3EE' : '#F0EDE8', border: 'none', cursor: 'pointer' }}
-                  >
-                    <CreditCard size={12} style={{ color: c.sessionCredits > 0 ? '#2D7A4F' : '#7A7570' }} />
-                    <span className="text-[12px] font-medium" style={{ color: c.sessionCredits > 0 ? '#2D7A4F' : '#7A7570' }}>
-                      {c.sessionCredits}
-                    </span>
-                  </button>
-                )}
-                {!isAdmin && c.sessionCredits > 0 && (
-                  <div className="flex items-center gap-1 px-2 py-1 rounded-[var(--radius-badge)]" style={{ background: '#E8F3EE' }}>
-                    <CreditCard size={12} style={{ color: '#2D7A4F' }} />
-                    <span className="text-[12px] font-medium" style={{ color: '#2D7A4F' }}>{c.sessionCredits}</span>
-                  </div>
-                )}
+                <button
+                  onClick={(e) => openCredits(e, c)}
+                  className="flex items-center gap-1 px-2 py-1 rounded-[var(--radius-badge)]"
+                  style={{ background: c.sessionCredits > 0 ? '#E8F3EE' : '#F0EDE8', border: 'none', cursor: 'pointer' }}
+                >
+                  <CreditCard size={12} style={{ color: c.sessionCredits > 0 ? '#2D7A4F' : '#7A7570' }} />
+                  <span className="text-[12px] font-medium" style={{ color: c.sessionCredits > 0 ? '#2D7A4F' : '#7A7570' }}>
+                    {c.sessionCredits}
+                  </span>
+                </button>
                 <button onClick={e => { e.stopPropagation(); openEdit(c) }} style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
                   <Pencil size={14} style={{ color: '#C8C4BC' }} />
                 </button>

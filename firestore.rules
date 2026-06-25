@@ -51,11 +51,7 @@ service cloud.firestore {
     match /clients/{clientId} {
       allow read: if canReadClient(resource.data);
       allow create: if isCoach();
-      allow update: if isAdmin() || (
-        isCoach() &&
-        canReadClient(resource.data) &&
-        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['sessionCredits'])
-      );
+      allow update: if isAdmin() || (isCoach() && canReadClient(resource.data));
       allow delete: if isAdmin();
     }
 
@@ -125,7 +121,7 @@ service cloud.firestore {
     // ─── creditTransactions ──────────────────────────────────────────────────
 
     match /creditTransactions/{txId} {
-      allow read, write: if isAdmin();
+      allow read, write: if isAdmin() || isCoach();
     }
 
     // ─── roomRentalPayments ──────────────────────────────────────────────────
