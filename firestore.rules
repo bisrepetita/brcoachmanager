@@ -50,7 +50,13 @@ service cloud.firestore {
 
     match /clients/{clientId} {
       allow read: if canReadClient(resource.data);
-      allow create, update, delete: if isAdmin();
+      allow create: if isCoach();
+      allow update: if isAdmin() || (
+        isCoach() &&
+        canReadClient(resource.data) &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['sessionCredits'])
+      );
+      allow delete: if isAdmin();
     }
 
     // ─── clientGroups ────────────────────────────────────────────────────────

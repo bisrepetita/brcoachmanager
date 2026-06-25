@@ -109,7 +109,10 @@ export default function ClientsPage() {
 
   function openCreate() {
     setEditing(null); setFirstName(''); setLastName(''); setEmail(''); setPhone('')
-    setAddress(''); setCity(''); setPostalCode(''); setAdditionalInfo(''); setVisibleCoachIds([]); setError(null); setSheet('create')
+    setAddress(''); setCity(''); setPostalCode(''); setAdditionalInfo('')
+    // Pré-assigner le coach connecté (sauf admin qui voit tout)
+    setVisibleCoachIds(isAdmin ? [] : (user?.id ? [user.id] : []))
+    setError(null); setSheet('create')
   }
 
   function openEdit(c: Client) {
@@ -184,7 +187,7 @@ export default function ClientsPage() {
     <>
       <TopBar
         title="Clients"
-        right={isAdmin ? <Button size="icon-sm" onClick={openCreate}><Plus size={18} /></Button> : undefined}
+        right={<Button size="icon-sm" onClick={openCreate}><Plus size={18} /></Button>}
       />
       <TopBarSpacer />
 
@@ -211,7 +214,7 @@ export default function ClientsPage() {
           icon={Users}
           title={search ? 'Aucun résultat' : 'Aucun client'}
           description={search ? `Aucun client pour "${search}"` : 'Ajoute ton premier client.'}
-          action={!search && isAdmin ? <Button onClick={openCreate}><Plus size={16} />Ajouter un client</Button> : undefined}
+          action={!search ? <Button onClick={openCreate}><Plus size={16} />Ajouter un client</Button> : undefined}
         />
       ) : (
         <div className="px-4 pb-4 space-y-2">
@@ -253,11 +256,9 @@ export default function ClientsPage() {
                     <span className="text-[12px] font-medium" style={{ color: '#2D7A4F' }}>{c.sessionCredits}</span>
                   </div>
                 )}
-                {isAdmin && (
-                  <button onClick={e => { e.stopPropagation(); openEdit(c) }} style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-                    <Pencil size={14} style={{ color: '#C8C4BC' }} />
-                  </button>
-                )}
+                <button onClick={e => { e.stopPropagation(); openEdit(c) }} style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                  <Pencil size={14} style={{ color: '#C8C4BC' }} />
+                </button>
                 <ChevronRight size={14} style={{ color: '#C8C4BC' }} />
               </div>
             </div>
@@ -412,7 +413,7 @@ export default function ClientsPage() {
               {sheet === 'create' ? 'Créer le client' : 'Enregistrer'}
             </Button>
 
-            {sheet === 'edit' && (
+            {sheet === 'edit' && isAdmin && (
               confirmDelete ? (
                 <div className="space-y-2 pt-1">
                   <p className="text-[13px] text-center text-[var(--color-text-tertiary)]">Supprimer définitivement ce client ?</p>
