@@ -25,7 +25,10 @@ service cloud.firestore {
     }
 
     function canReadClient(clientData) {
-      return isAdmin() || (isAuth() && request.auth.uid in clientData.visibleToCoachIds);
+      return isAdmin() || (isCoach() && (
+        clientData.visibleToCoachIds.size() == 0 ||
+        request.auth.uid in clientData.visibleToCoachIds
+      ));
     }
 
     // ─── users ────────────────────────────────────────────────────────────────
