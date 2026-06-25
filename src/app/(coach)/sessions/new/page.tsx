@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { format, addMinutes } from 'date-fns'
 import { orderBy, Timestamp, writeBatch, doc, collection, serverTimestamp, addDoc, getDocs, query, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase/firestore'
-import { X, Check, Search, RefreshCw } from 'lucide-react'
+import { X, Check, Search, RefreshCw, UserPlus } from 'lucide-react'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { useCollection } from '@/lib/hooks/useCollection'
 import { useAuth } from '@/lib/hooks/useAuth'
@@ -153,6 +153,11 @@ function NewSessionForm() {
   const [recurrenceEndType, setRecurrenceEndType] = useState<RecurrenceEndType>('3months')
   const [recurrenceCount, setRecurrenceCount] = useState(12)
   const [clientSearch, setClientSearch] = useState('')
+  const [showNewClient, setShowNewClient] = useState(false)
+  const [newFirstName, setNewFirstName] = useState('')
+  const [newLastName, setNewLastName] = useState('')
+  const [newPhone, setNewPhone] = useState('')
+  const [creatingClient, setCreatingClient] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [locationBookings, setLocationBookings] = useState<Record<string, number>>({})
@@ -230,6 +235,26 @@ function NewSessionForm() {
       : { type: 'months' as const, count: recurrenceEndType === '3months' ? 3 : recurrenceEndType === '6months' ? 6 : 12 }
     return generateOccurrenceDates(startDate, recurrence, end).length
   }, [recurrence, date, startTime, recurrenceEndType, recurrenceCount])
+
+  const handleCreateClient = useCallback(async () => {
+    if (!newFirstName.trim() || !newLastName.trim()) return
+    setCreatingClient(true)
+    try {
+      const newId = await createDoc('clients', {
+        firstName: newFirstName.trim(),
+        lastName: newLastName.trim(),
+        phone: newPhone.trim(),
+        sessionCredits: 0,
+        visibleToCoachIds: isAdmin ? [] : (user?.id ? [user.id] : []),
+      })
+      logActivity({ userId: user!.id, userFirstName: user!.firstName, userLastName: user!.lastName, action: 'client_created', description: `${newFirstName.trim()} ${newLastName.trim()}`, clientId: newId })
+      setSelectedClientIds(prev => [...prev, newId])
+      setNewFirstName(''); setNewLastName(''); setNewPhone('')
+      setShowNewClient(false)
+    } finally {
+      setCreatingClient(false)
+    }
+  }, [newFirstName, newLastName, newPhone, isAdmin, user])
 
   const handleSubmit = useCallback(async () => {
     if (!canSubmit || !selectedService) return
@@ -448,10 +473,38 @@ function NewSessionForm() {
           </div>
           {clientMode === 'individual' ? (
             <>
-              <div style={{ position: 'relative', marginBottom: 8 }}>
-                <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#7A7570', pointerEvents: 'none' }} />
-                <input type="text" placeholder="Rechercher un client..." value={clientSearch} onChange={e => setClientSearch(e.target.value)} style={{ ...inputStyle, paddingLeft: 30 }} />
+              <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                <div style={{ position: 'relative', flex: 1 }}>
+                  <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#7A7570', pointerEvents: 'none' }} />
+                  <input type="text" placeholder="Rechercher un client..." value={clientSearch} onChange={e => setClientSearch(e.target.value)} style={{ ...inputStyle, paddingLeft: 30 }} />
+                </div>
+                <button
+                  onClick={() => { setShowNewClient(v => !v); setNewFirstName(''); setNewLastName(''); setNewPhone('') }}
+                  style={{ width: 36, height: 36, borderRadius: 8, border: '1px solid', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: showNewClient ? '#1A1A18' : '#F0EDE8', borderColor: showNewClient ? '#1A1A18' : '#E5E1DA' }}
+                  title="Nouveau client"
+                >
+                  <UserPlus size={15} color={showNewClient ? '#fff' : '#7A7570'} />
+                </button>
               </div>
+
+              {showNewClient && (
+                <div style={{ background: '#F9F8F6', borderRadius: 8, padding: '10px 10px 12px', marginBottom: 8, border: '1px solid #E5E1DA' }}>
+                  <p style={{ fontSize: 11, fontWeight: 600, color: '#7A7570', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 8px' }}>Nouveau client</p>
+                  <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                    <input placeholder="Prénom *" value={newFirstName} onChange={e => setNewFirstName(e.target.value)} style={{ ...inputStyle, flex: 1 }} />
+                    <input placeholder="Nom *" value={newLastName} onChange={e => setNewLastName(e.target.value)} style={{ ...inputStyle, flex: 1 }} />
+                  </div>
+                  <input placeholder="Téléphone" value={newPhone} onChange={e => setNewPhone(e.target.value)} style={{ ...inputStyle, marginBottom: 8 }} />
+                  <button
+                    onClick={handleCreateClient}
+                    disabled={!newFirstName.trim() || !newLastName.trim() || creatingClient}
+                    style={{ width: '100%', height: 34, borderRadius: 8, border: 'none', cursor: newFirstName.trim() && newLastName.trim() && !creatingClient ? 'pointer' : 'default', background: newFirstName.trim() && newLastName.trim() ? '#1A1A18' : '#E5E1DA', color: newFirstName.trim() && newLastName.trim() ? '#fff' : '#A09890', fontSize: 13, fontWeight: 600 }}
+                  >
+                    {creatingClient ? 'Création…' : 'Créer et sélectionner'}
+                  </button>
+                </div>
+              )}
+
               <div style={{ maxHeight: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
                 {filteredClients.map(c => (
                   <SelectItem key={c.id} label={`${c.firstName} ${c.lastName}`} multi selected={selectedClientIds.includes(c.id)} onSelect={() => setSelectedClientIds(prev => prev.includes(c.id) ? prev.filter(id => id !== c.id) : [...prev, c.id])} />
