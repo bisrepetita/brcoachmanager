@@ -10,7 +10,7 @@ import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { useAuth } from '@/lib/hooks/useAuth'
 import { useCollection } from '@/lib/hooks/useCollection'
 import { db } from '@/lib/firebase/firestore'
-import type { Session, User, Service } from '@/types'
+import type { Session, User, Service, Client } from '@/types'
 
 export default function ToClosePage() {
   const router = useRouter()
@@ -21,6 +21,13 @@ export default function ToClosePage() {
 
   const { data: coaches } = useCollection<User>('users', [orderBy('firstName')])
   const { data: services } = useCollection<Service>('services', [orderBy('name')])
+  const { data: clients } = useCollection<Client>('clients', [orderBy('firstName')])
+
+  // IDs des clients visibles par ce coach
+  const visibleClientIds = useMemo(
+    () => new Set(clients.map(c => c.id)),
+    [clients]
+  )
 
   useEffect(() => {
     if (!user) { setLoading(false); return }
@@ -39,7 +46,7 @@ export default function ToClosePage() {
         const past = snap.docs
           .map(d => ({ id: d.id, ...d.data() } as Session))
           .filter(s => s.status === 'planned' && s.endAt && s.endAt.toDate().getTime() <= now)
-          .sort((a, b) => a.endAt.toDate().getTime() - b.endAt.toDate().getTime()) // plus ancienne en premier
+          .sort((a, b) => a.endAt.toDate().getTime() - b.endAt.toDate().getTime())
         setSessions(past)
         setLoading(false)
       },
@@ -48,9 +55,16 @@ export default function ToClosePage() {
   }, [user?.id, isAdmin]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = useMemo(() => {
-    if (!isAdmin || coachFilter === 'all') return sessions
-    return sessions.filter(s => (s.coachIds ?? []).includes(coachFilter))
-  }, [sessions, coachFilter, isAdmin])
+    let result = sessions
+    // Pour les coachs : n'afficher que les séances dont au moins un client leur est assigné
+    if (!isAdmin) {
+      result = result.filter(s => (s.clientIds ?? []).some(id => visibleClientIds.has(id)))
+    }
+    if (isAdmin && coachFilter !== 'all') {
+      result = result.filter(s => (s.coachIds ?? []).includes(coachFilter))
+    }
+    return result
+  }, [sessions, coachFilter, isAdmin, visibleClientIds])
 
   const now = Date.now()
 
@@ -138,7 +152,9 @@ export default function ToClosePage() {
                     )}
                     {(s.clientIds ?? []).length > 0 && (
                       <p style={{ fontSize: 12, color: '#A09890', margin: '1px 0 0' }}>
-                        {(s.clientIds ?? []).length} client{(s.clientIds ?? []).length > 1 ? 's' : ''}
+                        {(s.clientIds ?? [])
+                          .map(id => { const c = clients.find(cl => cl.id === id); return c ? `${c.firstName} ${c.lastName}` : null })
+                          .filter(Boolean).join(', ') || `${s.clientIds.length} client${s.clientIds.length > 1 ? 's' : ''}`}
                       </p>
                     )}
                   </div>
