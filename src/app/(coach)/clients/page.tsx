@@ -158,6 +158,9 @@ export default function ClientsPage() {
         createdBy: user?.id ?? '',
         createdAt: serverTimestamp(),
       })
+      const sign = qty > 0 ? '+' : ''
+      const desc = `${creditClient.firstName} ${creditClient.lastName} · ${sign}${qty} crédit${Math.abs(qty) > 1 ? 's' : ''}${creditNote.trim() ? ` · ${creditNote.trim()}` : ''}`
+      logActivity({ userId: user!.id, userFirstName: user!.firstName, userLastName: user!.lastName, action: 'credit_added', description: desc, clientId: creditClient.id })
       setCreditClient(null)
     } catch {
       // ignore

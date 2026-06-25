@@ -148,6 +148,15 @@ export default function CloseSessionPage() {
 
       await batch.commit()
       logActivity({ userId: user!.id, userFirstName: user!.firstName, userLastName: user!.lastName, action: 'session_done', description: `${session.priceSnapshot?.serviceName ?? 'Séance'} · ${format(session.startAt.toDate(), 'd MMM yyyy HH:mm', { locale: fr })}`, sessionId })
+
+      // Logger l'utilisation de crédit pour chaque client concerné
+      for (const item of items) {
+        if (item.status === 'credits') {
+          const client = clients.find(c => c.id === item.clientId)
+          const clientName = client ? `${client.firstName} ${client.lastName}` : item.clientId
+          logActivity({ userId: user!.id, userFirstName: user!.firstName, userLastName: user!.lastName, action: 'credit_used', description: `${clientName} · ${session.priceSnapshot?.serviceName ?? 'Séance'} · ${format(session.startAt.toDate(), 'd MMM', { locale: fr })}`, clientId: item.clientId })
+        }
+      }
       router.replace(`/sessions/${sessionId}` as never)
     } catch {
       setSaving(false)

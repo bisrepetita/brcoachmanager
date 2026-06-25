@@ -34,6 +34,8 @@ const ACTION_LABELS: Record<ActivityAction, string> = {
   client_created: 'Client créé',
   client_edited: 'Client modifié',
   client_deleted: 'Client supprimé',
+  credit_added: 'Crédit ajouté',
+  credit_used: 'Crédit utilisé',
 }
 
 const ACTION_COLORS: Record<ActivityAction, string> = {
@@ -46,6 +48,8 @@ const ACTION_COLORS: Record<ActivityAction, string> = {
   client_created: '#10B981',
   client_edited: '#0EA5E9',
   client_deleted: '#A09890',
+  credit_added: '#2D7A4F',
+  credit_used: '#8B5CF6',
 }
 
 const PAGE_SIZE = 30

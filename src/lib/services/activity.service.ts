@@ -11,6 +11,8 @@ export type ActivityAction =
   | 'client_created'
   | 'client_edited'
   | 'client_deleted'
+  | 'credit_added'
+  | 'credit_used'
 
 export async function logActivity(params: {
   userId: string
