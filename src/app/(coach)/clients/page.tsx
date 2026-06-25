@@ -7,6 +7,7 @@ import { fr } from 'date-fns/locale'
 import { db } from '@/lib/firebase/firestore'
 import { useCollection } from '@/lib/hooks/useCollection'
 import { createDoc, updateDocById } from '@/lib/services/crud.service'
+import { logActivity } from '@/lib/services/activity.service'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -128,6 +129,7 @@ export default function ClientsPage() {
     setDeleting(true)
     try {
       await deleteDoc(doc(db, 'clients', editing.id))
+      logActivity({ userId: user!.id, userFirstName: user!.firstName, userLastName: user!.lastName, action: 'client_deleted', description: `${editing.firstName} ${editing.lastName}`, clientId: editing.id })
       close()
     } finally {
       setDeleting(false)
@@ -174,9 +176,11 @@ export default function ClientsPage() {
         visibleToCoachIds: visibleCoachIds,
       }
       if (sheet === 'create') {
-        await createDoc('clients', { ...data, sessionCredits: 0 })
+        const newId = await createDoc('clients', { ...data, sessionCredits: 0 })
+        logActivity({ userId: user!.id, userFirstName: user!.firstName, userLastName: user!.lastName, action: 'client_created', description: `${data.firstName} ${data.lastName}`, clientId: newId })
       } else if (editing) {
         await updateDocById('clients', editing.id, data)
+        logActivity({ userId: user!.id, userFirstName: user!.firstName, userLastName: user!.lastName, action: 'client_edited', description: `${data.firstName} ${data.lastName}`, clientId: editing.id })
       }
       close()
     } catch (err) { setError((err as Error).message) }

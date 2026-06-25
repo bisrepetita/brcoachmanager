@@ -8,6 +8,9 @@ export type ActivityAction =
   | 'session_deleted'
   | 'session_done'
   | 'payment_updated'
+  | 'client_created'
+  | 'client_edited'
+  | 'client_deleted'
 
 export async function logActivity(params: {
   userId: string
@@ -16,6 +19,7 @@ export async function logActivity(params: {
   action: ActivityAction
   description: string
   sessionId?: string
+  clientId?: string
   meta?: Record<string, string>
 }): Promise<void> {
   try {

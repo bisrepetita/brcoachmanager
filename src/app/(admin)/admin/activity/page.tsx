@@ -20,6 +20,7 @@ interface ActivityLog {
   action: ActivityAction
   description: string
   sessionId?: string
+  clientId?: string
   createdAt: Timestamp
 }
 
@@ -30,6 +31,9 @@ const ACTION_LABELS: Record<ActivityAction, string> = {
   session_deleted: 'Séance supprimée',
   session_done: 'Séance clôturée',
   payment_updated: 'Paiement mis à jour',
+  client_created: 'Client créé',
+  client_edited: 'Client modifié',
+  client_deleted: 'Client supprimé',
 }
 
 const ACTION_COLORS: Record<ActivityAction, string> = {
@@ -39,6 +43,9 @@ const ACTION_COLORS: Record<ActivityAction, string> = {
   session_deleted: '#7A7570',
   session_done: '#6366F1',
   payment_updated: '#F59E0B',
+  client_created: '#10B981',
+  client_edited: '#0EA5E9',
+  client_deleted: '#A09890',
 }
 
 const PAGE_SIZE = 30
@@ -129,8 +136,11 @@ export default function ActivityPage() {
                 </p>
               )}
               <div
-                style={{ display: 'flex', gap: 12, padding: '10px 16px', borderBottom: '1px solid #F5F3F0', cursor: log.sessionId ? 'pointer' : 'default' }}
-                onClick={() => log.sessionId && router.push(`/sessions/${log.sessionId}` as never)}
+                style={{ display: 'flex', gap: 12, padding: '10px 16px', borderBottom: '1px solid #F5F3F0', cursor: (log.sessionId || log.clientId) ? 'pointer' : 'default' }}
+                onClick={() => {
+                  if (log.sessionId) router.push(`/sessions/${log.sessionId}` as never)
+                  else if (log.clientId) router.push(`/clients/${log.clientId}` as never)
+                }}
               >
                 <div style={{ width: 36, height: 36, borderRadius: 10, background: `${ACTION_COLORS[log.action]}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                   <div style={{ width: 8, height: 8, borderRadius: '50%', background: ACTION_COLORS[log.action] }} />
