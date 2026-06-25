@@ -111,7 +111,12 @@ export default function CloseSessionPage() {
 
       const updatedDistribution: ClientPayment[] = items.map(item => {
         const original = session.paymentDistribution.find(p => p.clientId === item.clientId)!
-        return { ...original, paymentStatus: item.status }
+        return {
+          ...original,
+          paymentStatus: item.status,
+          // Crédits = séance pré-payée → l'encaissement est réel
+          amountPaid: item.status === 'credits' ? item.amountDue : original.amountPaid,
+        }
       })
 
       batch.update(doc(db, 'sessions', sessionId), {
