@@ -171,6 +171,29 @@ export interface Session {
   cancelledAt?: Timestamp
 }
 
+// ─── Vente hors séance ────────────────────────────────────────────────────────
+
+export interface Sale {
+  id: string
+  serviceId: string
+  coachIds: string[]
+  clientIds: string[]
+  clientGroupId?: string
+  pricingMode: PricingMode
+  paymentDistribution: ClientPayment[]
+  paymentStatus: PaymentStatus
+  note?: string
+  priceSnapshot: {
+    serviceName: string
+    basePrice: number
+    pricingMode: PricingMode
+    customTotalPrice?: number
+    customPricePerClient?: number
+  }
+  createdAt: Timestamp
+  updatedAt: Timestamp
+}
+
 // ─── Disponibilités ───────────────────────────────────────────────────────────
 
 export interface AvailabilitySlot {

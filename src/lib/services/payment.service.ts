@@ -1,21 +1,15 @@
 import { getAuth } from 'firebase/auth'
 import { firebaseApp } from '@/lib/firebase/config'
 
-export async function requestPaymentLink(
-  sessionId: string,
-  clientId: string
-): Promise<string> {
+async function callPaymentLinkApi(body: Record<string, string>): Promise<string> {
   const auth = getAuth(firebaseApp)
   const token = await auth.currentUser?.getIdToken()
   if (!token) throw new Error('Non authentifié')
 
   const res = await fetch('/api/create-payment-link', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({ sessionId, clientId }),
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
   })
 
   if (!res.ok) {
@@ -25,6 +19,13 @@ export async function requestPaymentLink(
     throw new Error(message)
   }
 
-  const data = (await res.json()) as { link: string }
-  return data.link
+  return ((await res.json()) as { link: string }).link
+}
+
+export function requestPaymentLink(sessionId: string, clientId: string): Promise<string> {
+  return callPaymentLinkApi({ sessionId, clientId })
+}
+
+export function requestSalePaymentLink(saleId: string, clientId: string): Promise<string> {
+  return callPaymentLinkApi({ saleId, clientId })
 }
