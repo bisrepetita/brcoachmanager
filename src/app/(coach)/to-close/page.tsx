@@ -10,7 +10,7 @@ import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { useAuth } from '@/lib/hooks/useAuth'
 import { useCollection } from '@/lib/hooks/useCollection'
 import { db } from '@/lib/firebase/firestore'
-import type { Session, User, Service, Client } from '@/types'
+import type { Session, User, Service, Client, ClientGroup } from '@/types'
 
 export default function ToClosePage() {
   const router = useRouter()
@@ -22,6 +22,7 @@ export default function ToClosePage() {
   const { data: coaches } = useCollection<User>('users', [orderBy('firstName')])
   const { data: services } = useCollection<Service>('services', [orderBy('name')])
   const { data: clients } = useCollection<Client>('clients', [orderBy('firstName')])
+  const { data: groups } = useCollection<ClientGroup>('clientGroups', [orderBy('name')])
 
   // IDs des clients visibles par ce coach
   const visibleClientIds = useMemo(
@@ -57,8 +58,11 @@ export default function ToClosePage() {
   const filtered = useMemo(() => {
     let result = sessions
     // Pour les coachs : n'afficher que les séances dont au moins un client leur est assigné
+    // Exception : les séances de groupe sont toujours affichées (le coach est déjà filtré par coachIds)
     if (!isAdmin) {
-      result = result.filter(s => (s.clientIds ?? []).some(id => visibleClientIds.has(id)))
+      result = result.filter(s =>
+        !!s.clientGroupId || (s.clientIds ?? []).some(id => visibleClientIds.has(id))
+      )
     }
     if (isAdmin && coachFilter !== 'all') {
       result = result.filter(s => (s.coachIds ?? []).includes(coachFilter))
@@ -119,6 +123,7 @@ export default function ToClosePage() {
           {filtered.map(s => {
             const service = services.find(sv => sv.id === s.serviceId)
             const sessionCoaches = coaches.filter(c => (s.coachIds ?? []).includes(c.id))
+            const sessionGroup = s.clientGroupId ? groups.find(g => g.id === s.clientGroupId) : undefined
             const start = s.startAt.toDate()
             const durationMin = Math.round((s.endAt.toDate().getTime() - start.getTime()) / 60000)
             const msAgo = now - start.getTime()
@@ -150,13 +155,20 @@ export default function ToClosePage() {
                         {sessionCoaches.map(c => `${c.firstName} ${c.lastName}`).join(', ')}
                       </p>
                     )}
-                    {(s.clientIds ?? []).length > 0 && (
-                      <p style={{ fontSize: 12, color: '#A09890', margin: '1px 0 0' }}>
-                        {(s.clientIds ?? [])
-                          .map(id => { const c = clients.find(cl => cl.id === id); return c ? `${c.firstName} ${c.lastName}` : null })
-                          .filter(Boolean).join(', ') || `${s.clientIds.length} client${s.clientIds.length > 1 ? 's' : ''}`}
-                      </p>
-                    )}
+                    {sessionGroup
+                      ? (
+                        <p style={{ fontSize: 12, color: '#A09890', margin: '1px 0 0' }}>
+                          Groupe · {sessionGroup.name} ({(s.clientIds ?? []).length || sessionGroup.clientIds.length} clients)
+                        </p>
+                      )
+                      : (s.clientIds ?? []).length > 0 && (
+                        <p style={{ fontSize: 12, color: '#A09890', margin: '1px 0 0' }}>
+                          {(s.clientIds ?? [])
+                            .map(id => { const c = clients.find(cl => cl.id === id); return c ? `${c.firstName} ${c.lastName}` : null })
+                            .filter(Boolean).join(', ') || `${s.clientIds.length} client${s.clientIds.length > 1 ? 's' : ''}`}
+                        </p>
+                      )
+                    }
                   </div>
                   <div style={{
                     display: 'flex', alignItems: 'center', gap: 4,

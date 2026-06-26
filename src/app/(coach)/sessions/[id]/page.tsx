@@ -14,7 +14,7 @@ import { requestPaymentLink } from '@/lib/services/payment.service'
 import { sendNotification } from '@/lib/services/notification.service'
 import { logActivity } from '@/lib/services/activity.service'
 import { db } from '@/lib/firebase/firestore'
-import type { Session, User as UserType, Service, Location, Client, AppSettings } from '@/types'
+import type { Session, User as UserType, Service, Location, Client, ClientGroup, AppSettings } from '@/types'
 
 function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
@@ -59,6 +59,7 @@ export default function SessionDetailPage() {
   const { data: services } = useCollection<Service>('services', [orderBy('name')])
   const { data: locations } = useCollection<Location>('locations', [orderBy('name')])
   const { data: clients } = useCollection<Client>('clients', [orderBy('firstName')])
+  const { data: groups } = useCollection<ClientGroup>('clientGroups', [orderBy('name')])
 
   useEffect(() => {
     if (!sessionId) return
@@ -273,7 +274,12 @@ export default function SessionDetailPage() {
   const service = services.find(s => s.id === session.serviceId)
   const location = locations.find(l => l.id === session.locationId)
   const sessionCoaches = coaches.filter(c => session.coachIds.includes(c.id))
-  const sessionClients = clients.filter(c => session.clientIds.includes(c.id))
+  const sessionGroup = session.clientGroupId ? groups.find(g => g.id === session.clientGroupId) : undefined
+  // Pour les séances de groupe : utiliser les membres actuels du groupe comme fallback si clientIds est vide
+  const effectiveClientIds = session.clientIds.length > 0
+    ? session.clientIds
+    : (sessionGroup?.clientIds ?? [])
+  const sessionClients = clients.filter(c => effectiveClientIds.includes(c.id))
 
   const startDate = session.startAt.toDate()
   const endDate = session.endAt.toDate()
@@ -327,7 +333,8 @@ export default function SessionDetailPage() {
             <div style={{ color: '#7A7570', marginTop: 1, flexShrink: 0 }}><Users size={16} /></div>
             <div style={{ flex: 1 }}>
               <p style={{ fontSize: 11, color: '#A09890', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600, margin: 0 }}>
-                Clients ({sessionClients.length})
+                {sessionGroup ? `Groupe · ${sessionGroup.name}` : `Client${sessionClients.length !== 1 ? 's' : ''}`}
+                {' '}({sessionClients.length})
               </p>
               {sessionClients.length === 0
                 ? <p style={{ fontSize: 15, color: '#A09890', margin: '2px 0 0' }}>Aucun client</p>
