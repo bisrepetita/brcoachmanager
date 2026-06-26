@@ -4,8 +4,8 @@ import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { orderBy, doc, getDoc, updateDoc, deleteDoc, query, collection, where, getDocs, writeBatch, serverTimestamp } from 'firebase/firestore'
-import { ChevronLeft, MapPin, User, Users, Dumbbell, Clock, AlertTriangle, Send, RefreshCw, Pencil } from 'lucide-react'
+import { orderBy, doc, getDoc, updateDoc, deleteDoc, query, collection, where, getDocs, writeBatch, serverTimestamp, deleteField, increment } from 'firebase/firestore'
+import { ChevronLeft, MapPin, User, Users, Dumbbell, Clock, AlertTriangle, Send, RefreshCw, Pencil, RotateCcw } from 'lucide-react'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { Badge } from '@/components/ui/badge'
 import { useCollection } from '@/lib/hooks/useCollection'
@@ -54,6 +54,8 @@ export default function SessionDetailPage() {
   const [sendingFor, setSendingFor] = useState<Set<string>>(new Set())
   const [markingPaidFor, setMarkingPaidFor] = useState<Set<string>>(new Set())
   const [whatsappTemplate, setWhatsappTemplate] = useState(DEFAULT_WHATSAPP_TEMPLATE)
+  const [revertConfirm, setRevertConfirm] = useState(false)
+  const [reverting, setReverting] = useState(false)
 
   const { data: coaches } = useCollection<UserType>('users', [orderBy('firstName')])
   const { data: services } = useCollection<Service>('services', [orderBy('name')])
@@ -245,6 +247,72 @@ export default function SessionDetailPage() {
       setMarkingPaidFor(prev => { const n = new Set(prev); n.delete(clientId); return n })
     }
   }, [session, sessionId])
+
+  const handleRevertClose = useCallback(async () => {
+    if (!session) return
+    setReverting(true)
+    try {
+      const batch = writeBatch(db)
+      const ps = session.priceSnapshot
+      const clientCount = session.paymentDistribution.length
+
+      // Recalcule le montant original par client à partir du priceSnapshot
+      let originalAmountDue: number
+      if (ps?.pricingMode === 'split_between_group') {
+        originalAmountDue = clientCount > 0
+          ? Math.round(((ps.customTotalPrice ?? ps.basePrice) / clientCount) * 100) / 100
+          : 0
+      } else {
+        originalAmountDue = ps?.customPricePerClient ?? ps?.basePrice ?? 0
+      }
+      // Fallback : prend le max des amountDue existants (les non-absents ont la bonne valeur)
+      if (!originalAmountDue) {
+        originalAmountDue = Math.max(...session.paymentDistribution.map(p => p.amountDue), 0)
+      }
+
+      // Rend les crédits aux clients qui en avaient utilisé
+      for (const p of session.paymentDistribution) {
+        if (p.paymentStatus === 'credits') {
+          batch.update(doc(db, 'clients', p.clientId), { sessionCredits: increment(1) })
+          batch.set(doc(collection(db, 'creditTransactions')), {
+            clientId: p.clientId,
+            type: 'refund',
+            quantity: 1,
+            sessionId,
+            note: 'Clôture annulée',
+            createdBy: user?.id ?? '',
+            createdAt: serverTimestamp(),
+          })
+        }
+      }
+
+      // Remet tous les paiements à zéro (restaure amountDue pour les absents)
+      const resetDistribution = session.paymentDistribution.map(p => ({
+        clientId: p.clientId,
+        amountDue: p.amountDue > 0 ? p.amountDue : originalAmountDue,
+        amountPaid: 0,
+        paymentStatus: 'payment_to_request' as const,
+      }))
+
+      batch.update(doc(db, 'sessions', sessionId), {
+        status: 'planned',
+        paymentStatus: 'payment_to_request',
+        paymentDistribution: resetDistribution,
+        completedAt: deleteField(),
+        updatedAt: serverTimestamp(),
+      })
+
+      await batch.commit()
+      logActivity({ userId: user!.id, userFirstName: user!.firstName, userLastName: user!.lastName, action: 'session_edited', description: `Clôture annulée · ${session.priceSnapshot?.serviceName ?? 'Séance'} · ${format(session.startAt.toDate(), 'd MMM yyyy', { locale: fr })}`, sessionId })
+
+      setSession(prev => prev ? { ...prev, status: 'planned', paymentStatus: 'payment_to_request', paymentDistribution: resetDistribution } : prev)
+      setRevertConfirm(false)
+    } catch (err) {
+      alert('Erreur : ' + String(err))
+    } finally {
+      setReverting(false)
+    }
+  }, [session, sessionId, user])
 
   if (loading) {
     return (
@@ -513,8 +581,27 @@ export default function SessionDetailPage() {
             </div>
           )}
 
+          {/* ── Confirmation annulation de clôture ─────────────────── */}
+          {revertConfirm && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <p style={{ fontSize: 13, color: '#7A7570', margin: 0, textAlign: 'center' }}>
+                Remettre la séance en statut "Planifié" ?{session.paymentDistribution.some(p => p.paymentStatus === 'credits') ? ' Les crédits utilisés seront restitués.' : ''}
+              </p>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => setRevertConfirm(false)} disabled={reverting}
+                  style={{ flex: 1, height: 44, borderRadius: 8, border: '1px solid #E5E1DA', cursor: 'pointer', backgroundColor: 'transparent', color: '#7A7570', fontSize: 14, fontWeight: 500 }}>
+                  Retour
+                </button>
+                <button onClick={handleRevertClose} disabled={reverting}
+                  style={{ flex: 2, height: 44, borderRadius: 8, border: 'none', cursor: reverting ? 'default' : 'pointer', backgroundColor: '#4285F4', color: '#fff', fontSize: 14, fontWeight: 600 }}>
+                  {reverting ? 'En cours…' : 'Confirmer'}
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* ── Boutons principaux ──────────────────────────────────── */}
-          {cancelScope === 'none' && deleteScope === 'none' && (
+          {cancelScope === 'none' && deleteScope === 'none' && !revertConfirm && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {session.status === 'planned' && (
                 <div style={{ display: 'flex', gap: 10 }}>
@@ -531,6 +618,14 @@ export default function SessionDetailPage() {
                     </button>
                   )}
                 </div>
+              )}
+              {session.status === 'done' && (
+                <button
+                  onClick={() => setRevertConfirm(true)}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%', height: 44, borderRadius: 8, border: '1px solid #E5E1DA', cursor: 'pointer', backgroundColor: 'transparent', color: '#7A7570', fontSize: 14, fontWeight: 500 }}>
+                  <RotateCcw size={15} />
+                  Annuler la clôture
+                </button>
               )}
               <button onClick={() => setDeleteScope('pending')}
                 style={{ width: '100%', height: 36, borderRadius: 8, border: 'none', cursor: 'pointer', backgroundColor: 'transparent', color: '#A09890', fontSize: 13, fontWeight: 500 }}>
