@@ -19,6 +19,7 @@ interface PaymentItem {
   creditBalance: number
   status: 'payment_to_request' | 'offered' | 'credits'
   offeredReason: string
+  present: boolean
 }
 
 const backBtn: React.CSSProperties = {
@@ -67,16 +68,24 @@ export default function CloseSessionPage() {
         const client = clients.find(c => c.id === p.clientId)
         const creditBalance = client?.sessionCredits ?? 0
         const wasAlreadyOffered = p.paymentStatus === 'offered'
+        const wasAbsent = p.paymentStatus === 'cancelled'
         return {
           clientId: p.clientId,
           amountDue: p.amountDue,
           creditBalance,
           status: wasAlreadyOffered ? 'offered' : 'payment_to_request',
           offeredReason: '',
+          present: !wasAbsent,
         }
       }))
     }
   }, [session, clients])
+
+  const togglePresent = useCallback((clientId: string) => {
+    setItems(prev => prev.map(p =>
+      p.clientId !== clientId ? p : { ...p, present: !p.present }
+    ))
+  }, [])
 
   const toggleOffered = useCallback((clientId: string) => {
     setItems(prev => prev.map(p => {
@@ -104,17 +113,20 @@ export default function CloseSessionPage() {
     setSaving(true)
     try {
       const batch = writeBatch(db)
-      const allOffered = items.every(p => p.status === 'offered')
-      const allCredits = items.every(p => p.status === 'credits')
+      const presentItems = items.filter(p => p.present)
+      const allOffered = presentItems.length > 0 && presentItems.every(p => p.status === 'offered')
+      const allCredits = presentItems.length > 0 && presentItems.every(p => p.status === 'credits')
       const sessionPaymentStatus = allOffered ? 'offered' : allCredits ? 'credits' : 'payment_to_request'
-      const offeredReason = items.find(p => p.status === 'offered' && p.offeredReason)?.offeredReason
+      const offeredReason = presentItems.find(p => p.status === 'offered' && p.offeredReason)?.offeredReason
 
       const updatedDistribution: ClientPayment[] = items.map(item => {
         const original = session.paymentDistribution.find(p => p.clientId === item.clientId)!
+        if (!item.present) {
+          return { ...original, paymentStatus: 'cancelled', amountDue: 0, amountPaid: 0 }
+        }
         return {
           ...original,
           paymentStatus: item.status,
-          // Crédits = séance pré-payée → l'encaissement est réel
           amountPaid: item.status === 'credits' ? item.amountDue : original.amountPaid,
         }
       })
@@ -128,9 +140,9 @@ export default function CloseSessionPage() {
         ...(offeredReason ? { offeredReason } : {}),
       })
 
-      // Déduire 1 crédit par client qui utilise des crédits
+      // Déduire 1 crédit par client PRÉSENT qui utilise des crédits
       for (const item of items) {
-        if (item.status === 'credits') {
+        if (item.present && item.status === 'credits') {
           batch.update(doc(db, 'clients', item.clientId), {
             sessionCredits: increment(-1),
           })
@@ -149,9 +161,8 @@ export default function CloseSessionPage() {
       await batch.commit()
       logActivity({ userId: user!.id, userFirstName: user!.firstName, userLastName: user!.lastName, action: 'session_done', description: `${session.priceSnapshot?.serviceName ?? 'Séance'} · ${format(session.startAt.toDate(), 'd MMM yyyy HH:mm', { locale: fr })}`, sessionId })
 
-      // Logger l'utilisation de crédit pour chaque client concerné
       for (const item of items) {
-        if (item.status === 'credits') {
+        if (item.present && item.status === 'credits') {
           const client = clients.find(c => c.id === item.clientId)
           const clientName = client ? `${client.firstName} ${client.lastName}` : item.clientId
           logActivity({ userId: user!.id, userFirstName: user!.firstName, userLastName: user!.lastName, action: 'credit_used', description: `${clientName} · ${session.priceSnapshot?.serviceName ?? 'Séance'} · ${format(session.startAt.toDate(), 'd MMM', { locale: fr })}`, clientId: item.clientId })
@@ -161,7 +172,7 @@ export default function CloseSessionPage() {
     } catch {
       setSaving(false)
     }
-  }, [session, sessionId, items, note, router, user])
+  }, [session, sessionId, items, note, router, user, clients])
 
   if (loadingSession || !session) {
     return (
@@ -179,8 +190,10 @@ export default function CloseSessionPage() {
   }
 
   const start = session.startAt.toDate()
-  const pendingCount = items.filter(p => p.status === 'payment_to_request').length
-  const creditsCount = items.filter(p => p.status === 'credits').length
+  const presentItems = items.filter(p => p.present)
+  const absentCount = items.filter(p => !p.present).length
+  const pendingCount = presentItems.filter(p => p.status === 'payment_to_request').length
+  const creditsCount = presentItems.filter(p => p.status === 'credits').length
 
   return (
     <>
@@ -220,14 +233,31 @@ export default function CloseSessionPage() {
                 const name = client ? `${client.firstName} ${client.lastName}` : '—'
                 const isOffered = item.status === 'offered'
                 const isCredits = item.status === 'credits'
+                const isAbsent = !item.present
                 const isLast = idx === items.length - 1
 
                 return (
-                  <div key={item.clientId} style={{ paddingTop: idx === 0 ? 0 : 10, paddingBottom: isLast ? 0 : 10, borderBottom: isLast ? 'none' : '1px solid #F0EDE8' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ fontSize: 14, color: '#1A1A18', fontWeight: 500, margin: 0 }}>{name}</p>
-                        <p style={{ fontSize: 13, color: '#7A7570', margin: '1px 0 0', fontFamily: 'monospace' }}>
+                  <div key={item.clientId} style={{ paddingTop: idx === 0 ? 0 : 10, paddingBottom: isLast ? 0 : 10, borderBottom: isLast ? 'none' : '1px solid #F0EDE8', opacity: isAbsent ? 0.5 : 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: isAbsent ? 0 : 6 }}>
+                      <p style={{ fontSize: 14, color: isAbsent ? '#A09890' : '#1A1A18', fontWeight: 500, margin: 0, flex: 1, minWidth: 0 }}>{name}</p>
+                      {/* Toggle présence */}
+                      <button
+                        onClick={() => togglePresent(item.clientId)}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 4,
+                          padding: '4px 10px', borderRadius: 6, border: 'none', cursor: 'pointer',
+                          fontSize: 12, fontWeight: 500, flexShrink: 0,
+                          backgroundColor: isAbsent ? '#F0EDE8' : '#E8F3EE',
+                          color: isAbsent ? '#A09890' : '#2D7A4F',
+                        }}
+                      >
+                        {isAbsent ? '✗ Absent' : '✓ Présent'}
+                      </button>
+                    </div>
+
+                    {!isAbsent && (
+                      <>
+                        <p style={{ fontSize: 13, color: '#7A7570', margin: '0 0 6px', fontFamily: 'monospace' }}>
                           {item.amountDue.toFixed(2)} CHF
                           {item.creditBalance > 0 && (
                             <span style={{ marginLeft: 6, fontSize: 11, color: '#5B8A6A', fontFamily: 'inherit', fontWeight: 500 }}>
@@ -235,53 +265,51 @@ export default function CloseSessionPage() {
                             </span>
                           )}
                         </p>
-                      </div>
-
-                      <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                        {item.creditBalance > 0 && (
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          {item.creditBalance > 0 && (
+                            <button
+                              onClick={() => toggleCredits(item.clientId)}
+                              style={{
+                                display: 'flex', alignItems: 'center', gap: 4,
+                                padding: '5px 10px', borderRadius: 6, border: 'none', cursor: 'pointer',
+                                fontSize: 12, fontWeight: 500,
+                                backgroundColor: isCredits ? '#E8F3EE' : '#F0EDE8',
+                                color: isCredits ? '#2D7A4F' : '#7A7570',
+                              }}
+                            >
+                              <CreditCard size={12} />
+                              Crédit
+                            </button>
+                          )}
                           <button
-                            onClick={() => toggleCredits(item.clientId)}
+                            onClick={() => toggleOffered(item.clientId)}
                             style={{
                               display: 'flex', alignItems: 'center', gap: 4,
                               padding: '5px 10px', borderRadius: 6, border: 'none', cursor: 'pointer',
                               fontSize: 12, fontWeight: 500,
-                              backgroundColor: isCredits ? '#E8F3EE' : '#F0EDE8',
-                              color: isCredits ? '#2D7A4F' : '#7A7570',
+                              backgroundColor: isOffered ? '#FDF6EA' : '#F0EDE8',
+                              color: isOffered ? '#8A6200' : '#7A7570',
                             }}
                           >
-                            <CreditCard size={12} />
-                            Crédit
+                            <Gift size={12} />
+                            {isOffered ? 'Offert' : 'Offrir'}
                           </button>
+                        </div>
+                        {isOffered && (
+                          <input
+                            type="text"
+                            placeholder="Raison (optionnel)"
+                            value={item.offeredReason}
+                            onChange={e => setReason(item.clientId, e.target.value)}
+                            style={{
+                              marginTop: 7, width: '100%', border: '1px solid #F0EDE8',
+                              borderRadius: 6, padding: '5px 8px', fontSize: 13,
+                              color: '#1A1A18', background: '#FDF6EA', outline: 'none',
+                              boxSizing: 'border-box', fontFamily: 'inherit',
+                            }}
+                          />
                         )}
-                        <button
-                          onClick={() => toggleOffered(item.clientId)}
-                          style={{
-                            display: 'flex', alignItems: 'center', gap: 4,
-                            padding: '5px 10px', borderRadius: 6, border: 'none', cursor: 'pointer',
-                            fontSize: 12, fontWeight: 500,
-                            backgroundColor: isOffered ? '#FDF6EA' : '#F0EDE8',
-                            color: isOffered ? '#8A6200' : '#7A7570',
-                          }}
-                        >
-                          <Gift size={12} />
-                          {isOffered ? 'Offert' : 'Offrir'}
-                        </button>
-                      </div>
-                    </div>
-
-                    {isOffered && (
-                      <input
-                        type="text"
-                        placeholder="Raison (optionnel)"
-                        value={item.offeredReason}
-                        onChange={e => setReason(item.clientId, e.target.value)}
-                        style={{
-                          marginTop: 7, width: '100%', border: '1px solid #F0EDE8',
-                          borderRadius: 6, padding: '5px 8px', fontSize: 13,
-                          color: '#1A1A18', background: '#FDF6EA', outline: 'none',
-                          boxSizing: 'border-box', fontFamily: 'inherit',
-                        }}
-                      />
+                      </>
                     )}
                   </div>
                 )
@@ -293,6 +321,9 @@ export default function CloseSessionPage() {
         {/* Résumé */}
         <div style={{ background: '#F0EDE8', borderRadius: 10, padding: '10px 14px' }}>
           <p style={{ fontSize: 13, color: '#7A7570', margin: 0 }}>
+            {absentCount > 0 && (
+              <span>{absentCount} absent{absentCount > 1 ? 's' : ''}. </span>
+            )}
             {pendingCount === 0 && creditsCount === 0
               ? 'Aucun paiement à demander.'
               : pendingCount === 0
