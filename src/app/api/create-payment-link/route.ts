@@ -50,7 +50,8 @@ export async function POST(req: NextRequest) {
     const clientSnap = await adminDb.collection('clients').doc(clientId).get()
     const client = clientSnap.data() as { firstName: string; lastName: string; email?: string } | undefined
     const clientName = client ? `${client.firstName} ${client.lastName}` : clientId
-    const returnUrl = process.env.STRIPE_RETURN_URL ?? 'https://bisrepetita.ch'
+    const successUrl = process.env.STRIPE_SUCCESS_URL ?? 'https://g.page/r/CWNO2cYqxHNDEAE/review'
+    const cancelUrl = process.env.STRIPE_RETURN_URL ?? 'https://bisrepetita.ch'
 
     // Label produit : pour une séance on inclut la date, pour une vente non
     let productName: string
@@ -74,8 +75,8 @@ export async function POST(req: NextRequest) {
         },
         quantity: 1,
       }],
-      success_url: returnUrl,
-      cancel_url: returnUrl,
+      success_url: successUrl,
+      cancel_url: cancelUrl,
       client_reference_id: `${docId}__${clientId}`,
     })
 
