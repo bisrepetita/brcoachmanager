@@ -1,7 +1,9 @@
 'use client'
 
 import * as React from 'react'
+import { Menu } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
+import { useBurgerMenu } from './BurgerMenu'
 
 interface TopBarProps {
   title: React.ReactNode
@@ -13,6 +15,8 @@ interface TopBarProps {
 }
 
 export function TopBar({ title, subtitle, left, right, className, noBorder }: TopBarProps) {
+  const burger = useBurgerMenu()
+
   return (
     <header
       className={cn(
@@ -37,7 +41,17 @@ export function TopBar({ title, subtitle, left, right, className, noBorder }: To
           )}
         </div>
       </div>
-      {right && <div className="shrink-0 ml-3">{right}</div>}
+      <div className="shrink-0 ml-3 flex items-center gap-2">
+        {right}
+        {burger && (
+          <button
+            onClick={burger.open}
+            style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid #E5E1DA', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+          >
+            <Menu size={16} color="#7A7570" />
+          </button>
+        )}
+      </div>
     </header>
   )
 }

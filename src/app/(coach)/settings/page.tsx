@@ -1,11 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import Link from 'next/link'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { useAuth } from '@/lib/hooks/useAuth'
-import { AdminHub } from '@/components/layout/AdminHub'
-import { LogOut, User, BarChart2, ChevronRight, Calendar, Copy, Check, ExternalLink, Bell } from 'lucide-react'
+import { LogOut, User, Calendar, Copy, Check, ExternalLink, Bell } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase/firestore'
@@ -213,26 +211,6 @@ export default function SettingsPage() {
             <p className="mt-2 text-[11px] px-1" style={{ color: notifStatus === 'error' ? '#DC2626' : '#7A7570' }}>{notifDetail}</p>
           ) : null}
         </section>
-
-        {/* Admin hub */}
-        {isAdmin && <AdminHub />}
-
-        {/* Suivi indépendant */}
-        {!isAdmin && (
-          <section>
-            <p className="section-label mb-3">Mode indépendant</p>
-            <Link href="/independent" className="flex items-center gap-3 px-4 py-3.5 rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] no-underline press-effect">
-              <div className="w-9 h-9 rounded-[var(--radius-md)] flex items-center justify-center shrink-0" style={{ background: '#F0EDE8' }}>
-                <BarChart2 size={18} style={{ color: '#7A7570' }} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[14px] font-medium text-[var(--color-text-primary)]">Suivi location de salle</p>
-                <p className="text-[12px] text-[var(--color-text-tertiary)]">Montants dus à l&apos;entreprise</p>
-              </div>
-              <ChevronRight size={16} style={{ color: '#C8C4BC' }} />
-            </Link>
-          </section>
-        )}
 
         {/* Déconnexion */}
         <section>
