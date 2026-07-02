@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { orderBy, serverTimestamp, addDoc, collection } from 'firebase/firestore'
-import { ChevronLeft, Search, Users, User, Check } from 'lucide-react'
+import { ChevronLeft, Search, Users, User, Check, Plus } from 'lucide-react'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { useCollection } from '@/lib/hooks/useCollection'
 import { useAuth } from '@/lib/hooks/useAuth'
@@ -33,6 +33,9 @@ export default function NewSalePage() {
   const { data: groups } = useCollection<ClientGroup>('clientGroups', [orderBy('name')])
 
   const [serviceId, setServiceId] = useState('')
+  const [customServiceName, setCustomServiceName] = useState('')
+  const [customServicePrice, setCustomServicePrice] = useState('')
+  const isCustomService = serviceId === '__custom__'
   const [clientMode, setClientMode] = useState<'individual' | 'group'>('individual')
   const [search, setSearch] = useState('')
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>([])
@@ -46,7 +49,9 @@ export default function NewSalePage() {
   const [saving, setSaving] = useState(false)
 
   const selectedService = services.find(s => s.id === serviceId)
-  const basePrice = selectedService?.price ?? 0
+  const basePrice = isCustomService
+    ? (parseFloat(customServicePrice) || 0)
+    : (selectedService?.price ?? 0)
 
   // Clients effectifs selon le mode
   const selectedGroup = groups.find(g => g.id === selectedGroupId)
@@ -88,11 +93,15 @@ export default function NewSalePage() {
     })
   }
 
-  const canSubmit = !!(serviceId && effectiveClientIds.length > 0 &&
-    (clientMode === 'individual' ? true : !!selectedGroupId))
+  const canSubmit = !!(
+    (isCustomService ? (customServiceName.trim() && customServicePrice) : serviceId) &&
+    effectiveClientIds.length > 0 &&
+    (clientMode === 'individual' ? true : !!selectedGroupId)
+  )
 
   const handleSubmit = useCallback(async () => {
-    if (!user || !canSubmit || !selectedService) return
+    if (!user || !canSubmit) return
+    if (!isCustomService && !selectedService) return
     setSaving(true)
     try {
       const customPricePerClient = (useCustomPrice && pricingMode === 'per_person' && customTotalPrice)
@@ -102,6 +111,9 @@ export default function NewSalePage() {
         ? parseFloat(customTotalPrice) || undefined
         : undefined
 
+      const serviceName = isCustomService ? customServiceName.trim() : selectedService!.name
+      const serviceBasePrice = isCustomService ? (parseFloat(customServicePrice) || 0) : selectedService!.price
+
       const distribution: ClientPayment[] = effectiveClientIds.map(cId => ({
         clientId: cId,
         amountDue: pricePerClient,
@@ -110,7 +122,7 @@ export default function NewSalePage() {
       }))
 
       const saleData = {
-        serviceId,
+        serviceId: isCustomService ? '' : serviceId,
         coachIds: [user.id],
         clientIds: effectiveClientIds,
         ...(clientMode === 'group' && selectedGroupId ? { clientGroupId: selectedGroupId } : {}),
@@ -119,8 +131,8 @@ export default function NewSalePage() {
         paymentStatus: 'payment_to_request',
         note: note.trim(),
         priceSnapshot: {
-          serviceName: selectedService.name,
-          basePrice: selectedService.price,
+          serviceName,
+          basePrice: serviceBasePrice,
           pricingMode,
           ...(customPricePerClient !== undefined ? { customPricePerClient } : {}),
           ...(customTotal !== undefined ? { customTotalPrice: customTotal } : {}),
@@ -134,7 +146,7 @@ export default function NewSalePage() {
     } catch {
       setSaving(false)
     }
-  }, [user, canSubmit, selectedService, effectiveClientIds, pricePerClient, serviceId, clientMode, selectedGroupId, pricingMode, note, useCustomPrice, customTotalPrice])
+  }, [user, canSubmit, isCustomService, selectedService, customServiceName, customServicePrice, effectiveClientIds, pricePerClient, serviceId, clientMode, selectedGroupId, pricingMode, note, useCustomPrice, customTotalPrice])
 
   return (
     <>
@@ -166,6 +178,48 @@ export default function NewSalePage() {
                 <span style={{ fontSize: 13, color: '#7A7570', fontFamily: 'monospace' }}>{s.price.toFixed(2)} CHF</span>
               </button>
             ))}
+
+            {/* Service ponctuel */}
+            <button
+              onClick={() => setServiceId('__custom__')}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '10px 12px', borderRadius: 8,
+                border: isCustomService ? '1.5px solid #1A1A18' : '1.5px dashed #C8C4BC',
+                background: isCustomService ? '#F9F8F6' : 'transparent',
+                cursor: 'pointer', textAlign: 'left',
+              }}
+            >
+              <Plus size={14} style={{ color: isCustomService ? '#1A1A18' : '#A09890', flexShrink: 0 }} />
+              <span style={{ fontSize: 14, color: isCustomService ? '#1A1A18' : '#A09890', fontWeight: isCustomService ? 600 : 400 }}>
+                Service ponctuel
+              </span>
+            </button>
+
+            {/* Champs service ponctuel */}
+            {isCustomService && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '4px 0' }}>
+                <input
+                  autoFocus
+                  value={customServiceName}
+                  onChange={e => setCustomServiceName(e.target.value)}
+                  placeholder="Nom du service *"
+                  style={input}
+                />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={customServicePrice}
+                    onChange={e => setCustomServicePrice(e.target.value)}
+                    placeholder="Prix (CHF) *"
+                    style={{ ...input, flex: 1 }}
+                  />
+                  <span style={{ fontSize: 13, color: '#7A7570', flexShrink: 0 }}>CHF</span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
