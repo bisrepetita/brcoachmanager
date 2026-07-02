@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { CalendarDays, AlertCircle, History, ShoppingBag, Users, Settings } from 'lucide-react'
+import { CalendarDays, AlertCircle, History, ShoppingBag, Users } from 'lucide-react'
 import { useToCloseCount } from '@/lib/hooks/useToCloseCount'
 import { useNotifCount } from '@/components/providers/NotificationProvider'
 
@@ -12,7 +12,6 @@ const NAV_ITEMS = [
   { href: '/history',  label: 'Historique', icon: History },
   { href: '/sales',    label: 'Ventes',     icon: ShoppingBag },
   { href: '/clients',  label: 'Clients',    icon: Users },
-  { href: '/settings', label: 'Réglages',   icon: Settings },
 ] as const
 
 export function BottomNav() {

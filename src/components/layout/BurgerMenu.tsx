@@ -104,6 +104,7 @@ function BurgerDrawer({ isOpen, close }: { isOpen: boolean; close: () => void })
             <Link
               key={href}
               href={href}
+              onClick={close}
               style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 16px', textDecoration: 'none', borderBottom: '1px solid #F5F3F0' }}
             >
               <div style={{ width: 36, height: 36, borderRadius: 10, background: '#F0EDE8', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -122,6 +123,7 @@ function BurgerDrawer({ isOpen, close }: { isOpen: boolean; close: () => void })
           </p>
           <Link
             href="/settings"
+            onClick={close}
             style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 16px', textDecoration: 'none', borderBottom: '1px solid #F5F3F0' }}
           >
             <div style={{ width: 36, height: 36, borderRadius: 10, background: '#F0EDE8', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
