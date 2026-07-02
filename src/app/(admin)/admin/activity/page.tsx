@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { collection, query, orderBy, limit, getDocs, startAfter, where, Timestamp, type QueryDocumentSnapshot } from 'firebase/firestore'
+import { collection, query, orderBy, limit, getDocs, startAfter, Timestamp, type QueryDocumentSnapshot } from 'firebase/firestore'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { ChevronLeft, Filter } from 'lucide-react'
@@ -69,26 +69,30 @@ export default function ActivityPage() {
   async function fetchLogs(reset = false) {
     setLoading(true)
     try {
+      const base = reset ? null : lastDoc
       let q = query(collection(db, 'activityLogs'), orderBy('createdAt', 'desc'), limit(PAGE_SIZE))
-      if (filterCoachId) q = query(collection(db, 'activityLogs'), where('userId', '==', filterCoachId), orderBy('createdAt', 'desc'), limit(PAGE_SIZE))
-      if (!reset && lastDoc) q = query(collection(db, 'activityLogs'), orderBy('createdAt', 'desc'), startAfter(lastDoc), limit(PAGE_SIZE))
+      if (!reset && base) q = query(collection(db, 'activityLogs'), orderBy('createdAt', 'desc'), startAfter(base), limit(PAGE_SIZE))
 
       const snap = await getDocs(q)
       const newLogs = snap.docs.map(d => ({ id: d.id, ...d.data() } as ActivityLog))
       setLogs(prev => reset ? newLogs : [...prev, ...newLogs])
       setLastDoc(snap.docs[snap.docs.length - 1] ?? null)
       setHasMore(snap.docs.length === PAGE_SIZE)
+    } catch (err) {
+      console.error('[activityLogs] fetch error:', err)
     } finally {
       setLoading(false)
     }
   }
 
-  useEffect(() => { fetchLogs(true) }, [filterCoachId, filterAction])
+  useEffect(() => { fetchLogs(true) }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const filtered = useMemo(() =>
-    filterAction ? logs.filter(l => l.action === filterAction) : logs,
-    [logs, filterAction]
-  )
+  const filtered = useMemo(() => {
+    let result = logs
+    if (filterCoachId) result = result.filter(l => l.userId === filterCoachId)
+    if (filterAction) result = result.filter(l => l.action === filterAction)
+    return result
+  }, [logs, filterCoachId, filterAction])
 
   return (
     <>
