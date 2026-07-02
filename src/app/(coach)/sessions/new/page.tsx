@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { format, addMinutes } from 'date-fns'
 import { orderBy, Timestamp, writeBatch, doc, collection, serverTimestamp, addDoc, getDocs, query, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase/firestore'
-import { X, Check, Search, RefreshCw, UserPlus } from 'lucide-react'
+import { X, Check, Search, RefreshCw, UserPlus, Dumbbell, Users2 } from 'lucide-react'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { useCollection } from '@/lib/hooks/useCollection'
 import { useAuth } from '@/lib/hooks/useAuth'
@@ -120,6 +120,7 @@ function generateOccurrenceDates(
 }
 
 const DURATIONS = [30, 45, 60, 75, 90, 120] as const
+type SessionMode = 'standard' | 'training'
 type ClientMode = 'individual' | 'group'
 type RecurrenceVal = 'none' | 'weekly' | 'biweekly' | 'monthly'
 type RecurrenceEndType = 'infinite' | '3months' | '6months' | '1year' | 'count'
@@ -139,6 +140,8 @@ function NewSessionForm() {
     return isNaN(d.getTime()) ? new Date() : d
   }, [dateParam])
 
+  const [sessionMode, setSessionMode] = useState<SessionMode>('standard')
+  const isTraining = sessionMode === 'training'
   const [serviceId, setServiceId] = useState('')
   const [locationId, setLocationId] = useState('')
   const [coachIds, setCoachIds] = useState<string[]>([])
@@ -175,6 +178,7 @@ function NewSessionForm() {
     return user?.id ? s.assignedCoachIds.includes(user.id) : false
   }), [allServices, isAdmin, user?.id])
   const locations = useMemo(() => allLocations.filter(l => l.active !== false), [allLocations])
+  const trainingLocations = useMemo(() => locations.filter(l => l.allowCoachTraining), [locations])
   const coaches = useMemo(() => allCoaches.filter(c => c.active !== false), [allCoaches])
 
   useEffect(() => {
@@ -218,10 +222,10 @@ function NewSessionForm() {
     [clients, clientSearch]
   )
 
-  const canSubmit = !!(
-    serviceId && locationId && coachIds.length > 0 && date && startTime &&
-    (clientMode === 'group' ? selectedGroupId : selectedClientIds.length > 0)
-  )
+  const canSubmit = isTraining
+    ? !!(locationId && coachIds.length > 0 && date && startTime)
+    : !!(serviceId && locationId && coachIds.length > 0 && date && startTime &&
+        (clientMode === 'group' ? selectedGroupId : selectedClientIds.length > 0))
 
   // Aperçu du nombre de séances générées (null = sans fin)
   const occurrencePreview = useMemo(() => {
@@ -257,7 +261,8 @@ function NewSessionForm() {
   }, [newFirstName, newLastName, newPhone, isAdmin, user])
 
   const handleSubmit = useCallback(async () => {
-    if (!canSubmit || !selectedService) return
+    if (!canSubmit) return
+    if (!isTraining && !selectedService) return
     setSaving(true)
     setError('')
     try {
@@ -266,6 +271,28 @@ function NewSessionForm() {
       const startDate = new Date(yr!, mo! - 1, dy!, hh, mm, 0)
       const endDate = addMinutes(startDate, duration)
 
+      // ── Mode entraînement coach ──────────────────────────────────────────────
+      if (isTraining) {
+        const sessionId = await createDoc('sessions', {
+          sessionType: 'coach_training',
+          coachIds,
+          clientIds: [],
+          locationId,
+          serviceId: '',
+          isIndependent: false,
+          status: 'planned',
+          paymentStatus: 'offered',
+          paymentDistribution: [],
+          priceSnapshot: { serviceName: 'Entraînement', basePrice: 0, pricingMode: 'per_person' },
+          startAt: Timestamp.fromDate(startDate),
+          endAt: Timestamp.fromDate(endDate),
+        } as Record<string, unknown>)
+        logActivity({ userId: user!.id, userFirstName: user!.firstName, userLastName: user!.lastName, action: 'session_created', description: `Entraînement · ${formatDate(startDate, 'd MMM yyyy HH:mm', { locale: fr })}`, sessionId })
+        router.replace(`/sessions/${sessionId}` as never)
+        return
+      }
+
+      // ── Mode standard ────────────────────────────────────────────────────────
       let finalClientIds = selectedClientIds
       let finalGroupId: string | undefined
       if (clientMode === 'group' && selectedGroupId) {
@@ -273,9 +300,9 @@ function NewSessionForm() {
         finalClientIds = groups.find(g => g.id === selectedGroupId)?.clientIds ?? []
       }
 
-      const pricePerClient = selectedService.pricingMode === 'per_person'
-        ? selectedService.price
-        : finalClientIds.length > 0 ? Math.round((selectedService.price / finalClientIds.length) * 100) / 100 : 0
+      const pricePerClient = selectedService!.pricingMode === 'per_person'
+        ? selectedService!.price
+        : finalClientIds.length > 0 ? Math.round((selectedService!.price / finalClientIds.length) * 100) / 100 : 0
 
       const paymentDistribution: ClientPayment[] = finalClientIds.map(cId => ({
         clientId: cId, amountDue: pricePerClient, amountPaid: 0, paymentStatus: 'payment_to_request',
@@ -292,14 +319,14 @@ function NewSessionForm() {
         paymentStatus: 'payment_to_request',
         paymentDistribution,
         priceSnapshot: {
-          serviceName: selectedService.name,
-          basePrice: selectedService.price,
-          pricingMode: selectedService.pricingMode,
+          serviceName: selectedService!.name,
+          basePrice: selectedService!.price,
+          pricingMode: selectedService!.pricingMode,
         },
         ...(isIndependent ? {
           roomRentalSnapshot: coachIds.map(cId => ({
             coachId: cId,
-            amountDueToCompany: selectedService.independentRoomRentalPrice,
+            amountDueToCompany: selectedService!.independentRoomRentalPrice,
             status: 'pending',
           })),
         } : {}),
@@ -319,12 +346,12 @@ function NewSessionForm() {
           sendNotification({
             userIds: otherCoachIds,
             title: 'Nouvelle séance',
-            body: `${selectedService.name} · ${formatDate(startDate, 'd MMM yyyy HH:mm', { locale: fr })}`,
+            body: `${selectedService!.name} · ${formatDate(startDate, 'd MMM yyyy HH:mm', { locale: fr })}`,
             link: `/sessions/${sessionId}`,
           })
         }
 
-        logActivity({ userId: user!.id, userFirstName: user!.firstName, userLastName: user!.lastName, action: 'session_created', description: `${selectedService.name} · ${formatDate(startDate, 'd MMM yyyy HH:mm', { locale: fr })}`, sessionId })
+        logActivity({ userId: user!.id, userFirstName: user!.firstName, userLastName: user!.lastName, action: 'session_created', description: `${selectedService!.name} · ${formatDate(startDate, 'd MMM yyyy HH:mm', { locale: fr })}`, sessionId })
         router.replace(`/sessions/${sessionId}` as never)
         return
       }
@@ -383,14 +410,14 @@ function NewSessionForm() {
       }
 
       await batch.commit()
-      logActivity({ userId: user!.id, userFirstName: user!.firstName, userLastName: user!.lastName, action: 'session_created', description: `${selectedService.name} · récurrence (${occurrences.length} séances)`, sessionId: firstSessionId! })
+      logActivity({ userId: user!.id, userFirstName: user!.firstName, userLastName: user!.lastName, action: 'session_created', description: `${selectedService!.name} · récurrence (${occurrences.length} séances)`, sessionId: firstSessionId! })
       router.replace(`/sessions/${firstSessionId}` as never)
     } catch (e) {
       console.error(e)
       setError('Erreur lors de la création. Réessaie.')
       setSaving(false)
     }
-  }, [canSubmit, selectedService, date, startTime, duration, selectedClientIds, selectedGroupId, clientMode, groups, coachIds, locationId, serviceId, isIndependent, recurrence, recurrenceEndType, recurrenceCount, router])
+  }, [canSubmit, isTraining, selectedService, date, startTime, duration, selectedClientIds, selectedGroupId, clientMode, groups, coachIds, locationId, serviceId, isIndependent, recurrence, recurrenceEndType, recurrenceCount, router, user])
 
   const visibleCoaches = isAdmin ? coaches : coaches.filter(c => c.id === user?.id)
 
@@ -416,6 +443,27 @@ function NewSessionForm() {
 
       <div style={{ padding: '12px 16px 140px', display: 'flex', flexDirection: 'column', gap: 12, background: '#F9F8F6', minHeight: '100dvh' }}>
 
+        {/* Mode séance */}
+        <div style={{ display: 'flex', gap: 8 }}>
+          {([['standard', 'Séance', Users2], ['training', 'Entraînement', Dumbbell]] as [SessionMode, string, typeof Dumbbell][]).map(([mode, label, Icon]) => (
+            <button
+              key={mode}
+              onClick={() => { setSessionMode(mode); setLocationId('') }}
+              style={{
+                flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                padding: '9px 0', borderRadius: 8, border: 'none', cursor: 'pointer',
+                fontSize: 14, fontWeight: 500,
+                backgroundColor: sessionMode === mode ? '#1A1A18' : '#fff',
+                color: sessionMode === mode ? '#fff' : '#7A7570',
+                boxShadow: sessionMode === mode ? 'none' : '0 0 0 1px #E5E1DA',
+              }}
+            >
+              <Icon size={15} />
+              {label}
+            </button>
+          ))}
+        </div>
+
         {/* Date & heure */}
         <Section title="Date & heure">
           <Row label="Date">
@@ -435,35 +483,62 @@ function NewSessionForm() {
           </Row>
         </Section>
 
-        {/* Service */}
-        <Section title="Service">
-          {services.length === 0 && <p style={{ fontSize: 13, color: '#A09890', textAlign: 'center', padding: '8px 0' }}>Aucun service actif</p>}
-          {services.map(s => (
-            <SelectItem key={s.id} label={s.name} sub={`${s.price.toFixed(2)} CHF`} selected={serviceId === s.id} onSelect={() => setServiceId(s.id)} />
-          ))}
-        </Section>
+        {/* Service — mode standard uniquement */}
+        {!isTraining && (
+          <Section title="Service">
+            {services.length === 0 && <p style={{ fontSize: 13, color: '#A09890', textAlign: 'center', padding: '8px 0' }}>Aucun service actif</p>}
+            {services.map(s => (
+              <SelectItem key={s.id} label={s.name} sub={`${s.price.toFixed(2)} CHF`} selected={serviceId === s.id} onSelect={() => setServiceId(s.id)} />
+            ))}
+          </Section>
+        )}
 
         {/* Lieu */}
         <Section title="Lieu">
-          {locations.length === 0 && <p style={{ fontSize: 13, color: '#A09890', textAlign: 'center', padding: '8px 0' }}>Aucun lieu actif</p>}
-          {locations.map(l => {
-            const booked = locationBookings[l.id] ?? 0
-            const maxSim = l.maxSimultaneous ?? 1
-            const full = l.allowMultipleBookings && maxSim === 0 ? false : booked >= (l.allowMultipleBookings ? maxSim : 1)
-            const maxSim2 = l.allowMultipleBookings ? (l.maxSimultaneous ?? 1) : 1
-            const sub = l.address
-              ? full ? `${l.address} · Complet (${booked}/${maxSim2})` : l.address
-              : full ? `Complet (${booked}/${maxSim2})` : undefined
-            return (
-              <div key={l.id} style={{ opacity: full ? 0.45 : 1 }}>
-                <SelectItem label={l.name} sub={sub} selected={locationId === l.id} onSelect={() => !full && setLocationId(l.id)} />
-              </div>
+          {isTraining ? (
+            trainingLocations.length === 0 ? (
+              <p style={{ fontSize: 13, color: '#A09890', textAlign: 'center', padding: '8px 0' }}>
+                Aucun lieu autorisé pour l&apos;entraînement — configure-les dans Admin → Lieux
+              </p>
+            ) : (
+              trainingLocations.map(l => {
+                const booked = locationBookings[l.id] ?? 0
+                const maxSim = l.maxSimultaneous ?? 1
+                const full = l.allowMultipleBookings && maxSim === 0 ? false : booked >= (l.allowMultipleBookings ? maxSim : 1)
+                const maxSim2 = l.allowMultipleBookings ? (l.maxSimultaneous ?? 1) : 1
+                const sub = l.address
+                  ? full ? `${l.address} · Complet (${booked}/${maxSim2})` : l.address
+                  : full ? `Complet (${booked}/${maxSim2})` : undefined
+                return (
+                  <div key={l.id} style={{ opacity: full ? 0.45 : 1 }}>
+                    <SelectItem label={l.name} sub={sub} selected={locationId === l.id} onSelect={() => !full && setLocationId(l.id)} />
+                  </div>
+                )
+              })
             )
-          })}
+          ) : (
+            <>
+              {locations.length === 0 && <p style={{ fontSize: 13, color: '#A09890', textAlign: 'center', padding: '8px 0' }}>Aucun lieu actif</p>}
+              {locations.map(l => {
+                const booked = locationBookings[l.id] ?? 0
+                const maxSim = l.maxSimultaneous ?? 1
+                const full = l.allowMultipleBookings && maxSim === 0 ? false : booked >= (l.allowMultipleBookings ? maxSim : 1)
+                const maxSim2 = l.allowMultipleBookings ? (l.maxSimultaneous ?? 1) : 1
+                const sub = l.address
+                  ? full ? `${l.address} · Complet (${booked}/${maxSim2})` : l.address
+                  : full ? `Complet (${booked}/${maxSim2})` : undefined
+                return (
+                  <div key={l.id} style={{ opacity: full ? 0.45 : 1 }}>
+                    <SelectItem label={l.name} sub={sub} selected={locationId === l.id} onSelect={() => !full && setLocationId(l.id)} />
+                  </div>
+                )
+              })}
+            </>
+          )}
         </Section>
 
-        {/* Clients */}
-        <Section title="Clients">
+        {/* Clients — mode standard uniquement */}
+        {isTraining ? null : <Section title="Clients">
           <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
             {(['individual', 'group'] as ClientMode[]).map(m => (
               <button key={m} onClick={() => setClientMode(m)} style={{ flex: 1, padding: '6px 0', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 13, backgroundColor: clientMode === m ? '#1A1A18' : '#F0EDE8', color: clientMode === m ? '#fff' : '#1A1A18' }}>
@@ -520,7 +595,7 @@ function NewSessionForm() {
               {groups.length === 0 && <p style={{ fontSize: 13, color: '#A09890', textAlign: 'center', padding: '8px 0' }}>Aucun groupe</p>}
             </div>
           )}
-        </Section>
+        </Section>}
 
         {/* Coachs */}
         <Section title={isAdmin ? 'Coach(s)' : 'Coach'}>
@@ -538,8 +613,8 @@ function NewSessionForm() {
           ))}
         </Section>
 
-        {/* Mode */}
-        <Section title="Mode">
+        {/* Mode indépendant — standard uniquement */}
+        {!isTraining && <Section title="Mode">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '2px 0' }}>
             <div>
               <p style={{ fontSize: 14, color: '#1A1A18', fontWeight: 500, margin: 0 }}>Mode indépendant</p>
@@ -547,10 +622,10 @@ function NewSessionForm() {
             </div>
             <Toggle value={isIndependent} onChange={setIsIndependent} />
           </div>
-        </Section>
+        </Section>}
 
-        {/* Récurrence */}
-        <Section title="Récurrence">
+        {/* Récurrence — standard uniquement */}
+        {!isTraining && <Section title="Récurrence">
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {([['none', 'Aucune'], ['weekly', 'Hebdo'], ['biweekly', 'Bi-hebdo'], ['monthly', 'Mensuel']] as [RecurrenceVal, string][]).map(([val, label]) => (
               <button key={val} onClick={() => setRecurrence(val)} style={{ padding: '6px 14px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 13, backgroundColor: recurrence === val ? '#1A1A18' : '#F0EDE8', color: recurrence === val ? '#fff' : '#1A1A18' }}>
@@ -595,7 +670,7 @@ function NewSessionForm() {
               </div>
             </div>
           )}
-        </Section>
+        </Section>}
 
         {error && <p style={{ color: '#C0392B', fontSize: 13, textAlign: 'center' }}>{error}</p>}
       </div>
@@ -609,11 +684,13 @@ function NewSessionForm() {
         >
           {saving
             ? 'Création en cours…'
-            : recurrence !== 'none' && recurrenceEndType === 'infinite'
-              ? 'Créer la récurrence'
-              : recurrence !== 'none' && occurrencePreview
-                ? `Créer ${occurrencePreview} séances`
-                : 'Créer la séance'}
+            : isTraining
+              ? 'Réserver l\'entraînement'
+              : recurrence !== 'none' && recurrenceEndType === 'infinite'
+                ? 'Créer la récurrence'
+                : recurrence !== 'none' && occurrencePreview
+                  ? `Créer ${occurrencePreview} séances`
+                  : 'Créer la séance'}
         </button>
       </div>
     </>

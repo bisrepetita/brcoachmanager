@@ -12,7 +12,7 @@ import { FormField } from '@/components/ui/form-field'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ListSkeleton } from '@/components/shared/LoadingSkeleton'
 import { useRouter } from 'next/navigation'
-import { Plus, ArrowLeft, MapPin, Pencil, Trash2 } from 'lucide-react'
+import { Plus, ArrowLeft, MapPin, Pencil, Trash2, Dumbbell } from 'lucide-react'
 import type { Location } from '@/types'
 
 export default function LocationsPage() {
@@ -28,16 +28,18 @@ export default function LocationsPage() {
   const [allowMultiple, setAllowMultiple] = useState(false)
   const [unlimited, setUnlimited] = useState(false)
   const [maxSimultaneous, setMaxSimultaneous] = useState('')
+  const [allowCoachTraining, setAllowCoachTraining] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   function openCreate() {
-    setEditing(null); setName(''); setAddress(''); setNotes(''); setAllowMultiple(false); setUnlimited(false); setMaxSimultaneous(''); setError(null); setSheet('create')
+    setEditing(null); setName(''); setAddress(''); setNotes(''); setAllowMultiple(false); setUnlimited(false); setMaxSimultaneous(''); setAllowCoachTraining(false); setError(null); setSheet('create')
   }
   function openEdit(l: Location) {
     setEditing(l); setName(l.name); setAddress(l.address ?? ''); setNotes(l.notes ?? '')
     setAllowMultiple(l.allowMultipleBookings ?? false)
     setUnlimited((l.maxSimultaneous ?? 1) === 0)
     setMaxSimultaneous((l.maxSimultaneous && l.maxSimultaneous > 0) ? String(l.maxSimultaneous) : '')
+    setAllowCoachTraining(l.allowCoachTraining ?? false)
     setError(null); setSheet('edit')
   }
   function close() { setSheet(null); setEditing(null) }
@@ -46,7 +48,7 @@ export default function LocationsPage() {
     if (!name.trim()) { setError('Le nom est requis.'); return }
     setSaving(true); setError(null)
     const max = !allowMultiple ? 1 : unlimited ? 0 : (parseInt(maxSimultaneous) || 2)
-    const data = { name: name.trim(), address, notes, allowMultipleBookings: allowMultiple, maxSimultaneous: max }
+    const data = { name: name.trim(), address, notes, allowMultipleBookings: allowMultiple, maxSimultaneous: max, allowCoachTraining }
     try {
       if (sheet === 'create') await createDoc('locations', data)
       else if (editing) await updateDocById('locations', editing.id, data)
@@ -81,6 +83,7 @@ export default function LocationsPage() {
                 <p className="text-[12px] text-[var(--color-text-tertiary)] truncate">
                   {l.address ? `${l.address} · ` : ''}
                   {l.allowMultipleBookings ? (l.maxSimultaneous === 0 ? 'Sans limite de réservations' : `${l.maxSimultaneous} max simultanés`) : 'Réservation unique'}
+                  {l.allowCoachTraining ? ' · Entraînement coach' : ''}
                 </p>
               </div>
               <div className="flex gap-1 shrink-0">
@@ -174,6 +177,25 @@ export default function LocationsPage() {
                   )}
                 </div>
               )}
+            </div>
+
+            {/* Entraînement coach */}
+            <div>
+              <p className="text-[11px] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wide mb-2">Entraînement coach</p>
+              <button
+                onClick={() => setAllowCoachTraining(v => !v)}
+                className="w-full flex items-center gap-3 px-3 py-3 rounded-[var(--radius-md)] border text-left"
+                style={{ background: allowCoachTraining ? 'var(--color-accent-subtle)' : 'var(--color-surface)', borderColor: allowCoachTraining ? 'var(--color-border-strong)' : 'var(--color-border)' }}
+              >
+                <Dumbbell size={16} style={{ color: allowCoachTraining ? '#1A1A18' : '#A09890', flexShrink: 0 }} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-medium">Disponible pour l&apos;entraînement des coachs</p>
+                  <p className="text-[11px] text-[var(--color-text-tertiary)]">Les coachs pourront réserver ce lieu sans client ni service</p>
+                </div>
+                <div className="w-4 h-4 rounded shrink-0 flex items-center justify-center" style={{ background: allowCoachTraining ? '#1A1A18' : 'transparent', border: allowCoachTraining ? 'none' : '1.5px solid #C8C4BC' }}>
+                  {allowCoachTraining && <svg width="10" height="10" viewBox="0 0 10 10"><path d="M2 5l2.5 2.5L8 2.5" stroke="#fff" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                </div>
+              </button>
             </div>
 
             {error && <p className="text-[13px] text-[var(--color-danger)]">{error}</p>}

@@ -62,6 +62,7 @@ export interface Location {
   active: boolean
   allowMultipleBookings: boolean
   maxSimultaneous: number
+  allowCoachTraining?: boolean
   createdAt: Timestamp
   updatedAt: Timestamp
 }
@@ -145,8 +146,11 @@ export interface RoomRentalEntry {
   paidAt?: Timestamp
 }
 
+export type SessionType = 'standard' | 'coach_training'
+
 export interface Session {
   id: string
+  sessionType?: SessionType
   coachIds: string[]
   clientIds: string[]
   clientGroupId?: string
