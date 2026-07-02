@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { collection, query, where, orderBy, getDocs } from 'firebase/firestore'
+import { collection, query, where, getDocs } from 'firebase/firestore'
+import { orderBy } from 'firebase/firestore'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { Search, Filter, ChevronRight } from 'lucide-react'
@@ -12,39 +13,7 @@ import { useAuth } from '@/lib/hooks/useAuth'
 import { useCollection } from '@/lib/hooks/useCollection'
 import type { Session, User, Service, Client } from '@/types'
 
-const PAYMENT_STATUS_LABELS: Record<string, string> = {
-  payment_to_request: 'À demander',
-  link_sent: 'Lien envoyé',
-  paid: 'Payé',
-  offered: 'Offert',
-  credits: 'Crédits',
-  cancelled: 'Annulé',
-}
-
-const PAYMENT_STATUS_COLORS: Record<string, string> = {
-  payment_to_request: '#F59E0B',
-  link_sent: '#4285F4',
-  paid: '#2D7A4F',
-  offered: '#6366F1',
-  credits: '#8B5CF6',
-  cancelled: '#A09890',
-}
-
-// Calcule le statut de paiement effectif
-// Le champ session.paymentStatus est la source de vérité quand il est 'paid'
-function effectivePaymentStatus(session: Session): string {
-  if (session.paymentStatus === 'paid') return 'paid'
-  const dist = session.paymentDistribution ?? []
-  if (dist.length === 0) return session.paymentStatus ?? 'payment_to_request'
-  const statuses = dist.map(p => p.paymentStatus ?? session.paymentStatus ?? 'payment_to_request')
-  if (statuses.every(s => s === 'paid')) return 'paid'
-  if (statuses.every(s => s === 'offered')) return 'offered'
-  if (statuses.every(s => s === 'credits')) return 'credits'
-  if (statuses.some(s => s === 'paid') || statuses.some(s => s === 'link_sent')) return 'link_sent'
-  return 'payment_to_request'
-}
-
-export default function HistoryPage() {
+export default function UpcomingPage() {
   const router = useRouter()
   const { user, isAdmin } = useAuth()
   const { data: coaches } = useCollection<User>('users', [orderBy('firstName')])
@@ -57,7 +26,6 @@ export default function HistoryPage() {
   const [showFilters, setShowFilters] = useState(false)
   const [filterCoachId, setFilterCoachId] = useState('')
   const [filterServiceId, setFilterServiceId] = useState('')
-  const [filterPayment, setFilterPayment] = useState('')
 
   const clientMap = useMemo(() => new Map(clients.map(c => [c.id, c])), [clients])
   const serviceMap = useMemo(() => new Map(services.map(s => [s.id, s])), [services])
@@ -66,17 +34,19 @@ export default function HistoryPage() {
   useEffect(() => {
     if (!user?.id) return
     setLoading(true)
-    // Sans orderBy pour éviter l'index composite — tri en JS
+    const nowSeconds = Date.now() / 1000
     const constraints = isAdmin
-      ? [where('status', '==', 'done')]
-      : [where('status', '==', 'done'), where('coachIds', 'array-contains', user.id)]
+      ? [where('status', '==', 'planned')]
+      : [where('status', '==', 'planned'), where('coachIds', 'array-contains', user.id)]
     getDocs(query(collection(db, 'sessions'), ...constraints))
       .then(snap => {
-        const data = snap.docs.map(d => ({ id: d.id, ...d.data() } as Session))
-        data.sort((a, b) => (b.startAt?.seconds ?? 0) - (a.startAt?.seconds ?? 0))
+        const data = snap.docs
+          .map(d => ({ id: d.id, ...d.data() } as Session))
+          .filter(s => (s.startAt?.seconds ?? 0) >= nowSeconds)
+        data.sort((a, b) => (a.startAt?.seconds ?? 0) - (b.startAt?.seconds ?? 0))
         setSessions(data)
       })
-      .catch(err => console.error('History fetch error:', err))
+      .catch(err => console.error('[upcoming] fetch error:', err))
       .finally(() => setLoading(false))
   }, [user?.id, isAdmin])
 
@@ -84,7 +54,6 @@ export default function HistoryPage() {
     let result = sessions
     if (filterCoachId) result = result.filter(s => s.coachIds?.includes(filterCoachId))
     if (filterServiceId) result = result.filter(s => s.serviceId === filterServiceId)
-    if (filterPayment) result = result.filter(s => effectivePaymentStatus(s) === filterPayment)
     if (search.trim()) {
       const q = search.toLowerCase()
       result = result.filter(s => {
@@ -93,16 +62,17 @@ export default function HistoryPage() {
           return c ? `${c.firstName} ${c.lastName}`.toLowerCase() : ''
         })
         const serviceName = serviceMap.get(s.serviceId)?.name?.toLowerCase() ?? ''
-        return clientNames.some(n => n.includes(q)) || serviceName.includes(q)
+        const note = s.note?.toLowerCase() ?? ''
+        return clientNames.some(n => n.includes(q)) || serviceName.includes(q) || note.includes(q)
       })
     }
     return result
-  }, [sessions, filterCoachId, filterServiceId, filterPayment, search, clientMap, serviceMap])
+  }, [sessions, filterCoachId, filterServiceId, search, clientMap, serviceMap])
 
   return (
     <>
       <TopBar
-        title="Historique"
+        title="Séances à venir"
         right={
           <button
             onClick={() => setShowFilters(v => !v)}
@@ -116,15 +86,15 @@ export default function HistoryPage() {
 
       {/* Toggle À venir / Passées */}
       <div style={{ display: 'flex', borderBottom: '1px solid #E5E1DA', background: 'var(--color-surface)' }}>
+        <span style={{ flex: 1, textAlign: 'center', padding: '9px 0', fontSize: 13, fontWeight: 700, color: '#1A1A18', borderBottom: '2px solid #1A1A18' }}>
+          À venir
+        </span>
         <button
-          onClick={() => router.push('/upcoming' as never)}
+          onClick={() => router.push('/history' as never)}
           style={{ flex: 1, textAlign: 'center', padding: '9px 0', fontSize: 13, fontWeight: 400, color: '#A09890', background: 'none', border: 'none', borderBottom: '2px solid transparent', cursor: 'pointer' }}
         >
-          À venir
-        </button>
-        <span style={{ flex: 1, textAlign: 'center', padding: '9px 0', fontSize: 13, fontWeight: 700, color: '#1A1A18', borderBottom: '2px solid #1A1A18' }}>
           Passées
-        </span>
+        </button>
       </div>
 
       {/* Recherche */}
@@ -155,11 +125,6 @@ export default function HistoryPage() {
             <option value="">Tous les services</option>
             {services.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
-          <select value={filterPayment} onChange={e => setFilterPayment(e.target.value)}
-            style={{ flex: 1, minWidth: 120, height: 34, borderRadius: 8, border: '1px solid #E5E1DA', padding: '0 8px', fontSize: 13, background: '#fff' }}>
-            <option value="">Tous les paiements</option>
-            {Object.entries(PAYMENT_STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </select>
         </div>
       )}
 
@@ -169,7 +134,7 @@ export default function HistoryPage() {
           <p style={{ textAlign: 'center', color: '#A09890', fontSize: 14, paddingTop: 48 }}>Chargement…</p>
         )}
         {!loading && filtered.length === 0 && (
-          <p style={{ textAlign: 'center', color: '#A09890', fontSize: 14, paddingTop: 48 }}>Aucune séance clôturée</p>
+          <p style={{ textAlign: 'center', color: '#A09890', fontSize: 14, paddingTop: 48 }}>Aucune séance à venir</p>
         )}
 
         {filtered.map((session, i) => {
@@ -180,9 +145,8 @@ export default function HistoryPage() {
           const service = serviceMap.get(session.serviceId)
           const clientNames = (session.clientIds ?? []).map(id => clientMap.get(id)?.firstName ?? '').filter(Boolean).join(', ')
           const coachNames = isAdmin ? (session.coachIds ?? []).map(id => coachMap.get(id)?.firstName ?? '').filter(Boolean).join(', ') : null
-          const total = (session.paymentDistribution ?? []).reduce((s, p) => s + (p.amountDue ?? 0), 0)
-          const paid = (session.paymentDistribution ?? []).reduce((s, p) => s + (p.amountPaid ?? 0), 0)
-          const payStatus = effectivePaymentStatus(session)
+          const endDate = session.endAt?.toDate?.()
+          const duration = endDate ? Math.round((endDate.getTime() - sessionDate.getTime()) / 60000) : null
 
           return (
             <div key={session.id}>
@@ -205,17 +169,19 @@ export default function HistoryPage() {
                     <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#1A1A18', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {service?.name ?? session.priceSnapshot?.serviceName ?? '—'}
                     </p>
-                    <span style={{ fontSize: 11, fontWeight: 600, color: PAYMENT_STATUS_COLORS[payStatus] ?? '#A09890', background: `${PAYMENT_STATUS_COLORS[payStatus] ?? '#A09890'}18`, padding: '2px 7px', borderRadius: 6, whiteSpace: 'nowrap', flexShrink: 0 }}>
-                      {PAYMENT_STATUS_LABELS[payStatus] ?? payStatus}
-                    </span>
+                    {duration && (
+                      <span style={{ fontSize: 11, color: '#A09890', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                        {duration} min
+                      </span>
+                    )}
                   </div>
                   <p style={{ margin: '2px 0 0', fontSize: 12, color: '#7A7570', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {format(sessionDate, 'HH:mm')} · {clientNames || '—'}
                     {coachNames ? ` · ${coachNames}` : ''}
                   </p>
-                  {payStatus !== 'offered' && payStatus !== 'credits' && total > 0 && (
-                    <p style={{ margin: '2px 0 0', fontSize: 12, color: paid >= total ? '#2D7A4F' : '#F59E0B', fontWeight: 500 }}>
-                      CHF {paid.toFixed(2)} / {total.toFixed(2)}
+                  {session.note && (
+                    <p style={{ margin: '2px 0 0', fontSize: 12, color: '#A09890', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {session.note}
                     </p>
                   )}
                 </div>
