@@ -62,7 +62,7 @@ export default function UpcomingPage() {
           return c ? `${c.firstName} ${c.lastName}`.toLowerCase() : ''
         })
         const serviceName = serviceMap.get(s.serviceId)?.name?.toLowerCase() ?? ''
-        const note = s.note?.toLowerCase() ?? ''
+        const note = s.sessionNote?.toLowerCase() ?? ''
         return clientNames.some(n => n.includes(q)) || serviceName.includes(q) || note.includes(q)
       })
     }
@@ -179,9 +179,9 @@ export default function UpcomingPage() {
                     {format(sessionDate, 'HH:mm')} · {clientNames || '—'}
                     {coachNames ? ` · ${coachNames}` : ''}
                   </p>
-                  {session.note && (
+                  {session.sessionNote && (
                     <p style={{ margin: '2px 0 0', fontSize: 12, color: '#A09890', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {session.note}
+                      {session.sessionNote}
                     </p>
                   )}
                 </div>
