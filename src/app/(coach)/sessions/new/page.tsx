@@ -199,10 +199,11 @@ function NewSessionForm() {
     const [hh, mm] = startTime.split(':').map(Number)
     const slotStart = new Date(yr!, mo! - 1, dy!, hh, mm, 0).getTime()
     const slotEnd = slotStart + duration * 60000
-    // Fenêtre de recherche élargie pour couvrir les séances qui commencent avant
-    // le créneau mais se terminent après (ex: 23h-1h le lendemain)
-    const windowStart = new Date(slotStart - 24 * 60 * 60 * 1000)
-    const windowEnd = new Date(slotEnd + 60 * 1000)
+    // Fenêtre : on remonte 12h pour capter les séances qui ont démarré la veille et
+    // se terminent pendant le créneau. La borne haute exclut les séances qui commencent
+    // exactement à slotEnd (startAt < slotEnd), ce qui est voulu.
+    const windowStart = new Date(slotStart - 12 * 60 * 60 * 1000)
+    const windowEnd = new Date(slotEnd)
 
     getDocs(query(
       collection(db, 'sessions'),
@@ -215,6 +216,7 @@ function NewSessionForm() {
         if (s.status === 'cancelled') return
         const sStart = (s.startAt as Timestamp).toDate().getTime()
         const sEnd = (s.endAt as Timestamp).toDate().getTime()
+        // Chevauchement strict : sEnd == slotStart (séance adjacente) n'est PAS un conflit
         if (sStart < slotEnd && sEnd > slotStart) {
           const lid = s.locationId as string
           if (lid) bookings[lid] = (bookings[lid] ?? 0) + 1
