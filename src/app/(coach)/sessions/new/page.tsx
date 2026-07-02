@@ -196,30 +196,32 @@ function NewSessionForm() {
   useEffect(() => {
     if (!date || !startTime) { setLocationBookings({}); return }
     const [yr, mo, dy] = date.split('-').map(Number)
-    const dayStart = new Date(yr!, mo! - 1, dy!, 0, 0, 0)
-    const dayEnd = new Date(yr!, mo! - 1, dy!, 23, 59, 59)
     const [hh, mm] = startTime.split(':').map(Number)
     const slotStart = new Date(yr!, mo! - 1, dy!, hh, mm, 0).getTime()
     const slotEnd = slotStart + duration * 60000
+    // Fenêtre de recherche élargie pour couvrir les séances qui commencent avant
+    // le créneau mais se terminent après (ex: 23h-1h le lendemain)
+    const windowStart = new Date(slotStart - 24 * 60 * 60 * 1000)
+    const windowEnd = new Date(slotEnd + 60 * 1000)
 
     getDocs(query(
       collection(db, 'sessions'),
-      where('startAt', '>=', Timestamp.fromDate(dayStart)),
-      where('startAt', '<=', Timestamp.fromDate(dayEnd)),
-      where('status', '!=', 'cancelled'),
+      where('startAt', '>=', Timestamp.fromDate(windowStart)),
+      where('startAt', '<', Timestamp.fromDate(windowEnd)),
     )).then(snap => {
       const bookings: Record<string, number> = {}
       snap.docs.forEach(d => {
         const s = d.data()
-        const sStart = s.startAt.toDate().getTime()
-        const sEnd = s.endAt.toDate().getTime()
+        if (s.status === 'cancelled') return
+        const sStart = (s.startAt as Timestamp).toDate().getTime()
+        const sEnd = (s.endAt as Timestamp).toDate().getTime()
         if (sStart < slotEnd && sEnd > slotStart) {
           const lid = s.locationId as string
-          bookings[lid] = (bookings[lid] ?? 0) + 1
+          if (lid) bookings[lid] = (bookings[lid] ?? 0) + 1
         }
       })
       setLocationBookings(bookings)
-    }).catch(() => {})
+    }).catch(err => console.error('[location-check]', err))
   }, [date, startTime, duration])
 
   const selectedService = useMemo(() => services.find(s => s.id === serviceId), [services, serviceId])
