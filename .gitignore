@@ -45,3 +45,5 @@ ui-debug.log
 
 # credentials sensibles
 scripts/service-account.json
+
+.vercel

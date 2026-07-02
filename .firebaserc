@@ -1,0 +1,7 @@
+{
+  "projects": {
+    "default": "brcoachmanager",
+    "prod": "brcoachmanager",
+    "dev": "brcoachmanager-dev"
+  }
+}
