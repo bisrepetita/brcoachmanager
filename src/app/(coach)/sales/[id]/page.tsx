@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { orderBy, doc, getDoc, updateDoc, serverTimestamp, deleteDoc } from 'firebase/firestore'
+import { orderBy, doc, onSnapshot, updateDoc, serverTimestamp, deleteDoc } from 'firebase/firestore'
 import { ChevronLeft, Send, Trash2 } from 'lucide-react'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { Badge } from '@/components/ui/badge'
@@ -43,9 +43,10 @@ export default function SaleDetailPage() {
 
   useEffect(() => {
     if (!saleId) return
-    getDoc(doc(db, 'sales', saleId))
-      .then(snap => { if (snap.exists()) setSale({ id: snap.id, ...snap.data() } as Sale) })
-      .finally(() => setLoading(false))
+    return onSnapshot(doc(db, 'sales', saleId), snap => {
+      if (snap.exists()) setSale({ id: snap.id, ...snap.data() } as Sale)
+      setLoading(false)
+    }, () => setLoading(false))
   }, [saleId])
 
   const handleSendLink = useCallback(async (clientId: string) => {
