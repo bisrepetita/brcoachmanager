@@ -63,6 +63,7 @@ export interface Location {
   allowMultipleBookings: boolean
   maxSimultaneous: number
   allowCoachTraining?: boolean
+  order?: number
   createdAt: Timestamp
   updatedAt: Timestamp
 }
@@ -79,6 +80,7 @@ export interface Service {
   independentRoomRentalPrice: number
   active: boolean
   assignedCoachIds?: string[]
+  order?: number
   createdAt: Timestamp
   updatedAt: Timestamp
 }

@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
-import { orderBy } from 'firebase/firestore'
+import { useState, useEffect } from 'react'
+import { writeBatch, doc } from 'firebase/firestore'
 import { useCollection } from '@/lib/hooks/useCollection'
 import { createDoc, updateDocById, deleteDocById } from '@/lib/services/crud.service'
+import { db } from '@/lib/firebase/firestore'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,7 +13,15 @@ import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ListSkeleton } from '@/components/shared/LoadingSkeleton'
 import { useRouter } from 'next/navigation'
-import { Plus, ArrowLeft, Briefcase, Pencil, Trash2 } from 'lucide-react'
+import { Plus, ArrowLeft, Briefcase, Pencil, Trash2, GripVertical } from 'lucide-react'
+import {
+  DndContext, closestCenter, PointerSensor, TouchSensor,
+  useSensor, useSensors, type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext, useSortable, verticalListSortingStrategy, arrayMove,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import type { Service, PricingMode, User } from '@/types'
 
 const PRICING_OPTIONS: { value: PricingMode; label: string; description: string }[] = [
@@ -20,10 +29,84 @@ const PRICING_OPTIONS: { value: PricingMode; label: string; description: string 
   { value: 'split_between_group', label: 'Partagé', description: 'Le prix est divisé entre les participants' },
 ]
 
+function SortableServiceRow({ s, coaches, onEdit, onDelete }: { s: Service; coaches: User[]; onEdit: () => void; onDelete: () => void }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: s.id })
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }}
+      className="flex items-center gap-2 p-3 rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)]"
+    >
+      <button
+        {...attributes} {...listeners}
+        style={{ touchAction: 'none', cursor: isDragging ? 'grabbing' : 'grab', padding: 4, background: 'none', border: 'none', display: 'flex', flexShrink: 0 }}
+      >
+        <GripVertical size={18} style={{ color: '#C8C4BC' }} />
+      </button>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-0.5">
+          <p className="text-[14px] font-medium text-[var(--color-text-primary)] truncate">{s.name}</p>
+          {!s.active && <Badge variant="muted">Inactif</Badge>}
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="amount-mono text-[13px] font-semibold text-[var(--color-text-primary)]">CHF {s.price.toFixed(2)}</span>
+          <Badge variant="muted">{s.pricingMode === 'per_person' ? 'Par personne' : 'Partagé'}</Badge>
+          {s.independentRoomRentalPrice > 0 && (
+            <span className="text-[11px] text-[var(--color-text-tertiary)]">Loc. CHF {s.independentRoomRentalPrice.toFixed(2)}</span>
+          )}
+        </div>
+        <p className="text-[11px] text-[var(--color-text-tertiary)] mt-0.5">
+          {!s.assignedCoachIds || s.assignedCoachIds.length === 0
+            ? 'Tous les coachs'
+            : s.assignedCoachIds.map(id => coaches.find(c => c.id === id)?.firstName ?? '').filter(Boolean).join(', ')}
+        </p>
+      </div>
+      <div className="flex gap-1 shrink-0">
+        <button onClick={onEdit} className="p-2 rounded-[var(--radius-md)] hover:bg-[var(--color-surface-elevated)]">
+          <Pencil size={14} style={{ color: '#7A7570' }} />
+        </button>
+        <button onClick={onDelete} className="p-2 rounded-[var(--radius-md)] hover:bg-[var(--color-danger-bg)]">
+          <Trash2 size={14} style={{ color: 'var(--color-danger)' }} />
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function ServicesPage() {
   const router = useRouter()
-  const { data: services, loading } = useCollection<Service>('services', [orderBy('name')])
-  const { data: coaches } = useCollection<User>('users', [orderBy('firstName')])
+  const { data: raw, loading } = useCollection<Service>('services', [])
+  const { data: coaches } = useCollection<User>('users', [])
+  const [ordered, setOrdered] = useState<Service[]>([])
+
+  useEffect(() => {
+    if (raw.length === 0) return
+    setOrdered([...raw].sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity) || a.name.localeCompare(b.name)))
+  }, [raw])
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
+  )
+
+  async function saveOrder(items: Service[]) {
+    const batch = writeBatch(db)
+    items.forEach((item, i) => batch.update(doc(db, 'services', item.id), { order: i }))
+    await batch.commit()
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    setOrdered(prev => {
+      const oldIdx = prev.findIndex(i => i.id === active.id)
+      const newIdx = prev.findIndex(i => i.id === over.id)
+      const next = arrayMove(prev, oldIdx, newIdx)
+      saveOrder(next)
+      return next
+    })
+  }
+
   const [sheet, setSheet] = useState<'create' | 'edit' | null>(null)
   const [editing, setEditing] = useState<Service | null>(null)
   const [saving, setSaving] = useState(false)
@@ -81,45 +164,18 @@ export default function ServicesPage() {
       />
       <TopBarSpacer />
 
-      {loading ? <ListSkeleton /> : services.length === 0 ? (
+      {loading ? <ListSkeleton /> : ordered.length === 0 ? (
         <EmptyState icon={Briefcase} title="Aucun service" description="Ajoute un type de séance." action={<Button onClick={openCreate}><Plus size={16} />Ajouter un service</Button>} />
       ) : (
-        <div className="p-4 space-y-2">
-          {services.map((s) => (
-            <div key={s.id} className="flex items-start gap-3 p-4 rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)]">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <p className="text-[14px] font-medium text-[var(--color-text-primary)]">{s.name}</p>
-                  {!s.active && <Badge variant="muted">Inactif</Badge>}
-                </div>
-                <div className="flex items-center gap-3 flex-wrap">
-                  <span className="amount-mono text-[13px] font-semibold text-[var(--color-text-primary)]">CHF {s.price.toFixed(2)}</span>
-                  <Badge variant="muted">{s.pricingMode === 'per_person' ? 'Par personne' : 'Partagé'}</Badge>
-                  {s.independentRoomRentalPrice > 0 && (
-                    <span className="text-[12px] text-[var(--color-text-tertiary)]">Location CHF {s.independentRoomRentalPrice.toFixed(2)}</span>
-                  )}
-                </div>
-                <div className="mt-1">
-                  {!s.assignedCoachIds || s.assignedCoachIds.length === 0 ? (
-                    <span className="text-[11px] text-[var(--color-text-tertiary)]">Tous les coachs</span>
-                  ) : (
-                    <span className="text-[11px] text-[var(--color-text-tertiary)]">
-                      {s.assignedCoachIds.map(id => coaches.find(c => c.id === id)?.firstName ?? '').filter(Boolean).join(', ')}
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="flex gap-1 shrink-0">
-                <button onClick={() => openEdit(s)} className="p-2 rounded-[var(--radius-md)] hover:bg-[var(--color-surface-elevated)]">
-                  <Pencil size={15} style={{ color: '#7A7570' }} />
-                </button>
-                <button onClick={() => handleDelete(s.id)} className="p-2 rounded-[var(--radius-md)] hover:bg-[var(--color-danger-bg)]">
-                  <Trash2 size={15} style={{ color: 'var(--color-danger)' }} />
-                </button>
-              </div>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={ordered.map(s => s.id)} strategy={verticalListSortingStrategy}>
+            <div className="p-4 space-y-2">
+              {ordered.map(s => (
+                <SortableServiceRow key={s.id} s={s} coaches={coaches} onEdit={() => openEdit(s)} onDelete={() => handleDelete(s.id)} />
+              ))}
             </div>
-          ))}
-        </div>
+          </SortableContext>
+        </DndContext>
       )}
 
       {sheet && (

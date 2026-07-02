@@ -28,7 +28,10 @@ export default function NewSalePage() {
   const router = useRouter()
   const { user, isAdmin } = useAuth()
 
-  const { data: services } = useCollection<Service>('services', [orderBy('name')])
+  const { data: rawServices } = useCollection<Service>('services', [])
+  const services = useMemo(() =>
+    [...rawServices].sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity) || a.name.localeCompare(b.name)),
+  [rawServices])
   const { data: clients } = useCollection<Client>('clients', [orderBy('firstName')])
   const { data: groups } = useCollection<ClientGroup>('clientGroups', [orderBy('name')])
 

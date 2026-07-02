@@ -171,13 +171,20 @@ function NewSessionForm() {
   const { data: clients } = useCollection<Client>('clients', [orderBy('firstName')])
   const { data: groups } = useCollection<ClientGroup>('clientGroups', [orderBy('name')])
 
-  const services = useMemo(() => allServices.filter(s => {
-    if (s.active === false) return false
-    if (!s.assignedCoachIds || s.assignedCoachIds.length === 0) return true
-    if (isAdmin) return true
-    return user?.id ? s.assignedCoachIds.includes(user.id) : false
-  }), [allServices, isAdmin, user?.id])
-  const locations = useMemo(() => allLocations.filter(l => l.active !== false), [allLocations])
+  const services = useMemo(() => allServices
+    .filter(s => {
+      if (s.active === false) return false
+      if (!s.assignedCoachIds || s.assignedCoachIds.length === 0) return true
+      if (isAdmin) return true
+      return user?.id ? s.assignedCoachIds.includes(user.id) : false
+    })
+    .sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity) || a.name.localeCompare(b.name)),
+  [allServices, isAdmin, user?.id])
+  const locations = useMemo(() =>
+    allLocations
+      .filter(l => l.active !== false)
+      .sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity) || a.name.localeCompare(b.name)),
+  [allLocations])
   const trainingLocations = useMemo(() => locations.filter(l => l.allowCoachTraining), [locations])
   const coaches = useMemo(() => allCoaches.filter(c => c.active !== false), [allCoaches])
 

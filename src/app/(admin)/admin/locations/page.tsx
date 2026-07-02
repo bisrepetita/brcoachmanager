@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
-import { orderBy } from 'firebase/firestore'
+import { useState, useEffect } from 'react'
+import { writeBatch, doc } from 'firebase/firestore'
 import { useCollection } from '@/lib/hooks/useCollection'
 import { createDoc, updateDocById, deleteDocById } from '@/lib/services/crud.service'
+import { db } from '@/lib/firebase/firestore'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,12 +13,87 @@ import { FormField } from '@/components/ui/form-field'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ListSkeleton } from '@/components/shared/LoadingSkeleton'
 import { useRouter } from 'next/navigation'
-import { Plus, ArrowLeft, MapPin, Pencil, Trash2, Dumbbell } from 'lucide-react'
+import { Plus, ArrowLeft, MapPin, Pencil, Trash2, GripVertical, Dumbbell } from 'lucide-react'
+import {
+  DndContext, closestCenter, PointerSensor, TouchSensor,
+  useSensor, useSensors, type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext, useSortable, verticalListSortingStrategy, arrayMove,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import type { Location } from '@/types'
+
+function SortableRow({ loc, onEdit, onDelete }: { loc: Location; onEdit: () => void; onDelete: () => void }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: loc.id })
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }}
+      className="flex items-center gap-2 p-3 rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)]"
+    >
+      <button
+        {...attributes} {...listeners}
+        style={{ touchAction: 'none', cursor: isDragging ? 'grabbing' : 'grab', padding: 4, background: 'none', border: 'none', display: 'flex', flexShrink: 0 }}
+      >
+        <GripVertical size={18} style={{ color: '#C8C4BC' }} />
+      </button>
+      <MapPin size={16} className="shrink-0" style={{ color: '#7A7570' }} />
+      <div className="flex-1 min-w-0">
+        <p className="text-[14px] font-medium text-[var(--color-text-primary)]">{loc.name}</p>
+        <p className="text-[12px] text-[var(--color-text-tertiary)] truncate">
+          {loc.address ? `${loc.address} · ` : ''}
+          {loc.allowMultipleBookings
+            ? loc.maxSimultaneous === 0 ? 'Sans limite' : `${loc.maxSimultaneous} max simultanés`
+            : 'Réservation unique'}
+          {loc.allowCoachTraining ? ' · Entraînement coach' : ''}
+        </p>
+      </div>
+      <div className="flex gap-1 shrink-0">
+        <button onClick={onEdit} className="p-2 rounded-[var(--radius-md)] hover:bg-[var(--color-surface-elevated)]">
+          <Pencil size={14} style={{ color: '#7A7570' }} />
+        </button>
+        <button onClick={onDelete} className="p-2 rounded-[var(--radius-md)] hover:bg-[var(--color-danger-bg)]">
+          <Trash2 size={14} style={{ color: 'var(--color-danger)' }} />
+        </button>
+      </div>
+    </div>
+  )
+}
 
 export default function LocationsPage() {
   const router = useRouter()
-  const { data: locations, loading } = useCollection<Location>('locations', [orderBy('name')])
+  const { data: raw, loading } = useCollection<Location>('locations', [])
+  const [ordered, setOrdered] = useState<Location[]>([])
+
+  useEffect(() => {
+    if (raw.length === 0) return
+    setOrdered([...raw].sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity) || a.name.localeCompare(b.name)))
+  }, [raw])
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
+  )
+
+  async function saveOrder(items: Location[]) {
+    const batch = writeBatch(db)
+    items.forEach((item, i) => batch.update(doc(db, 'locations', item.id), { order: i }))
+    await batch.commit()
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    setOrdered(prev => {
+      const oldIdx = prev.findIndex(i => i.id === active.id)
+      const newIdx = prev.findIndex(i => i.id === over.id)
+      const next = arrayMove(prev, oldIdx, newIdx)
+      saveOrder(next)
+      return next
+    })
+  }
+
   const [sheet, setSheet] = useState<'create' | 'edit' | null>(null)
   const [editing, setEditing] = useState<Location | null>(null)
   const [saving, setSaving] = useState(false)
@@ -32,7 +108,9 @@ export default function LocationsPage() {
   const [error, setError] = useState<string | null>(null)
 
   function openCreate() {
-    setEditing(null); setName(''); setAddress(''); setNotes(''); setAllowMultiple(false); setUnlimited(false); setMaxSimultaneous(''); setAllowCoachTraining(false); setError(null); setSheet('create')
+    setEditing(null); setName(''); setAddress(''); setNotes('')
+    setAllowMultiple(false); setUnlimited(false); setMaxSimultaneous('')
+    setAllowCoachTraining(false); setError(null); setSheet('create')
   }
   function openEdit(l: Location) {
     setEditing(l); setName(l.name); setAddress(l.address ?? ''); setNotes(l.notes ?? '')
@@ -71,32 +149,18 @@ export default function LocationsPage() {
       />
       <TopBarSpacer />
 
-      {loading ? <ListSkeleton /> : locations.length === 0 ? (
+      {loading ? <ListSkeleton /> : ordered.length === 0 ? (
         <EmptyState icon={MapPin} title="Aucun lieu" description="Ajoute tes salles et lieux d'entraînement." action={<Button onClick={openCreate}><Plus size={16} />Ajouter un lieu</Button>} />
       ) : (
-        <div className="p-4 space-y-2">
-          {locations.map((l) => (
-            <div key={l.id} className="flex items-center gap-3 p-4 rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)]">
-              <MapPin size={18} className="shrink-0" style={{ color: '#7A7570' }} />
-              <div className="flex-1 min-w-0">
-                <p className="text-[14px] font-medium text-[var(--color-text-primary)]">{l.name}</p>
-                <p className="text-[12px] text-[var(--color-text-tertiary)] truncate">
-                  {l.address ? `${l.address} · ` : ''}
-                  {l.allowMultipleBookings ? (l.maxSimultaneous === 0 ? 'Sans limite de réservations' : `${l.maxSimultaneous} max simultanés`) : 'Réservation unique'}
-                  {l.allowCoachTraining ? ' · Entraînement coach' : ''}
-                </p>
-              </div>
-              <div className="flex gap-1 shrink-0">
-                <button onClick={() => openEdit(l)} className="p-2 rounded-[var(--radius-md)] hover:bg-[var(--color-surface-elevated)]">
-                  <Pencil size={15} style={{ color: '#7A7570' }} />
-                </button>
-                <button onClick={() => setConfirmDelete(l.id)} className="p-2 rounded-[var(--radius-md)] hover:bg-[var(--color-danger-bg)]">
-                  <Trash2 size={15} style={{ color: 'var(--color-danger)' }} />
-                </button>
-              </div>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={ordered.map(l => l.id)} strategy={verticalListSortingStrategy}>
+            <div className="p-4 space-y-2">
+              {ordered.map(l => (
+                <SortableRow key={l.id} loc={l} onEdit={() => openEdit(l)} onDelete={() => setConfirmDelete(l.id)} />
+              ))}
             </div>
-          ))}
-        </div>
+          </SortableContext>
+        </DndContext>
       )}
 
       {confirmDelete && (
@@ -131,7 +195,6 @@ export default function LocationsPage() {
               <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Accès, code, informations utiles..." />
             </FormField>
 
-            {/* Multi-réservation */}
             <div>
               <p className="text-[11px] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wide mb-2">Réservations simultanées</p>
               <div className="space-y-2">
@@ -153,10 +216,7 @@ export default function LocationsPage() {
               {allowMultiple && (
                 <div className="mt-3 space-y-2">
                   <div className="flex gap-2">
-                    {([
-                      { val: false, label: 'Avec limite' },
-                      { val: true, label: 'Sans limite' },
-                    ] as const).map(opt => (
+                    {([{ val: false, label: 'Avec limite' }, { val: true, label: 'Sans limite' }] as const).map(opt => (
                       <button key={String(opt.val)} onClick={() => setUnlimited(opt.val)}
                         className="flex-1 py-2 rounded-[var(--radius-md)] border text-[13px] font-medium"
                         style={{ background: unlimited === opt.val ? '#1A1A18' : 'transparent', color: unlimited === opt.val ? '#fff' : '#1A1A18', borderColor: unlimited === opt.val ? '#1A1A18' : '#E5E1DA' }}>
@@ -166,27 +226,18 @@ export default function LocationsPage() {
                   </div>
                   {!unlimited && (
                     <FormField label="Nombre maximum simultané">
-                      <Input
-                        type="number"
-                        min={2}
-                        placeholder="ex. 3"
-                        value={maxSimultaneous}
-                        onChange={(e) => setMaxSimultaneous(e.target.value)}
-                      />
+                      <Input type="number" min={2} placeholder="ex. 3" value={maxSimultaneous} onChange={(e) => setMaxSimultaneous(e.target.value)} />
                     </FormField>
                   )}
                 </div>
               )}
             </div>
 
-            {/* Entraînement coach */}
             <div>
               <p className="text-[11px] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wide mb-2">Entraînement coach</p>
-              <button
-                onClick={() => setAllowCoachTraining(v => !v)}
+              <button onClick={() => setAllowCoachTraining(v => !v)}
                 className="w-full flex items-center gap-3 px-3 py-3 rounded-[var(--radius-md)] border text-left"
-                style={{ background: allowCoachTraining ? 'var(--color-accent-subtle)' : 'var(--color-surface)', borderColor: allowCoachTraining ? 'var(--color-border-strong)' : 'var(--color-border)' }}
-              >
+                style={{ background: allowCoachTraining ? 'var(--color-accent-subtle)' : 'var(--color-surface)', borderColor: allowCoachTraining ? 'var(--color-border-strong)' : 'var(--color-border)' }}>
                 <Dumbbell size={16} style={{ color: allowCoachTraining ? '#1A1A18' : '#A09890', flexShrink: 0 }} />
                 <div className="flex-1 min-w-0">
                   <p className="text-[13px] font-medium">Disponible pour l&apos;entraînement des coachs</p>
