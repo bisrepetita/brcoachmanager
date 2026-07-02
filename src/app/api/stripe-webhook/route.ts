@@ -31,17 +31,25 @@ export async function POST(req: NextRequest) {
     const sep = referenceId.lastIndexOf('__')
     if (sep === -1) return NextResponse.json({ error: 'Invalid referenceId' }, { status: 400 })
 
-    const sessionId = referenceId.substring(0, sep)
+    const docId = referenceId.substring(0, sep)
     const clientId = referenceId.substring(sep + 2)
     const amountPaid = (checkoutSession.amount_total ?? 0) / 100
 
     const adminDb = getAdminDb()
-    const sessionRef = adminDb.collection('sessions').doc(sessionId)
-    const snap = await sessionRef.get()
-    if (!snap.exists) return NextResponse.json({ error: 'Session not found' }, { status: 404 })
 
-    const sessionData = snap.data()!
-    const distribution = (sessionData['paymentDistribution'] as Array<Record<string, unknown>>) ?? []
+    // Résoudre la collection : sessions en priorité, puis sales
+    let docRef = adminDb.collection('sessions').doc(docId)
+    let snap = await docRef.get()
+    let collectionName = 'sessions'
+    if (!snap.exists) {
+      docRef = adminDb.collection('sales').doc(docId)
+      snap = await docRef.get()
+      collectionName = 'sales'
+    }
+    if (!snap.exists) return NextResponse.json({ error: 'Document not found' }, { status: 404 })
+
+    const docData = snap.data()!
+    const distribution = (docData['paymentDistribution'] as Array<Record<string, unknown>>) ?? []
 
     const updated = distribution.map((p) =>
       p['clientId'] === clientId
@@ -50,16 +58,17 @@ export async function POST(req: NextRequest) {
     )
 
     const allSettled = updated.every(
-      (p) => p['paymentStatus'] === 'paid' || p['paymentStatus'] === 'offered'
+      (p) => p['paymentStatus'] === 'paid' || p['paymentStatus'] === 'offered' || p['paymentStatus'] === 'cancelled'
     )
 
-    await sessionRef.update({
+    await docRef.update({
       paymentDistribution: updated,
       paymentStatus: allSettled ? 'paid' : 'link_sent',
       updatedAt: FieldValue.serverTimestamp(),
     })
 
     // Notifier les admins du paiement reçu
+    const navLink = collectionName === 'sales' ? `/sales/${docId}` : `/sessions/${docId}`
     try {
       const adminsSnap = await adminDb.collection('users')
         .where('roles', 'array-contains', 'admin')
@@ -75,10 +84,10 @@ export async function POST(req: NextRequest) {
           tokens: adminTokens,
           notification: {
             title: 'Paiement reçu',
-            body: `${amountPaid.toFixed(2)} CHF — session ${sessionId}`,
+            body: `${amountPaid.toFixed(2)} CHF`,
           },
-          data: { link: `/sessions/${sessionId}` },
-          webpush: { fcmOptions: { link: `/sessions/${sessionId}` } },
+          data: { link: navLink },
+          webpush: { fcmOptions: { link: navLink } },
         })
       }
     } catch {
