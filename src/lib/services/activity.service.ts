@@ -13,6 +13,9 @@ export type ActivityAction =
   | 'client_deleted'
   | 'credit_added'
   | 'credit_used'
+  | 'client_signup'
+  | 'client_signup_ambiguous_match'
+  | 'group_session_cancelled_after_payment'
 
 export async function logActivity(params: {
   userId: string

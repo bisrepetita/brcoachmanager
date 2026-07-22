@@ -8,11 +8,21 @@ import { ListSkeleton } from '@/components/shared/LoadingSkeleton'
 interface AuthGuardProps {
   children: React.ReactNode
   requireAdmin?: boolean
+  requireClient?: boolean
 }
 
-export function AuthGuard({ children, requireAdmin = false }: AuthGuardProps) {
-  const { firebaseUser, isAdmin, loading } = useAuth()
+export function AuthGuard({ children, requireAdmin = false, requireClient = false }: AuthGuardProps) {
+  const { firebaseUser, isAdmin, isClient, loading } = useAuth()
   const router = useRouter()
+
+  // Espace client : réservé aux comptes n'ayant que le rôle 'client'.
+  // Espace coach/admin (par défaut) : réservé aux comptes non-'client' (coach ou admin).
+  const denied = requireClient ? !isClient : isClient && !requireAdmin
+  const deniedAdmin = requireAdmin && !isAdmin
+  // La cible de redirection dépend du rôle réel de l'utilisateur refusé, pas du guard qui a
+  // déclenché le refus — sinon un coach non-admin refusé sur une page admin atterrissait sur
+  // l'espace client au lieu de son propre agenda.
+  const redirectTo = isClient ? '/group-sessions' : '/calendar'
 
   useEffect(() => {
     if (loading) return
@@ -21,14 +31,14 @@ export function AuthGuard({ children, requireAdmin = false }: AuthGuardProps) {
       router.replace('/login')
       return
     }
-    if (requireAdmin && !isAdmin) {
-      router.replace('/calendar')
+    if (deniedAdmin || denied) {
+      router.replace(redirectTo)
     }
-  }, [firebaseUser, isAdmin, loading, requireAdmin, router])
+  }, [firebaseUser, deniedAdmin, denied, redirectTo, loading, router])
 
   if (loading) return <ListSkeleton count={5} />
   if (!firebaseUser) return null
-  if (requireAdmin && !isAdmin) return null
+  if (deniedAdmin || denied) return null
 
   return <>{children}</>
 }

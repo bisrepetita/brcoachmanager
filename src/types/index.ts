@@ -2,7 +2,7 @@ import type { Timestamp } from 'firebase/firestore'
 
 // ─── Rôles ───────────────────────────────────────────────────────────────────
 
-export type UserRole = 'admin' | 'coach'
+export type UserRole = 'admin' | 'coach' | 'client'
 
 // ─── Utilisateur / Coach ─────────────────────────────────────────────────────
 
@@ -37,6 +37,8 @@ export interface Client {
   notesAdminOnly?: string
   sessionCredits: number
   visibleToCoachIds: string[]
+  uid?: string
+  hasEverBooked?: boolean
   createdAt: Timestamp
   updatedAt: Timestamp
 }
@@ -80,6 +82,9 @@ export interface Service {
   independentRoomRentalPrice: number
   active: boolean
   assignedCoachIds?: string[]
+  isPublic?: boolean
+  firstBookingFree?: boolean
+  imageUrl?: string
   order?: number
   createdAt: Timestamp
   updatedAt: Timestamp
@@ -139,6 +144,9 @@ export interface ClientPayment {
   twintLink?: string
   payrexxTransactionId?: string
   paidAt?: Timestamp
+  discountId?: string
+  discountLabel?: string
+  originalAmountDue?: number
 }
 
 export interface RoomRentalEntry {
@@ -177,6 +185,68 @@ export interface Session {
   cancelledAt?: Timestamp
 }
 
+// ─── Séance collective (auto-inscription client) ─────────────────────────────
+
+export type GroupSessionStatus = 'planned' | 'done' | 'cancelled'
+
+export type GroupSessionEnrollmentStatus = 'pending_payment' | 'confirmed' | 'cancelled'
+
+export interface GroupSessionEnrollment {
+  clientId: string
+  status: GroupSessionEnrollmentStatus
+  amountDue: number
+  amountPaid: number
+  paymentStatus: PaymentStatus
+  stripeCheckoutUrl?: string
+  stripeSessionId?: string
+  enrolledAt: Timestamp
+  cancelledAt?: Timestamp
+  paidAt?: Timestamp
+  discountId?: string
+  discountLabel?: string
+  originalAmountDue?: number
+  offeredReason?: string
+}
+
+export interface GroupSession {
+  id: string
+  title: string
+  description?: string
+  coachIds: string[]
+  coachNames?: string[]
+  locationId: string
+  serviceId?: string
+  startAt: Timestamp
+  endAt: Timestamp
+  maxParticipants: number
+  price: number
+  status: GroupSessionStatus
+  isPublic: boolean
+  enrollments: GroupSessionEnrollment[]
+  recurrenceId?: string
+  createdBy: string
+  createdAt: Timestamp
+  updatedAt: Timestamp
+  cancelledAt?: Timestamp
+}
+
+export interface GroupSessionRecurrence {
+  id: string
+  title: string
+  description?: string
+  coachIds: string[]
+  coachNames?: string[]
+  locationId: string
+  serviceId?: string
+  maxParticipants: number
+  price: number
+  isPublic: boolean
+  createdBy: string
+  rule: RecurrenceRule
+  createdAt: Timestamp
+  updatedAt: Timestamp
+}
+
 // ─── Vente hors séance ────────────────────────────────────────────────────────
 
 export interface Sale {
@@ -189,6 +259,7 @@ export interface Sale {
   paymentDistribution: ClientPayment[]
   paymentStatus: PaymentStatus
   note?: string
+  offeredReason?: string
   priceSnapshot: {
     serviceName: string
     basePrice: number
@@ -198,6 +269,46 @@ export interface Sale {
   }
   createdAt: Timestamp
   updatedAt: Timestamp
+}
+
+// ─── Remises (codes promo & rabais clients) ──────────────────────────────────
+
+export type DiscountKind = 'code' | 'client'
+export type DiscountValueType = 'percentage' | 'fixed_amount'
+
+export interface DiscountScope {
+  serviceIds: string[]        // vide = tous les services (ignoré si allPublicServices=true)
+  allPublicServices: boolean  // matche dynamiquement tout service isPublic===true
+}
+
+export interface Discount {
+  id: string
+  kind: DiscountKind
+  code?: string                 // kind='code' uniquement, stocké en majuscules, unique
+  clientId?: string              // kind='client' uniquement — id du doc `clients`
+  discountType: DiscountValueType
+  value: number                  // pourcentage (0-100) ou montant CHF selon discountType
+  scope: DiscountScope
+  startAt?: Timestamp
+  endAt?: Timestamp
+  maxUsesGlobal?: number
+  maxUsesPerClient?: number
+  usesCount: number
+  active: boolean
+  note?: string
+  createdBy: string
+  createdAt: Timestamp
+  updatedAt: Timestamp
+}
+
+export interface DiscountRedemption {
+  id: string
+  clientId: string
+  context: 'session' | 'sale' | 'group_session'
+  refId: string
+  amountBefore: number
+  amountAfter: number
+  createdAt: Timestamp
 }
 
 // ─── Disponibilités ───────────────────────────────────────────────────────────
@@ -261,6 +372,7 @@ export interface AppSettings {
   whatsappTemplate: string
   defaultSessionDuration: number
   twintBaseLink?: string
+  groupSessionCancellationDeadlineHours?: number
   updatedAt: Timestamp
 }
 
@@ -272,6 +384,18 @@ export const SESSION_STATUS_LABELS: Record<SessionStatus, string> = {
   cancelled: 'Annulé',
 }
 
+export const GROUP_SESSION_STATUS_LABELS: Record<GroupSessionStatus, string> = {
+  planned: 'Planifié',
+  done: 'Effectué',
+  cancelled: 'Annulé',
+}
+
+export const GROUP_SESSION_ENROLLMENT_STATUS_LABELS: Record<GroupSessionEnrollmentStatus, string> = {
+  pending_payment: 'Paiement à effectuer',
+  confirmed: 'Confirmé',
+  cancelled: 'Annulé',
+}
+
 export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
   payment_to_request: 'Paiement à demander',
   link_sent: 'Lien envoyé',
@@ -279,6 +403,11 @@ export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
   offered: 'Offert',
   credits: 'Crédits',
   cancelled: 'Annulé',
+}
+
+export const DISCOUNT_VALUE_TYPE_LABELS: Record<DiscountValueType, string> = {
+  percentage: 'Pourcentage',
+  fixed_amount: 'Montant fixe',
 }
 
 export const COACH_COLORS = [

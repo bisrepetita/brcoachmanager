@@ -1,4 +1,4 @@
-const CACHE = 'br-coach-v1'
+const CACHE = 'br-coach-v2'
 const OFFLINE_URL = '/offline'
 const IMMUTABLE_PATTERN = /\/_next\/static\//
 
@@ -24,6 +24,17 @@ function safePutInCache(request, response) {
   } catch {}
 }
 
+// Requêtes internes du routeur Next.js (App Router) : transitions client-side (clic sur un
+// <Link>, redirection après une action) qui vont chercher les données de la page suivante sans
+// navigation complète du navigateur (donc request.mode !== 'navigate'). Sans cette exclusion,
+// elles tombaient dans le cache "stale-while-revalidate" ci-dessous et resservaient la version
+// de la page vue lors d'une précédente visite — d'où des créneaux qui n'apparaissaient qu'après
+// un rechargement forcé (Ctrl+Maj+R, qui contourne le service worker).
+function isNextRouterRequest(request) {
+  const h = request.headers
+  return h.has('rsc') || h.has('next-router-prefetch') || h.has('next-router-state-tree') || h.has('next-url')
+}
+
 self.addEventListener('fetch', (e) => {
   const { request } = e
   const url = new URL(request.url)
@@ -33,6 +44,7 @@ self.addEventListener('fetch', (e) => {
   if (url.pathname === '/manifest.json') return  // géré par le navigateur directement
   if (url.pathname.startsWith('/_vercel/')) return  // protection Vercel
   if (url.origin !== self.location.origin) return
+  if (isNextRouterRequest(request)) return  // toujours réseau, jamais de cache
 
   // Assets Next.js immuables → cache-first
   if (IMMUTABLE_PATTERN.test(url.pathname)) {

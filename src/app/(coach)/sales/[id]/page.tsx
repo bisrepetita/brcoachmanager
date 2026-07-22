@@ -209,7 +209,15 @@ export default function SaleDetailPage() {
                     {client ? `${client.firstName} ${client.lastName}` : p.clientId}
                   </p>
                   <p style={{ fontSize: 13, color: '#7A7570', margin: '1px 0 0', fontFamily: 'monospace' }}>
+                    {p.originalAmountDue !== undefined && (
+                      <span style={{ textDecoration: 'line-through', color: '#A09890', marginRight: 6 }}>
+                        {p.originalAmountDue.toFixed(2)} CHF
+                      </span>
+                    )}
                     {p.amountDue.toFixed(2)} CHF
+                    {p.discountLabel && (
+                      <span style={{ color: '#2D7A4F', marginLeft: 6 }}>· {p.discountLabel}</span>
+                    )}
                   </p>
                 </div>
 

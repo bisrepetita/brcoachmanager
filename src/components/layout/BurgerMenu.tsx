@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation'
 import { useAuth } from '@/lib/hooks/useAuth'
 import {
   Users, MapPin, Briefcase, UsersRound, BarChart2,
-  Settings, ScrollText, LogOut, User, X, ChevronRight,
+  Settings, ScrollText, LogOut, User, X, ChevronRight, Users2, Percent,
 } from 'lucide-react'
 
 interface BurgerMenuCtx {
@@ -25,7 +25,9 @@ const ADMIN_LINKS = [
   { href: '/admin/coaches',              label: 'Coachs',               description: 'Gérer les coachs',            icon: Users },
   { href: '/admin/locations',            label: 'Lieux',                description: 'Salles et espaces',           icon: MapPin },
   { href: '/admin/services',             label: 'Services',             description: 'Types de séances et tarifs',  icon: Briefcase },
+  { href: '/admin/discounts',            label: 'Remises',              description: 'Codes promo et rabais clients', icon: Percent },
   { href: '/admin/groups',               label: 'Groupes clients',      description: 'Groupes pour les séances',    icon: UsersRound },
+  { href: '/manage-group-sessions',       label: 'Séances collectives',  description: 'Cours avec inscription client', icon: Users2 },
   { href: '/admin/stats',                label: 'Statistiques',         description: 'CA, séances, coachs',         icon: BarChart2 },
   { href: '/admin/independent-tracking', label: 'Suivi indépendants',   description: 'Location de salle',           icon: BarChart2 },
   { href: '/admin/activity',             label: 'Journal d\'activité',  description: 'Historique des modifications', icon: ScrollText },
@@ -33,6 +35,7 @@ const ADMIN_LINKS = [
 ] as const
 
 const COACH_LINKS = [
+  { href: '/manage-group-sessions', label: 'Séances collectives', description: 'Cours avec inscription client', icon: Users2 },
   { href: '/independent', label: 'Suivi location de salle', description: 'Montants dus à l\'entreprise', icon: BarChart2 },
 ] as const
 

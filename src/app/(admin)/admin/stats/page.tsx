@@ -9,12 +9,45 @@ import { db } from '@/lib/firebase/firestore'
 import { useCollection } from '@/lib/hooks/useCollection'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react'
-import type { Session, User, Service } from '@/types'
+import type { Session, Sale, GroupSession, User, Service, PaymentStatus, RoomRentalEntry } from '@/types'
+
+// Une entrée générique de paiement (ClientPayment ou GroupSessionEnrollment partagent ces champs)
+interface PaymentLike {
+  paymentStatus: PaymentStatus
+  amountDue: number
+  amountPaid: number
+}
+
+// Un paiement annulé ne doit jamais compter comme CA ni comme encaissé
+function paymentsRevenue(payments: PaymentLike[]): number {
+  return payments.filter(p => p.paymentStatus !== 'cancelled').reduce((a, p) => a + (p.amountDue ?? 0), 0)
+}
+function paymentsPaid(payments: PaymentLike[]): number {
+  return payments.filter(p => p.paymentStatus !== 'cancelled').reduce((a, p) => a + (p.amountPaid ?? 0), 0)
+}
+// Un loyer "offert" (waived) a été explicitement abandonné par le coach — il ne doit pas gonfler le CA
+function rentalRevenue(entries: RoomRentalEntry[]): number {
+  return entries.filter(r => r.status !== 'waived').reduce((a, r) => a + (r.amountDueToCompany ?? 0), 0)
+}
+function rentalPaid(entries: RoomRentalEntry[]): number {
+  return entries.filter(r => r.status === 'paid').reduce((a, r) => a + (r.amountDueToCompany ?? 0), 0)
+}
+
+interface RevenueItem {
+  date: Date
+  revenue: number
+  paid: number
+  serviceId?: string
+  serviceName: string
+  coachIds: string[]
+}
 
 export default function StatsPage() {
   const router = useRouter()
   const [monthAnchor, setMonthAnchor] = useState(() => startOfMonth(new Date()))
   const [sessions, setSessions] = useState<Session[]>([])
+  const [sales, setSales] = useState<Sale[]>([])
+  const [groupSessions, setGroupSessions] = useState<GroupSession[]>([])
   const [loading, setLoading] = useState(false)
   const [filterCoachId, setFilterCoachId] = useState('')
   const [filterServiceId, setFilterServiceId] = useState('')
@@ -27,12 +60,26 @@ export default function StatsPage() {
     setLoading(true)
     const start = startOfMonth(monthAnchor)
     const end = endOfMonth(monthAnchor)
-    getDocs(query(
-      collection(db, 'sessions'),
-      where('startAt', '>=', Timestamp.fromDate(start)),
-      where('startAt', '<=', Timestamp.fromDate(end)),
-    )).then(snap => {
-      setSessions(snap.docs.map(d => ({ id: d.id, ...d.data() }) as Session))
+    Promise.all([
+      getDocs(query(
+        collection(db, 'sessions'),
+        where('startAt', '>=', Timestamp.fromDate(start)),
+        where('startAt', '<=', Timestamp.fromDate(end)),
+      )),
+      getDocs(query(
+        collection(db, 'sales'),
+        where('createdAt', '>=', Timestamp.fromDate(start)),
+        where('createdAt', '<=', Timestamp.fromDate(end)),
+      )),
+      getDocs(query(
+        collection(db, 'groupSessions'),
+        where('startAt', '>=', Timestamp.fromDate(start)),
+        where('startAt', '<=', Timestamp.fromDate(end)),
+      )),
+    ]).then(([sessionsSnap, salesSnap, groupSessionsSnap]) => {
+      setSessions(sessionsSnap.docs.map(d => ({ id: d.id, ...d.data() }) as Session))
+      setSales(salesSnap.docs.map(d => ({ id: d.id, ...d.data() }) as Sale))
+      setGroupSessions(groupSessionsSnap.docs.map(d => ({ id: d.id, ...d.data() }) as GroupSession))
     }).finally(() => setLoading(false))
   }, [monthAnchor])
 
@@ -44,40 +91,66 @@ export default function StatsPage() {
     })
   }, [sessions, filterCoachId, filterServiceId])
 
+  // Toutes les sources de revenu (séances privées, ventes ponctuelles, inscriptions Planning) réunies
+  const revenueItems = useMemo((): RevenueItem[] => {
+    const fromSessions: RevenueItem[] = sessions
+      .filter(s => s.status !== 'cancelled')
+      .map(s => ({
+        date: s.startAt?.toDate?.() ?? new Date(0),
+        revenue: s.isIndependent ? rentalRevenue(s.roomRentalSnapshot ?? []) : paymentsRevenue(s.paymentDistribution ?? []),
+        paid: s.isIndependent ? rentalPaid(s.roomRentalSnapshot ?? []) : paymentsPaid(s.paymentDistribution ?? []),
+        serviceId: s.serviceId,
+        serviceName: services.find(sv => sv.id === s.serviceId)?.name ?? s.priceSnapshot?.serviceName ?? s.serviceId,
+        coachIds: s.coachIds,
+      }))
+
+    const fromSales: RevenueItem[] = sales.map(sale => ({
+      date: sale.createdAt?.toDate?.() ?? new Date(0),
+      revenue: paymentsRevenue(sale.paymentDistribution ?? []),
+      paid: paymentsPaid(sale.paymentDistribution ?? []),
+      serviceId: sale.serviceId,
+      serviceName: services.find(sv => sv.id === sale.serviceId)?.name ?? sale.priceSnapshot?.serviceName ?? sale.serviceId,
+      coachIds: sale.coachIds,
+    }))
+
+    const fromGroupSessions: RevenueItem[] = groupSessions
+      .filter(gs => gs.status !== 'cancelled')
+      .map(gs => ({
+        date: gs.startAt?.toDate?.() ?? new Date(0),
+        revenue: paymentsRevenue((gs.enrollments ?? []).filter(e => e.status !== 'cancelled')),
+        paid: paymentsPaid((gs.enrollments ?? []).filter(e => e.status !== 'cancelled')),
+        serviceId: gs.serviceId,
+        serviceName: (gs.serviceId && services.find(sv => sv.id === gs.serviceId)?.name) ?? gs.title,
+        coachIds: gs.coachIds,
+      }))
+
+    return [...fromSessions, ...fromSales, ...fromGroupSessions]
+  }, [sessions, sales, groupSessions, services])
+
+  const filteredRevenueItems = useMemo(() => revenueItems.filter(it => {
+    if (filterCoachId && !it.coachIds.includes(filterCoachId)) return false
+    if (filterServiceId && it.serviceId !== filterServiceId) return false
+    return true
+  }), [revenueItems, filterCoachId, filterServiceId])
+
   const stats = useMemo(() => {
     const planned = filtered.filter(s => s.status === 'planned').length
     const done = filtered.filter(s => s.status === 'done').length
     const cancelled = filtered.filter(s => s.status === 'cancelled').length
 
-    // Pour les séances indépendantes : CA = location (roomRentalSnapshot)
-    // Pour les séances normales : CA = service (paymentDistribution)
-    function sessionRevenue(s: Session): number {
-      if (s.isIndependent) {
-        return (s.roomRentalSnapshot ?? []).reduce((a, r) => a + (r.amountDueToCompany ?? 0), 0)
-      }
-      return (s.paymentDistribution ?? []).reduce((a, p) => a + (p.amountDue ?? 0), 0)
-    }
-
-    function sessionPaid(s: Session): number {
-      if (s.isIndependent) {
-        return (s.roomRentalSnapshot ?? []).filter(r => r.status === 'paid').reduce((a, r) => a + (r.amountDueToCompany ?? 0), 0)
-      }
-      return (s.paymentDistribution ?? []).reduce((a, p) => a + (p.amountPaid ?? 0), 0)
-    }
-
-    const revenue = filtered.filter(s => s.status !== 'cancelled').reduce((sum, s) => sum + sessionRevenue(s), 0)
-    const paid = filtered.filter(s => s.status !== 'cancelled').reduce((sum, s) => sum + sessionPaid(s), 0)
+    const revenue = filteredRevenueItems.reduce((sum, it) => sum + it.revenue, 0)
+    const paid = filteredRevenueItems.reduce((sum, it) => sum + it.paid, 0)
 
     // Par service
     const byService: Record<string, { name: string; count: number; revenue: number }> = {}
-    filtered.filter(s => s.status !== 'cancelled').forEach(s => {
-      const name = services.find(sv => sv.id === s.serviceId)?.name ?? s.priceSnapshot?.serviceName ?? s.serviceId
-      if (!byService[s.serviceId]) byService[s.serviceId] = { name, count: 0, revenue: 0 }
-      byService[s.serviceId]!.count++
-      byService[s.serviceId]!.revenue += sessionRevenue(s)
+    filteredRevenueItems.forEach(it => {
+      const key = it.serviceId ?? it.serviceName
+      if (!byService[key]) byService[key] = { name: it.serviceName, count: 0, revenue: 0 }
+      byService[key]!.count++
+      byService[key]!.revenue += it.revenue
     })
 
-    // Par coach
+    // Par coach (séances uniquement — activité planifiée sur l'agenda)
     const byCoach: Record<string, { name: string; count: number }> = {}
     filtered.filter(s => s.status !== 'cancelled').forEach(s => {
       s.coachIds.forEach(cId => {
@@ -91,14 +164,14 @@ export default function StatsPage() {
     // Par jour
     const days = eachDayOfInterval({ start: startOfMonth(monthAnchor), end: endOfMonth(monthAnchor) })
     const byDay = days.map(day => {
-      const daySessions = filtered.filter(s => s.status !== 'cancelled' && isSameDay(s.startAt?.toDate?.() ?? new Date(0), day))
-      const dayRevenue = daySessions.reduce((a, s) => a + sessionRevenue(s), 0)
-      const dayPaid = daySessions.reduce((a, s) => a + sessionPaid(s), 0)
-      return { day, sessions: daySessions, count: daySessions.length, revenue: dayRevenue, paid: dayPaid }
+      const dayItems = filteredRevenueItems.filter(it => isSameDay(it.date, day))
+      const dayRevenue = dayItems.reduce((a, it) => a + it.revenue, 0)
+      const dayPaid = dayItems.reduce((a, it) => a + it.paid, 0)
+      return { day, items: dayItems, count: dayItems.length, revenue: dayRevenue, paid: dayPaid }
     }).filter(d => d.count > 0)
 
     return { planned, done, cancelled, revenue, paid, byService, byCoach, byDay }
-  }, [filtered, services, coaches, monthAnchor])
+  }, [filtered, filteredRevenueItems, coaches, monthAnchor])
 
   const selectStyle: React.CSSProperties = {
     height: 36, border: '1px solid #E5E1DA', borderRadius: 8,
@@ -160,15 +233,15 @@ export default function StatsPage() {
                 <div style={{ padding: '12px 14px', borderBottom: '1px solid #F0EDE8', display: 'flex', justifyContent: 'space-between' }}>
                   <p style={{ fontSize: 11, fontWeight: 600, color: '#A09890', textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>Jour</p>
                   <div style={{ display: 'flex', gap: 32 }}>
-                    <p style={{ fontSize: 11, fontWeight: 600, color: '#A09890', textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>Séances</p>
+                    <p style={{ fontSize: 11, fontWeight: 600, color: '#A09890', textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>Opé.</p>
                     <p style={{ fontSize: 11, fontWeight: 600, color: '#A09890', textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>CA</p>
                   </div>
                 </div>
                 {stats.byDay.length === 0 && (
-                  <p style={{ textAlign: 'center', color: '#A09890', fontSize: 14, padding: '20px 0' }}>Aucune séance ce mois-ci</p>
+                  <p style={{ textAlign: 'center', color: '#A09890', fontSize: 14, padding: '20px 0' }}>Aucune activité ce mois-ci</p>
                 )}
-                {stats.byDay.map(({ day, count, revenue, paid: dayPaid, sessions: daySessions }) => {
-                  const serviceNames = [...new Set(daySessions.map(s => services.find(sv => sv.id === s.serviceId)?.name ?? s.priceSnapshot?.serviceName ?? '—'))].join(', ')
+                {stats.byDay.map(({ day, count, revenue, paid: dayPaid, items: dayItems }) => {
+                  const serviceNames = [...new Set(dayItems.map(it => it.serviceName ?? '—'))].join(', ')
                   return (
                     <div key={day.toISOString()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderBottom: '1px solid #F5F3F0' }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
@@ -215,6 +288,9 @@ export default function StatsPage() {
                 </div>
               ))}
             </div>
+            <p style={{ fontSize: 11, color: '#A09890', textAlign: 'center', margin: 0 }}>
+              CA = séances privées + ventes ponctuelles + inscriptions Planning (loyers coachs indépendants inclus, hors loyers offerts)
+            </p>
 
             {stats.cancelled > 0 && (
               <p style={{ fontSize: 12, color: '#A09890', textAlign: 'center' }}>{stats.cancelled} séance{stats.cancelled > 1 ? 's' : ''} annulée{stats.cancelled > 1 ? 's' : ''} (non comptée{stats.cancelled > 1 ? 's' : ''})</p>
@@ -228,7 +304,7 @@ export default function StatsPage() {
                   <div key={name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: '1px solid #F0EDE8' }}>
                     <div>
                       <p style={{ fontSize: 14, color: '#1A1A18', margin: 0 }}>{name}</p>
-                      <p style={{ fontSize: 12, color: '#A09890', margin: 0 }}>{count} séance{count > 1 ? 's' : ''}</p>
+                      <p style={{ fontSize: 12, color: '#A09890', margin: 0 }}>{count} opération{count > 1 ? 's' : ''}</p>
                     </div>
                     <p style={{ fontSize: 14, fontWeight: 600, color: '#1A1A18', margin: 0 }}>CHF {revenue.toFixed(2)}</p>
                   </div>
@@ -255,8 +331,8 @@ export default function StatsPage() {
               </div>
             )}
 
-            {filtered.length === 0 && (
-              <p style={{ textAlign: 'center', color: '#A09890', fontSize: 14, padding: 20 }}>Aucune séance ce mois-ci.</p>
+            {filtered.length === 0 && filteredRevenueItems.length === 0 && (
+              <p style={{ textAlign: 'center', color: '#A09890', fontSize: 14, padding: 20 }}>Aucune activité ce mois-ci.</p>
             )}
             </>
             )}

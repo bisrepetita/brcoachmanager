@@ -364,7 +364,7 @@ export default function SessionDetailPage() {
   return (
     <>
       <TopBar
-        title={service?.name ?? 'Séance'}
+        title={service?.name ?? session.priceSnapshot?.serviceName ?? 'Séance'}
         subtitle={format(startDate, 'd MMM yyyy', { locale: fr })}
         left={
           <button onClick={() => router.back()} style={{ padding: 6, background: 'none', border: 'none', cursor: 'pointer', color: '#7A7570', display: 'flex', alignItems: 'center' }}>
@@ -390,7 +390,11 @@ export default function SessionDetailPage() {
         {/* Infos principales */}
         <div style={{ background: '#fff', borderRadius: 10, padding: '4px 14px' }}>
           <InfoRow icon={<Clock size={16} />} label="Horaire" value={timeLabel} />
-          <InfoRow icon={<Dumbbell size={16} />} label="Service" value={`${service?.name ?? '—'} · ${service?.price?.toFixed(2) ?? '—'} CHF`} />
+          <InfoRow
+            icon={<Dumbbell size={16} />}
+            label="Service"
+            value={`${service?.name ?? session.priceSnapshot?.serviceName ?? '—'} · ${(service?.price ?? session.priceSnapshot?.basePrice)?.toFixed(2) ?? '—'} CHF`}
+          />
           <InfoRow icon={<MapPin size={16} />} label="Lieu" value={location?.name ?? '—'} />
           <InfoRow
             icon={<User size={16} />}
@@ -446,7 +450,15 @@ export default function SessionDetailPage() {
                       {client ? `${client.firstName} ${client.lastName}` : p.clientId}
                     </p>
                     <p style={{ fontSize: 13, color: '#7A7570', margin: '1px 0 0', fontFamily: 'monospace' }}>
+                      {p.originalAmountDue !== undefined && (
+                        <span style={{ textDecoration: 'line-through', color: '#A09890', marginRight: 6 }}>
+                          {p.originalAmountDue.toFixed(2)} CHF
+                        </span>
+                      )}
                       {p.amountDue.toFixed(2)} CHF
+                      {p.discountLabel && (
+                        <span style={{ color: '#2D7A4F', marginLeft: 6 }}>· {p.discountLabel}</span>
+                      )}
                     </p>
                   </div>
 

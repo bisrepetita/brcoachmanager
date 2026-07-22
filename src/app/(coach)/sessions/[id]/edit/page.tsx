@@ -121,7 +121,7 @@ export default function EditSessionPage() {
     [clients, clientSearch]
   )
 
-  const canSubmit = !!(serviceId && locationId && coachIds.length > 0 && date && startTime && selectedClientIds.length > 0)
+  const canSubmit = !!(serviceId && selectedService && locationId && coachIds.length > 0 && date && startTime && selectedClientIds.length > 0)
 
   const doSave = useCallback(async (scope: Scope) => {
     if (!canSubmit || !selectedService || !session) return
@@ -229,6 +229,11 @@ export default function EditSessionPage() {
 
       <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
         {error && <p style={{ color: '#EF4444', fontSize: 13, textAlign: 'center' }}>{error}</p>}
+        {serviceId && !selectedService && (
+          <div style={{ padding: '10px 12px', borderRadius: 8, background: '#FFF4E5', color: '#B26A00', fontSize: 13 }}>
+            Le service d&apos;origine de cette séance n&apos;est plus disponible (supprimé ou désactivé) — choisis un service actif ci-dessous pour pouvoir enregistrer.
+          </div>
+        )}
 
         {/* Date & heure */}
         <Section title="Date & heure">

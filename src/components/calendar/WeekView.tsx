@@ -171,7 +171,7 @@ export function WeekView({ anchor, sessions, coachMap, serviceMap, clientMap, gr
               {/* Sessions */}
               {(laidByDay[dayIdx] ?? []).map(({ session, top, height, col, numCols }) => {
                 const coachColor = session.coachIds[0] ? (coachMap.get(session.coachIds[0])?.color ?? '#6366F1') : '#6366F1'
-                const serviceName = serviceMap.get(session.serviceId)?.name ?? ''
+                const serviceName = serviceMap.get(session.serviceId)?.name ?? session.priceSnapshot?.serviceName ?? ''
                 const firstClientName = session.clientGroupId
                   ? groupMap.get(session.clientGroupId)?.name
                   : session.clientIds[0] ? clientMap.get(session.clientIds[0])?.firstName : undefined

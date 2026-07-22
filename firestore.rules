@@ -20,6 +20,10 @@ service cloud.firestore {
       return isAuth() && ('coach' in userDoc().roles || 'admin' in userDoc().roles);
     }
 
+    function isClient() {
+      return isAuth() && 'client' in userDoc().roles;
+    }
+
     function isAssignedCoach(sessionData) {
       return isAuth() && request.auth.uid in sessionData.coachIds;
     }
@@ -76,6 +80,28 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
+    // ─── discounts (codes promo & rabais clients) ───────────────────────────
+
+    match /discounts/{discountId} {
+      // Un client ne voit que ses propres rabais attribués (pas les codes promo génériques,
+      // validés côté serveur via /api/group-sessions/enroll) ; les coachs voient tout.
+      allow read: if isCoach() || (
+        isClient() && resource.data.kind == 'client' &&
+        get(/databases/$(database)/documents/clients/$(resource.data.clientId)).data.uid == request.auth.uid
+      );
+      allow create, delete: if isAdmin();
+      // Un coach peut uniquement incrémenter le compteur d'usage (application manuelle sur
+      // une séance privée/vente) — toute autre modification (valeur, dates, cible) est admin.
+      allow update: if isAdmin() || (
+        isCoach() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usesCount', 'updatedAt'])
+      );
+
+      match /redemptions/{redemptionId} {
+        allow read, create: if isCoach();
+      }
+    }
+
     // ─── sessions ────────────────────────────────────────────────────────────
 
     match /sessions/{sessionId} {
@@ -93,9 +119,38 @@ service cloud.firestore {
       allow delete: if isAdmin() || isAssignedCoach(resource.data);
     }
 
+    // ─── groupSessions (séances collectives auto-inscription client) ────────
+
+    match /groupSessions/{groupSessionId} {
+      // Un client ne voit que les séances publiées et non annulées ; les coachs voient tout.
+      allow read: if isCoach() || (
+        isClient() && resource.data.isPublic == true && resource.data.status != 'cancelled'
+      );
+
+      allow create: if isCoach();
+
+      // Les inscriptions (enrollments) ne sont modifiables que côté serveur (Admin SDK,
+      // routes /api/group-sessions/*) qui contourne ces règles — un coach ne peut jamais
+      // toucher ce champ depuis le client web, et un client n'a aucun accès en écriture ici.
+      allow update: if isAdmin() || (
+        isCoach() && request.auth.uid in resource.data.coachIds &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['enrollments'])
+      );
+
+      allow delete: if isAdmin();
+    }
+
     // ─── recurrences ─────────────────────────────────────────────────────────
 
     match /recurrences/{recurrenceId} {
+      allow read: if isAdmin() || (isCoach() && request.auth.uid in resource.data.coachIds);
+      allow create: if isCoach();
+      allow update, delete: if isAdmin() || (isCoach() && request.auth.uid in resource.data.coachIds);
+    }
+
+    // ─── groupSessionRecurrences ─────────────────────────────────────────────
+
+    match /groupSessionRecurrences/{recurrenceId} {
       allow read: if isAdmin() || (isCoach() && request.auth.uid in resource.data.coachIds);
       allow create: if isCoach();
       allow update, delete: if isAdmin() || (isCoach() && request.auth.uid in resource.data.coachIds);

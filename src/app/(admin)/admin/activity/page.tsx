@@ -36,6 +36,9 @@ const ACTION_LABELS: Record<ActivityAction, string> = {
   client_deleted: 'Client supprimé',
   credit_added: 'Crédit ajouté',
   credit_used: 'Crédit utilisé',
+  client_signup: 'Compte client créé',
+  client_signup_ambiguous_match: 'Compte client lié (correspondance ambiguë)',
+  group_session_cancelled_after_payment: 'Inscription annulée après paiement',
 }
 
 const ACTION_COLORS: Record<ActivityAction, string> = {
@@ -50,6 +53,9 @@ const ACTION_COLORS: Record<ActivityAction, string> = {
   client_deleted: '#A09890',
   credit_added: '#2D7A4F',
   credit_used: '#8B5CF6',
+  client_signup: '#0EA5E9',
+  client_signup_ambiguous_match: '#F59E0B',
+  group_session_cancelled_after_payment: '#C0392B',
 }
 
 const PAGE_SIZE = 30

@@ -9,12 +9,16 @@ import { X, Check, Search, RefreshCw, UserPlus, Dumbbell, Users2 } from 'lucide-
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { useCollection } from '@/lib/hooks/useCollection'
 import { useAuth } from '@/lib/hooks/useAuth'
-import { createDoc } from '@/lib/services/crud.service'
+import { createDoc, updateDocById } from '@/lib/services/crud.service'
 import { sendNotification } from '@/lib/services/notification.service'
 import { logActivity } from '@/lib/services/activity.service'
+import {
+  computeDiscountedAmount, matchesScope, findActiveClientDiscount,
+  lookupPromoCode, checkUsageLimits, recordRedemption, discountLabel,
+} from '@/lib/services/discount.service'
 import { format as formatDate } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import type { Service, Location, User, Client, ClientGroup, ClientPayment } from '@/types'
+import type { Service, Location, User, Client, ClientGroup, ClientPayment, Discount } from '@/types'
 
 // ─── Styles partagés ─────────────────────────────────────────────────────────
 
@@ -119,6 +123,13 @@ function generateOccurrenceDates(
   return dates
 }
 
+// Marque les clients comme ayant déjà réservé (empêche toute offre "1ère réservation" ultérieure,
+// sur ce service ou un autre) — appelé après toute création de séance, offerte ou non.
+async function markClientsAsBooked(clientIds: string[], clients: Client[]): Promise<void> {
+  const toMark = clientIds.filter(id => !clients.find(c => c.id === id)?.hasEverBooked)
+  await Promise.all(toMark.map(id => updateDocById('clients', id, { hasEverBooked: true })))
+}
+
 const DURATIONS = [30, 45, 60, 75, 90, 120] as const
 type SessionMode = 'standard' | 'training'
 type ClientMode = 'individual' | 'group'
@@ -142,6 +153,11 @@ function NewSessionForm() {
 
   const [sessionMode, setSessionMode] = useState<SessionMode>('standard')
   const isTraining = sessionMode === 'training'
+  const [isPublic, setIsPublic] = useState(() => searchParams.get('public') === '1')
+  const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
+  const [maxParticipants, setMaxParticipants] = useState(8)
+  const [price, setPrice] = useState(20)
   const [serviceId, setServiceId] = useState('')
   const [locationId, setLocationId] = useState('')
   const [coachIds, setCoachIds] = useState<string[]>([])
@@ -164,6 +180,11 @@ function NewSessionForm() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [locationBookings, setLocationBookings] = useState<Record<string, number>>({})
+  const [clientDiscounts, setClientDiscounts] = useState<Record<string, Discount>>({})
+  const [promoCodeInput, setPromoCodeInput] = useState('')
+  const [appliedPromoCode, setAppliedPromoCode] = useState<Discount | null>(null)
+  const [promoCodeError, setPromoCodeError] = useState('')
+  const [checkingPromo, setCheckingPromo] = useState(false)
 
   const { data: allServices } = useCollection<Service>('services', [orderBy('name')])
   const { data: allLocations } = useCollection<Location>('locations', [orderBy('name')])
@@ -205,15 +226,22 @@ function NewSessionForm() {
     const windowStart = new Date(slotStart - 12 * 60 * 60 * 1000)
     const windowEnd = new Date(slotEnd)
 
-    getDocs(query(
-      collection(db, 'sessions'),
-      where('startAt', '>=', Timestamp.fromDate(windowStart)),
-      where('startAt', '<', Timestamp.fromDate(windowEnd)),
-    )).then(snap => {
+    Promise.all([
+      getDocs(query(
+        collection(db, 'sessions'),
+        where('startAt', '>=', Timestamp.fromDate(windowStart)),
+        where('startAt', '<', Timestamp.fromDate(windowEnd)),
+      )),
+      getDocs(query(
+        collection(db, 'groupSessions'),
+        where('startAt', '>=', Timestamp.fromDate(windowStart)),
+        where('startAt', '<', Timestamp.fromDate(windowEnd)),
+      )),
+    ]).then(([sessionsSnap, groupSessionsSnap]) => {
       const bookings: Record<string, number> = {}
-      snap.docs.forEach(d => {
+      for (const d of [...sessionsSnap.docs, ...groupSessionsSnap.docs]) {
         const s = d.data()
-        if (s.status === 'cancelled') return
+        if (s.status === 'cancelled') continue
         const sStart = (s.startAt as Timestamp).toDate().getTime()
         const sEnd = (s.endAt as Timestamp).toDate().getTime()
         // Chevauchement strict : sEnd == slotStart (séance adjacente) n'est PAS un conflit
@@ -221,7 +249,7 @@ function NewSessionForm() {
           const lid = s.locationId as string
           if (lid) bookings[lid] = (bookings[lid] ?? 0) + 1
         }
-      })
+      }
       setLocationBookings(bookings)
     }).catch(err => console.error('[location-check]', err))
   }, [date, startTime, duration])
@@ -233,10 +261,62 @@ function NewSessionForm() {
     [clients, clientSearch]
   )
 
+  // Clients effectifs pour la séance en cours (individuel ou groupe fixe) — utilisé à la fois
+  // pour la détection des rabais et pour la construction du paymentDistribution à la soumission
+  const finalClientIds = useMemo(() => {
+    if (clientMode === 'group' && selectedGroupId) {
+      return groups.find(g => g.id === selectedGroupId)?.clientIds ?? []
+    }
+    return selectedClientIds
+  }, [clientMode, selectedGroupId, selectedClientIds, groups])
+
+  // Auto-détection des rabais client actifs pour le service sélectionné (mode standard uniquement)
+  useEffect(() => {
+    setAppliedPromoCode(null); setPromoCodeInput(''); setPromoCodeError('')
+    if (isTraining || isPublic || !selectedService || finalClientIds.length === 0) { setClientDiscounts({}); return }
+    let cancelled = false
+    Promise.all(finalClientIds.map(async (cId) => [cId, await findActiveClientDiscount(cId, selectedService)] as const))
+      .then(results => {
+        if (cancelled) return
+        const map: Record<string, Discount> = {}
+        for (const [cId, d] of results) if (d) map[cId] = d
+        setClientDiscounts(map)
+      })
+    return () => { cancelled = true }
+  }, [isTraining, isPublic, selectedService, finalClientIds])
+
+  async function handleApplyPromoCode() {
+    if (!promoCodeInput.trim() || !selectedService) return
+    setCheckingPromo(true); setPromoCodeError('')
+    try {
+      const found = await lookupPromoCode(promoCodeInput)
+      if (!found || !matchesScope(found.scope, selectedService)) {
+        setPromoCodeError('Code invalide ou non applicable à ce service.')
+        return
+      }
+      const check = await checkUsageLimits(found, finalClientIds[0] ?? '')
+      if (!check.ok) { setPromoCodeError(check.error); return }
+      setAppliedPromoCode(found)
+    } finally {
+      setCheckingPromo(false)
+    }
+  }
+
   const canSubmit = isTraining
     ? !!(locationId && coachIds.length > 0 && date && startTime)
-    : !!(serviceId && locationId && coachIds.length > 0 && date && startTime &&
-        (clientMode === 'group' ? selectedGroupId : selectedClientIds.length > 0))
+    : isPublic
+      ? !!(serviceId && title.trim() && locationId && coachIds.length > 0 && date && startTime && maxParticipants > 0)
+      : !!(serviceId && locationId && coachIds.length > 0 && date && startTime &&
+          (clientMode === 'group' ? selectedGroupId : selectedClientIds.length > 0))
+
+  // Séance publique : titre/prix hérités du service choisi (modifiables ensuite)
+  useEffect(() => {
+    if (!isPublic || !serviceId) return
+    const svc = services.find(s => s.id === serviceId)
+    if (!svc) return
+    setTitle(svc.name)
+    setPrice(svc.price)
+  }, [isPublic, serviceId, services])
 
   // Aperçu du nombre de séances générées (null = sans fin)
   const occurrencePreview = useMemo(() => {
@@ -303,21 +383,115 @@ function NewSessionForm() {
         return
       }
 
-      // ── Mode standard ────────────────────────────────────────────────────────
-      let finalClientIds = selectedClientIds
-      let finalGroupId: string | undefined
-      if (clientMode === 'group' && selectedGroupId) {
-        finalGroupId = selectedGroupId
-        finalClientIds = groups.find(g => g.id === selectedGroupId)?.clientIds ?? []
+      // ── Séance collective publique ───────────────────────────────────────────
+      if (isPublic) {
+        const baseGroupData = {
+          serviceId,
+          title: title.trim(),
+          ...(description.trim() ? { description: description.trim() } : {}),
+          coachIds,
+          coachNames: coachIds.map(cId => coaches.find(c => c.id === cId)?.firstName).filter((n): n is string => !!n),
+          locationId,
+          maxParticipants,
+          price,
+          status: 'planned' as const,
+          isPublic: true,
+        }
+
+        if (recurrence === 'none') {
+          const groupSessionId = await createDoc('groupSessions', {
+            ...baseGroupData,
+            startAt: Timestamp.fromDate(startDate),
+            endAt: Timestamp.fromDate(endDate),
+            enrollments: [],
+            createdBy: user!.id,
+          } as Record<string, unknown>)
+
+          logActivity({
+            userId: user!.id, userFirstName: user!.firstName, userLastName: user!.lastName,
+            action: 'session_created',
+            description: `Séance collective "${title.trim()}" créée (${maxParticipants} places)`,
+            sessionId: groupSessionId,
+          })
+
+          router.replace(`/manage-group-sessions/${groupSessionId}` as never)
+          return
+        }
+
+        // Récurrence
+        const isInfinitePublic = recurrenceEndType === 'infinite'
+        const endConditionPublic: { type: 'months'; count: number } | { type: 'count'; count: number } =
+          recurrenceEndType === 'count'
+            ? { type: 'count', count: recurrenceCount }
+            : { type: 'months', count: recurrenceEndType === '3months' ? 3 : recurrenceEndType === '6months' ? 6 : 12 }
+
+        const generationEndPublic = isInfinitePublic ? { type: 'months' as const, count: 3 } : endConditionPublic
+        const occurrencesPublic = generateOccurrenceDates(startDate, recurrence, generationEndPublic)
+
+        const recurrenceRef = await addDoc(collection(db, 'groupSessionRecurrences'), {
+          serviceId,
+          title: title.trim(),
+          ...(description.trim() ? { description: description.trim() } : {}),
+          coachIds,
+          coachNames: coachIds.map(cId => coaches.find(c => c.id === cId)?.firstName).filter((n): n is string => !!n),
+          locationId,
+          maxParticipants,
+          price,
+          isPublic: true,
+          createdBy: user!.id,
+          rule: {
+            frequency: recurrence,
+            dayOfWeek: startDate.getDay(),
+            startTime,
+            duration,
+            startDate: Timestamp.fromDate(startDate),
+            infinite: isInfinitePublic,
+            ...(!isInfinitePublic && endConditionPublic.type === 'months'
+              ? { endDate: Timestamp.fromDate(new Date(startDate.getFullYear(), startDate.getMonth() + endConditionPublic.count, startDate.getDate())) }
+              : {}),
+            ...(!isInfinitePublic && endConditionPublic.type === 'count'
+              ? { count: endConditionPublic.count }
+              : {}),
+          },
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        })
+
+        const groupBatch = writeBatch(db)
+        let firstGroupSessionId: string | null = null
+
+        for (const occDate of occurrencesPublic) {
+          const gsRef = doc(collection(db, 'groupSessions'))
+          if (!firstGroupSessionId) firstGroupSessionId = gsRef.id
+          groupBatch.set(gsRef, {
+            ...baseGroupData,
+            startAt: Timestamp.fromDate(occDate),
+            endAt: Timestamp.fromDate(addMinutes(occDate, duration)),
+            enrollments: [],
+            recurrenceId: recurrenceRef.id,
+            createdBy: user!.id,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          })
+        }
+
+        await groupBatch.commit()
+        logActivity({
+          userId: user!.id, userFirstName: user!.firstName, userLastName: user!.lastName,
+          action: 'session_created',
+          description: `Séance collective "${title.trim()}" · récurrence (${occurrencesPublic.length} séances)`,
+          sessionId: firstGroupSessionId!,
+        })
+        router.replace(`/manage-group-sessions/${firstGroupSessionId}` as never)
+        return
       }
+
+      // ── Mode standard ────────────────────────────────────────────────────────
+      const finalGroupId = clientMode === 'group' && selectedGroupId ? selectedGroupId : undefined
 
       const pricePerClient = selectedService!.pricingMode === 'per_person'
         ? selectedService!.price
         : finalClientIds.length > 0 ? Math.round((selectedService!.price / finalClientIds.length) * 100) / 100 : 0
-
-      const paymentDistribution: ClientPayment[] = finalClientIds.map(cId => ({
-        clientId: cId, amountDue: pricePerClient, amountPaid: 0, paymentStatus: 'payment_to_request',
-      }))
 
       const baseSessionData = {
         coachIds,
@@ -328,7 +502,6 @@ function NewSessionForm() {
         isIndependent,
         status: 'planned',
         paymentStatus: 'payment_to_request',
-        paymentDistribution,
         priceSnapshot: {
           serviceName: selectedService!.name,
           basePrice: selectedService!.price,
@@ -344,12 +517,46 @@ function NewSessionForm() {
       }
 
       if (recurrence === 'none') {
-        // Séance unique
+        // Séance unique — les remises (rabais client auto-détecté ou code promo) ne s'appliquent
+        // qu'ici, jamais aux séances récurrentes générées ci-dessous (éviterait d'épuiser en
+        // quelques semaines une limite d'usage prévue pour une seule séance).
+        const paymentDistribution: ClientPayment[] = await Promise.all(finalClientIds.map(async (cId) => {
+          if (selectedService!.firstBookingFree && !clients.find(c => c.id === cId)?.hasEverBooked) {
+            return {
+              clientId: cId, amountDue: 0, amountPaid: 0, paymentStatus: 'offered' as const,
+              originalAmountDue: pricePerClient, discountLabel: 'Première réservation offerte',
+            }
+          }
+          const candidate = clientDiscounts[cId] ?? appliedPromoCode
+          if (!candidate) {
+            return { clientId: cId, amountDue: pricePerClient, amountPaid: 0, paymentStatus: 'payment_to_request' as const }
+          }
+          const check = await checkUsageLimits(candidate, cId)
+          if (!check.ok) {
+            return { clientId: cId, amountDue: pricePerClient, amountPaid: 0, paymentStatus: 'payment_to_request' as const }
+          }
+          return {
+            clientId: cId, amountDue: computeDiscountedAmount(pricePerClient, candidate), amountPaid: 0,
+            paymentStatus: 'payment_to_request' as const,
+            discountId: candidate.id, discountLabel: discountLabel(candidate), originalAmountDue: pricePerClient,
+          }
+        }))
+
         const sessionId = await createDoc('sessions', {
           ...baseSessionData,
+          paymentDistribution,
           startAt: Timestamp.fromDate(startDate),
           endAt: Timestamp.fromDate(endDate),
         } as Record<string, unknown>)
+
+        await Promise.all(paymentDistribution
+          .filter(p => p.discountId)
+          .map(p => recordRedemption({
+            discountId: p.discountId!, clientId: p.clientId, context: 'session', refId: sessionId,
+            amountBefore: p.originalAmountDue!, amountAfter: p.amountDue,
+          })))
+
+        await markClientsAsBooked(finalClientIds, clients)
 
         // Notifier les coachs assignés (sauf celui qui crée)
         const otherCoachIds = coachIds.filter(id => id !== user?.id)
@@ -366,6 +573,11 @@ function NewSessionForm() {
         router.replace(`/sessions/${sessionId}` as never)
         return
       }
+
+      // Pas de remise sur les occurrences récurrentes (cf. commentaire ci-dessus)
+      const paymentDistribution: ClientPayment[] = finalClientIds.map(cId => ({
+        clientId: cId, amountDue: pricePerClient, amountPaid: 0, paymentStatus: 'payment_to_request',
+      }))
 
       // ── Séances récurrentes ─────────────────────────────────────────────────
       const isInfinite = recurrenceEndType === 'infinite'
@@ -412,6 +624,7 @@ function NewSessionForm() {
         if (!firstSessionId) firstSessionId = occRef.id
         batch.set(occRef, {
           ...baseSessionData,
+          paymentDistribution,
           startAt: Timestamp.fromDate(occDate),
           endAt: Timestamp.fromDate(addMinutes(occDate, duration)),
           recurrenceId: recurrenceRef.id,
@@ -421,6 +634,7 @@ function NewSessionForm() {
       }
 
       await batch.commit()
+      await markClientsAsBooked(finalClientIds, clients)
       logActivity({ userId: user!.id, userFirstName: user!.firstName, userLastName: user!.lastName, action: 'session_created', description: `${selectedService!.name} · récurrence (${occurrences.length} séances)`, sessionId: firstSessionId! })
       router.replace(`/sessions/${firstSessionId}` as never)
     } catch (e) {
@@ -428,7 +642,7 @@ function NewSessionForm() {
       setError('Erreur lors de la création. Réessaie.')
       setSaving(false)
     }
-  }, [canSubmit, isTraining, selectedService, date, startTime, duration, selectedClientIds, selectedGroupId, clientMode, groups, coachIds, locationId, serviceId, isIndependent, recurrence, recurrenceEndType, recurrenceCount, router, user])
+  }, [canSubmit, isTraining, isPublic, title, description, maxParticipants, price, selectedService, date, startTime, duration, selectedClientIds, selectedGroupId, clientMode, groups, coachIds, locationId, serviceId, isIndependent, recurrence, recurrenceEndType, recurrenceCount, router, user, finalClientIds, clientDiscounts, appliedPromoCode, clients])
 
   const visibleCoaches = isAdmin ? coaches : coaches.filter(c => c.id === user?.id)
 
@@ -459,7 +673,7 @@ function NewSessionForm() {
           {([['standard', 'Séance', Users2], ['training', 'Entraînement', Dumbbell]] as [SessionMode, string, typeof Dumbbell][]).map(([mode, label, Icon]) => (
             <button
               key={mode}
-              onClick={() => { setSessionMode(mode); setLocationId('') }}
+              onClick={() => { setSessionMode(mode); setLocationId(''); if (mode === 'training') setIsPublic(false) }}
               style={{
                 flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                 padding: '9px 0', borderRadius: 8, border: 'none', cursor: 'pointer',
@@ -474,6 +688,17 @@ function NewSessionForm() {
             </button>
           ))}
         </div>
+
+        {/* Séance publique (collective) — mode standard uniquement */}
+        {!isTraining && (
+          <div style={{ background: '#fff', borderRadius: 10, padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <p style={{ fontSize: 14, color: '#1A1A18', fontWeight: 500, margin: 0 }}>Séance publique (collective)</p>
+              <p style={{ fontSize: 12, color: '#7A7570', margin: '2px 0 0' }}>Les clients s&apos;inscrivent et paient eux-mêmes en ligne</p>
+            </div>
+            <Toggle value={isPublic} onChange={setIsPublic} />
+          </div>
+        )}
 
         {/* Date & heure */}
         <Section title="Date & heure">
@@ -494,13 +719,39 @@ function NewSessionForm() {
           </Row>
         </Section>
 
-        {/* Service — mode standard uniquement */}
+        {/* Service — mode standard uniquement (public ou non) */}
         {!isTraining && (
           <Section title="Service">
             {services.length === 0 && <p style={{ fontSize: 13, color: '#A09890', textAlign: 'center', padding: '8px 0' }}>Aucun service actif</p>}
             {services.map(s => (
-              <SelectItem key={s.id} label={s.name} sub={`${s.price.toFixed(2)} CHF`} selected={serviceId === s.id} onSelect={() => setServiceId(s.id)} />
+              <SelectItem
+                key={s.id}
+                label={s.name}
+                sub={s.isPublic ? `${s.price.toFixed(2)} CHF · Public` : `${s.price.toFixed(2)} CHF`}
+                selected={serviceId === s.id}
+                onSelect={() => { setServiceId(s.id); if (s.isPublic) setIsPublic(true) }}
+              />
             ))}
+          </Section>
+        )}
+
+        {/* Informations — mode public uniquement : titre/description hérités du service, modifiables */}
+        {!isTraining && isPublic && (
+          <Section title="Informations">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <input
+                style={inputStyle}
+                placeholder="Titre (ex: Cours collectif renforcement)"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+              />
+              <textarea
+                style={{ ...inputStyle, height: 64, padding: '8px 10px', resize: 'none' }}
+                placeholder="Description (optionnel)"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+              />
+            </div>
           </Section>
         )}
 
@@ -548,8 +799,28 @@ function NewSessionForm() {
           )}
         </Section>
 
-        {/* Clients — mode standard uniquement */}
-        {isTraining ? null : <Section title="Clients">
+        {/* Places & prix — mode public uniquement */}
+        {!isTraining && isPublic && (
+          <Section title="Places & prix">
+            <Row label="Nombre max de places">
+              <input
+                type="number" min={1} style={{ ...inputStyle, width: 90 }}
+                value={maxParticipants}
+                onChange={(e) => setMaxParticipants(Math.max(1, Number(e.target.value)))}
+              />
+            </Row>
+            <Row label="Prix par personne (CHF)">
+              <input
+                type="number" min={0} step={5} style={{ ...inputStyle, width: 90 }}
+                value={price}
+                onChange={(e) => setPrice(Math.max(0, Number(e.target.value)))}
+              />
+            </Row>
+          </Section>
+        )}
+
+        {/* Clients — mode standard non-public uniquement */}
+        {isTraining || isPublic ? null : <Section title="Clients">
           <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
             {(['individual', 'group'] as ClientMode[]).map(m => (
               <button key={m} onClick={() => setClientMode(m)} style={{ flex: 1, padding: '6px 0', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 13, backgroundColor: clientMode === m ? '#1A1A18' : '#F0EDE8', color: clientMode === m ? '#fff' : '#1A1A18' }}>
@@ -608,6 +879,60 @@ function NewSessionForm() {
           )}
         </Section>}
 
+        {/* Remise — mode standard uniquement, quand service + client(s) sélectionnés */}
+        {!isTraining && !isPublic && serviceId && finalClientIds.length > 0 && (
+          <Section title="Remise">
+            {selectedService?.firstBookingFree && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 8 }}>
+                {finalClientIds.filter(id => !clients.find(c => c.id === id)?.hasEverBooked).map(id => {
+                  const c = clients.find(cl => cl.id === id)
+                  return (
+                    <p key={id} style={{ fontSize: 13, color: '#2D7A4F', margin: 0 }}>
+                      {c ? `${c.firstName} ${c.lastName}` : id} — 1ère réservation offerte
+                    </p>
+                  )
+                })}
+              </div>
+            )}
+            {Object.keys(clientDiscounts).length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 8 }}>
+                {finalClientIds.filter(id => clientDiscounts[id]).map(id => {
+                  const c = clients.find(cl => cl.id === id)
+                  const d = clientDiscounts[id]!
+                  return (
+                    <p key={id} style={{ fontSize: 13, color: '#2D7A4F', margin: 0 }}>
+                      {c ? `${c.firstName} ${c.lastName}` : id} — {d.discountType === 'percentage' ? `-${d.value}%` : `-${d.value.toFixed(2)} CHF`} ({discountLabel(d)})
+                    </p>
+                  )
+                })}
+              </div>
+            )}
+            {appliedPromoCode ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', background: '#E8F3EE', borderRadius: 8 }}>
+                <span style={{ fontSize: 13, color: '#2D7A4F' }}>Code {appliedPromoCode.code} appliqué</span>
+                <button onClick={() => { setAppliedPromoCode(null); setPromoCodeInput('') }} style={{ background: 'none', border: 'none', color: '#2D7A4F', cursor: 'pointer', fontSize: 12 }}>Retirer</button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input
+                  style={inputStyle}
+                  placeholder="Code promo (optionnel)"
+                  value={promoCodeInput}
+                  onChange={(e) => { setPromoCodeInput(e.target.value.toUpperCase()); setPromoCodeError('') }}
+                />
+                <button
+                  onClick={handleApplyPromoCode}
+                  disabled={checkingPromo || !promoCodeInput.trim()}
+                  style={{ padding: '0 14px', borderRadius: 8, border: 'none', background: '#1A1A18', color: '#fff', fontSize: 13, cursor: 'pointer', flexShrink: 0 }}
+                >
+                  {checkingPromo ? '…' : 'Appliquer'}
+                </button>
+              </div>
+            )}
+            {promoCodeError && <p style={{ fontSize: 12, color: '#C0392B', margin: '6px 0 0' }}>{promoCodeError}</p>}
+          </Section>
+        )}
+
         {/* Coachs */}
         <Section title={isAdmin ? 'Coach(s)' : 'Coach'}>
           {visibleCoaches.map(c => (
@@ -624,8 +949,8 @@ function NewSessionForm() {
           ))}
         </Section>
 
-        {/* Mode indépendant — standard uniquement */}
-        {!isTraining && <Section title="Mode">
+        {/* Mode indépendant — standard non-public uniquement */}
+        {!isTraining && !isPublic && <Section title="Mode">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '2px 0' }}>
             <div>
               <p style={{ fontSize: 14, color: '#1A1A18', fontWeight: 500, margin: 0 }}>Mode indépendant</p>

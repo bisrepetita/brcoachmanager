@@ -4,7 +4,7 @@ import {
 } from 'firebase/firestore'
 import { addMinutes } from 'date-fns'
 import { db } from '@/lib/firebase/firestore'
-import type { Recurrence, Session, ClientPayment } from '@/types'
+import type { Recurrence, Session, ClientPayment, GroupSessionRecurrence, GroupSession } from '@/types'
 
 function nextOccurrence(date: Date, frequency: string): Date {
   const next = new Date(date)
@@ -93,6 +93,66 @@ export async function extendInfiniteRecurrences(): Promise<void> {
         paymentDistribution,
         priceSnapshot: templateData.priceSnapshot,
         recurrenceId: rec.id,
+        startAt: Timestamp.fromDate(occDate),
+        endAt: Timestamp.fromDate(addMinutes(occDate, rec.rule.duration)),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      })
+    }
+
+    await batch.commit()
+  }
+}
+
+// Équivalent de extendInfiniteRecurrences() pour les séances collectives : chaque occurrence
+// générée est un GroupSession indépendant avec ses propres enrollments (jamais copiés du modèle).
+export async function extendInfiniteGroupSessionRecurrences(): Promise<void> {
+  const recSnap = await getDocs(
+    query(collection(db, 'groupSessionRecurrences'), where('rule.infinite', '==', true))
+  )
+  if (recSnap.empty) return
+
+  const horizon = new Date()
+  horizon.setDate(horizon.getDate() + 30)
+
+  for (const recDoc of recSnap.docs) {
+    const rec = { id: recDoc.id, ...recDoc.data() } as GroupSessionRecurrence
+
+    const lastSnap = await getDocs(
+      query(
+        collection(db, 'groupSessions'),
+        where('recurrenceId', '==', rec.id),
+        orderBy('startAt', 'desc'),
+        limit(1)
+      )
+    )
+    if (lastSnap.empty) continue
+
+    const lastGroupSession = lastSnap.docs[0]!
+    const lastDate: Date = (lastGroupSession.data() as GroupSession).startAt.toDate()
+
+    if (lastDate > horizon) continue
+
+    const newDates = generateFrom(lastDate, rec.rule.frequency, rec.rule.duration, 3)
+    if (newDates.length === 0) continue
+
+    const batch = writeBatch(db)
+    for (const occDate of newDates) {
+      const gsRef = doc(collection(db, 'groupSessions'))
+      batch.set(gsRef, {
+        ...(rec.serviceId ? { serviceId: rec.serviceId } : {}),
+        title: rec.title,
+        ...(rec.description ? { description: rec.description } : {}),
+        coachIds: rec.coachIds,
+        ...(rec.coachNames ? { coachNames: rec.coachNames } : {}),
+        locationId: rec.locationId,
+        maxParticipants: rec.maxParticipants,
+        price: rec.price,
+        status: 'planned',
+        isPublic: rec.isPublic,
+        enrollments: [],
+        recurrenceId: rec.id,
+        createdBy: rec.createdBy,
         startAt: Timestamp.fromDate(occDate),
         endAt: Timestamp.fromDate(addMinutes(occDate, rec.rule.duration)),
         createdAt: serverTimestamp(),

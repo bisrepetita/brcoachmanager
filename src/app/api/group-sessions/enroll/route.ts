@@ -1,0 +1,187 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { FieldValue, Timestamp } from 'firebase-admin/firestore'
+import { getAdminDb, getAdminAuth } from '@/lib/firebase/admin'
+import { createGroupSessionCheckout } from '@/lib/server/group-session-stripe'
+import {
+  resolveDiscountInTransaction, applyDiscountInTransaction,
+  computeDiscountedAmount, discountLabelAdmin,
+} from '@/lib/server/discount-admin'
+
+// Type "loose" côté serveur : le type partagé GroupSessionEnrollment (src/types) pointe sur le
+// Timestamp du SDK client, incompatible avec firebase-admin/firestore côté API route.
+type ServerEnrollment = Record<string, unknown> & { clientId: string; status: string }
+
+export async function POST(req: NextRequest) {
+  const token = req.headers.get('authorization')?.replace('Bearer ', '')
+  if (!token) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
+
+  let uid: string
+  try {
+    uid = (await getAdminAuth().verifyIdToken(token)).uid
+  } catch {
+    return NextResponse.json({ error: 'Token invalide' }, { status: 401 })
+  }
+
+  const { groupSessionId, promoCode } = (await req.json()) as { groupSessionId?: string; promoCode?: string }
+  if (!groupSessionId) return NextResponse.json({ error: 'groupSessionId requis' }, { status: 400 })
+
+  try {
+    const adminDb = getAdminDb()
+
+    const clientRef = adminDb.collection('clients').where('uid', '==', uid).limit(1)
+    const clientSnap = await clientRef.get()
+    if (clientSnap.empty) {
+      return NextResponse.json({ error: 'Compte non lié à une fiche client' }, { status: 412 })
+    }
+    const clientId = clientSnap.docs[0]!.id
+    const clientDocRef = clientSnap.docs[0]!.ref
+
+    const groupSessionRef = adminDb.collection('groupSessions').doc(groupSessionId)
+
+    const enrollment = await adminDb.runTransaction(async (tx) => {
+      const snap = await tx.get(groupSessionRef)
+      if (!snap.exists) throw new HttpError(404, 'Séance introuvable')
+
+      const data = snap.data()!
+      if (data['status'] !== 'planned' || data['isPublic'] !== true) {
+        throw new HttpError(412, 'Séance non disponible')
+      }
+      const startAt = (data['startAt'] as Timestamp).toDate()
+      if (startAt.getTime() <= Date.now()) {
+        throw new HttpError(412, 'Séance déjà passée')
+      }
+
+      const enrollments = (data['enrollments'] as ServerEnrollment[] | undefined) ?? []
+      const active = enrollments.filter((e) => e.status !== 'cancelled')
+
+      if (active.some((e) => e.clientId === clientId)) {
+        throw new HttpError(409, 'Déjà inscrit à cette séance')
+      }
+      if (active.length >= (data['maxParticipants'] as number)) {
+        throw new HttpError(409, 'Séance complète')
+      }
+
+      const clientTxSnap = await tx.get(clientDocRef)
+      const hasEverBooked = clientTxSnap.data()?.['hasEverBooked'] === true
+
+      // Remise : rabais client auto-détecté, ou code promo fourni (pas de cumul des deux).
+      const serviceId = data['serviceId'] as string | undefined
+      let service: { id: string; isPublic?: boolean } | null = null
+      let serviceFirstBookingFree = false
+      if (serviceId) {
+        const serviceSnap = await tx.get(adminDb.collection('services').doc(serviceId))
+        if (serviceSnap.exists) {
+          service = { id: serviceSnap.id, isPublic: serviceSnap.data()!['isPublic'] as boolean | undefined }
+          serviceFirstBookingFree = serviceSnap.data()!['firstBookingFree'] === true
+        }
+      }
+
+      const basePrice = data['price'] as number
+      const firstBookingFree = serviceFirstBookingFree && !hasEverBooked
+
+      // Ne recherche/valide une remise que si la gratuité "1ère réservation" ne s'applique pas déjà.
+      const discountResult = firstBookingFree
+        ? null
+        : await resolveDiscountInTransaction(tx, adminDb, { clientId, promoCode, service })
+      if (discountResult && 'error' in discountResult) {
+        throw new HttpError(400, discountResult.error)
+      }
+
+      const newEnrollment: ServerEnrollment = firstBookingFree
+        ? {
+            clientId,
+            status: 'confirmed',
+            amountDue: 0,
+            amountPaid: 0,
+            paymentStatus: 'offered',
+            enrolledAt: Timestamp.now(),
+            originalAmountDue: basePrice,
+            discountLabel: 'Première réservation offerte',
+          }
+        : discountResult
+          ? {
+              clientId,
+              status: 'pending_payment',
+              amountDue: computeDiscountedAmount(basePrice, discountResult.data),
+              amountPaid: 0,
+              paymentStatus: 'payment_to_request',
+              enrolledAt: Timestamp.now(),
+              discountId: discountResult.ref.id,
+              discountLabel: discountLabelAdmin(discountResult.data),
+              originalAmountDue: basePrice,
+            }
+          : {
+              clientId,
+              status: 'pending_payment',
+              amountDue: basePrice,
+              amountPaid: 0,
+              paymentStatus: 'payment_to_request',
+              enrolledAt: Timestamp.now(),
+            }
+
+      tx.update(groupSessionRef, {
+        enrollments: [...enrollments, newEnrollment],
+        updatedAt: FieldValue.serverTimestamp(),
+      })
+
+      if (!hasEverBooked) {
+        tx.update(clientDocRef, { hasEverBooked: true, updatedAt: FieldValue.serverTimestamp() })
+      }
+
+      if (discountResult) {
+        applyDiscountInTransaction(tx, discountResult.ref, {
+          clientId, context: 'group_session', refId: groupSessionId,
+          amountBefore: basePrice, amountAfter: newEnrollment.amountDue as number,
+        })
+      }
+
+      return newEnrollment
+    })
+
+    // Séance offerte (1ère réservation) : déjà confirmée dans la transaction, pas de paiement à
+    // générer — on court-circuite Stripe entièrement.
+    if (enrollment.amountDue === 0) {
+      return NextResponse.json({ enrollment })
+    }
+
+    // Place réservée : on génère le lien de paiement hors transaction (appel réseau externe).
+    // Si cette étape échoue, la place reste réservée en 'pending_payment' sans lien — le client
+    // peut relancer via /api/group-sessions/request-payment-link.
+    const groupSessionSnap = await groupSessionRef.get()
+    const groupSessionData = groupSessionSnap.data()!
+    const clientDoc = clientSnap.docs[0]!.data()
+
+    const checkout = await createGroupSessionCheckout({
+      groupSessionId,
+      clientId,
+      title: `${groupSessionData['title']} — ${clientDoc['firstName']} ${clientDoc['lastName']}`,
+      amountCHF: enrollment.amountDue as number,
+      clientEmail: clientDoc['email'] as string | undefined,
+    })
+
+    const enrollments = (groupSessionData['enrollments'] as Record<string, unknown>[])
+    const updatedEnrollments = enrollments.map((e) =>
+      e['clientId'] === clientId && e['status'] === 'pending_payment'
+        ? { ...e, stripeCheckoutUrl: checkout.url, stripeSessionId: checkout.id, paymentStatus: 'link_sent' }
+        : e
+    )
+    await groupSessionRef.update({ enrollments: updatedEnrollments, updatedAt: FieldValue.serverTimestamp() })
+
+    return NextResponse.json({ enrollment, checkoutUrl: checkout.url })
+  } catch (err) {
+    if (err instanceof HttpError) {
+      return NextResponse.json({ error: err.message }, { status: err.status })
+    }
+    console.error('[group-sessions/enroll]', err)
+    const msg = err instanceof Error ? err.message : String(err)
+    return NextResponse.json({ error: msg }, { status: 500 })
+  }
+}
+
+class HttpError extends Error {
+  status: number
+  constructor(status: number, message: string) {
+    super(message)
+    this.status = status
+  }
+}

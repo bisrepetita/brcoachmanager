@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { writeBatch, doc } from 'firebase/firestore'
+import { useState, useEffect, type ChangeEvent } from 'react'
+import { writeBatch, doc, collection, query, where, limit, getDocs } from 'firebase/firestore'
 import { useCollection } from '@/lib/hooks/useCollection'
 import { createDoc, updateDocById, deleteDocById } from '@/lib/services/crud.service'
+import { fileToCompressedDataUrl } from '@/lib/utils/image'
 import { db } from '@/lib/firebase/firestore'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/button'
@@ -13,7 +14,7 @@ import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ListSkeleton } from '@/components/shared/LoadingSkeleton'
 import { useRouter } from 'next/navigation'
-import { Plus, ArrowLeft, Briefcase, Pencil, Trash2, GripVertical } from 'lucide-react'
+import { Plus, ArrowLeft, Briefcase, Pencil, Trash2, GripVertical, ImagePlus, X } from 'lucide-react'
 import {
   DndContext, closestCenter, PointerSensor, TouchSensor,
   useSensor, useSensors, type DragEndEvent,
@@ -43,10 +44,15 @@ function SortableServiceRow({ s, coaches, onEdit, onDelete }: { s: Service; coac
       >
         <GripVertical size={18} style={{ color: '#C8C4BC' }} />
       </button>
+      {s.imageUrl ? (
+        <div className="w-10 h-10 rounded-[var(--radius-md)] shrink-0 bg-cover bg-center" style={{ backgroundImage: `url(${s.imageUrl})` }} />
+      ) : null}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-0.5">
           <p className="text-[14px] font-medium text-[var(--color-text-primary)] truncate">{s.name}</p>
           {!s.active && <Badge variant="muted">Inactif</Badge>}
+          {s.isPublic && <Badge variant="paid">Public</Badge>}
+          {s.firstBookingFree && <Badge variant="gold">1ère offerte</Badge>}
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <span className="amount-mono text-[13px] font-semibold text-[var(--color-text-primary)]">CHF {s.price.toFixed(2)}</span>
@@ -115,18 +121,45 @@ export default function ServicesPage() {
   const [pricingMode, setPricingMode] = useState<PricingMode>('per_person')
   const [rentalPrice, setRentalPrice] = useState('')
   const [assignedCoachIds, setAssignedCoachIds] = useState<string[]>([])
+  const [isPublic, setIsPublic] = useState(false)
+  const [firstBookingFree, setFirstBookingFree] = useState(false)
+  const [active, setActive] = useState(true)
+  const [imageValue, setImageValue] = useState('')
+  const [compressingImage, setCompressingImage] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   function openCreate() {
     setEditing(null); setName(''); setPrice(''); setPricingMode('per_person')
-    setRentalPrice(''); setAssignedCoachIds([]); setError(null); setSheet('create')
+    setRentalPrice(''); setAssignedCoachIds([]); setIsPublic(false); setFirstBookingFree(false)
+    setActive(true); setImageValue('')
+    setError(null); setSheet('create')
   }
   function openEdit(s: Service) {
     setEditing(s); setName(s.name); setPrice(String(s.price)); setPricingMode(s.pricingMode)
     setRentalPrice(String(s.independentRoomRentalPrice))
-    setAssignedCoachIds(s.assignedCoachIds ?? []); setError(null); setSheet('edit')
+    setAssignedCoachIds(s.assignedCoachIds ?? []); setIsPublic(s.isPublic ?? false)
+    setFirstBookingFree(s.firstBookingFree ?? false); setActive(s.active !== false)
+    setImageValue(s.imageUrl ?? '')
+    setError(null); setSheet('edit')
   }
   function close() { setSheet(null); setEditing(null) }
+
+  async function handleImageChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setCompressingImage(true); setError(null)
+    try {
+      setImageValue(await fileToCompressedDataUrl(file, { aspectRatio: 2.5 }))
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setCompressingImage(false)
+    }
+  }
+  function handleImageRemove() {
+    setImageValue('')
+  }
 
   function toggleCoach(coachId: string) {
     setAssignedCoachIds(prev =>
@@ -140,8 +173,8 @@ export default function ServicesPage() {
     try {
       const data = {
         name: name.trim(), price: parseFloat(price), pricingMode,
-        independentRoomRentalPrice: parseFloat(rentalPrice) || 0, active: true,
-        assignedCoachIds,
+        independentRoomRentalPrice: parseFloat(rentalPrice) || 0, active,
+        assignedCoachIds, isPublic, firstBookingFree, imageUrl: imageValue,
       }
       if (sheet === 'create') await createDoc('services', data)
       else if (editing) await updateDocById('services', editing.id, data)
@@ -151,6 +184,17 @@ export default function ServicesPage() {
   }
 
   async function handleDelete(id: string) {
+    setDeleteError(null)
+    const [plannedSessions, plannedGroupSessions, recurrences, groupSessionRecurrences] = await Promise.all([
+      getDocs(query(collection(db, 'sessions'), where('serviceId', '==', id), where('status', '==', 'planned'), limit(1))),
+      getDocs(query(collection(db, 'groupSessions'), where('serviceId', '==', id), where('status', '==', 'planned'), limit(1))),
+      getDocs(query(collection(db, 'recurrences'), where('serviceId', '==', id), limit(1))),
+      getDocs(query(collection(db, 'groupSessionRecurrences'), where('serviceId', '==', id), limit(1))),
+    ])
+    if (!plannedSessions.empty || !plannedGroupSessions.empty || !recurrences.empty || !groupSessionRecurrences.empty) {
+      setDeleteError('Ce service est encore utilisé par des séances à venir ou une récurrence active — impossible de le supprimer. Désactive-le plutôt (bouton crayon → Service actif) : il disparaît des nouvelles créations sans casser l\'historique.')
+      return
+    }
     if (!confirm('Supprimer ce service ?')) return
     await deleteDocById('services', id)
   }
@@ -163,6 +207,13 @@ export default function ServicesPage() {
         right={<Button size="icon-sm" onClick={openCreate}><Plus size={18} /></Button>}
       />
       <TopBarSpacer />
+
+      {deleteError && (
+        <div className="mx-4 mt-3 p-3 rounded-[var(--radius-md)] flex items-start justify-between gap-3" style={{ background: '#FFF4E5', color: '#B26A00' }}>
+          <p className="text-[13px]">{deleteError}</p>
+          <button onClick={() => setDeleteError(null)} className="text-[13px] font-semibold shrink-0">✕</button>
+        </div>
+      )}
 
       {loading ? <ListSkeleton /> : ordered.length === 0 ? (
         <EmptyState icon={Briefcase} title="Aucun service" description="Ajoute un type de séance." action={<Button onClick={openCreate}><Plus size={16} />Ajouter un service</Button>} />
@@ -211,6 +262,73 @@ export default function ServicesPage() {
             <FormField label="Location salle indépendant (CHF)" hint="Montant dû à Bis Repetita par un coach indépendant">
               <Input type="number" value={rentalPrice} onChange={(e) => setRentalPrice(e.target.value)} placeholder="30" min="0" step="0.50" />
             </FormField>
+            <FormField label="Statut" hint="Un service inactif disparaît des nouvelles créations mais reste visible sur l'historique existant — préférable à la suppression si le service est encore utilisé">
+              <button type="button" onClick={() => setActive(v => !v)}
+                className="w-full flex items-center gap-3 p-3 rounded-[var(--radius-md)] border text-left transition-colors"
+                style={{ background: active ? 'var(--color-accent-subtle)' : 'var(--color-surface)', borderColor: active ? 'var(--color-border-strong)' : 'var(--color-border)' }}>
+                <div className="w-4 h-4 rounded flex items-center justify-center shrink-0"
+                  style={{ background: active ? 'var(--color-accent)' : 'transparent', border: `2px solid ${active ? 'var(--color-accent)' : 'var(--color-border)'}` }}>
+                  {active && <span style={{ color: '#fff', fontSize: 10, fontWeight: 700 }}>✓</span>}
+                </div>
+                <span className="text-[13px] font-medium text-[var(--color-text-primary)]">Service actif</span>
+              </button>
+            </FormField>
+            <FormField label="Image de fond" hint="Affichée en fond sombre sur la carte du service dans le Planning client — compressée automatiquement, aucun coût d'hébergement">
+              <div className="rounded-[var(--radius-md)] overflow-hidden relative h-28 flex items-end p-3"
+                style={{
+                  background: imageValue
+                    ? `linear-gradient(180deg, rgba(0,0,0,0.15), rgba(0,0,0,0.65)), url(${imageValue}) center/100% auto no-repeat`
+                    : 'var(--color-surface-elevated)',
+                  border: '1px solid var(--color-border)',
+                }}>
+                {compressingImage ? (
+                  <span className="text-[12px] w-full text-center" style={{ color: imageValue ? '#fff' : '#A09890' }}>Compression en cours…</span>
+                ) : imageValue ? (
+                  <>
+                    <span className="text-[13px] font-semibold text-white">{name || 'Aperçu'}</span>
+                    <button type="button" onClick={handleImageRemove}
+                      className="absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center"
+                      style={{ background: 'rgba(0,0,0,0.5)' }}>
+                      <X size={13} color="#fff" />
+                    </button>
+                  </>
+                ) : (
+                  <label className="w-full h-full flex flex-col items-center justify-center gap-1 cursor-pointer m-[-12px]">
+                    <ImagePlus size={20} style={{ color: '#A09890' }} />
+                    <span className="text-[12px]" style={{ color: '#A09890' }}>Choisir une image</span>
+                    <input type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
+                  </label>
+                )}
+              </div>
+              {imageValue && !compressingImage && (
+                <label className="inline-block mt-2 text-[12px] font-medium cursor-pointer" style={{ color: 'var(--color-text-secondary)' }}>
+                  Changer l&apos;image
+                  <input type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
+                </label>
+              )}
+            </FormField>
+            <FormField label="Visibilité" hint="Un service public apparaît dans le Planning des clients (auto-inscription + paiement en ligne)">
+              <button type="button" onClick={() => setIsPublic(v => !v)}
+                className="w-full flex items-center gap-3 p-3 rounded-[var(--radius-md)] border text-left transition-colors"
+                style={{ background: isPublic ? 'var(--color-accent-subtle)' : 'var(--color-surface)', borderColor: isPublic ? 'var(--color-border-strong)' : 'var(--color-border)' }}>
+                <div className="w-4 h-4 rounded flex items-center justify-center shrink-0"
+                  style={{ background: isPublic ? 'var(--color-accent)' : 'transparent', border: `2px solid ${isPublic ? 'var(--color-accent)' : 'var(--color-border)'}` }}>
+                  {isPublic && <span style={{ color: '#fff', fontSize: 10, fontWeight: 700 }}>✓</span>}
+                </div>
+                <span className="text-[13px] font-medium text-[var(--color-text-primary)]">Service public</span>
+              </button>
+            </FormField>
+            <FormField label="Offre de bienvenue" hint="Gratuit pour un client qui n'a encore jamais fait de réservation avec son compte — une seule fois, tous services confondus">
+              <button type="button" onClick={() => setFirstBookingFree(v => !v)}
+                className="w-full flex items-center gap-3 p-3 rounded-[var(--radius-md)] border text-left transition-colors"
+                style={{ background: firstBookingFree ? 'var(--color-accent-subtle)' : 'var(--color-surface)', borderColor: firstBookingFree ? 'var(--color-border-strong)' : 'var(--color-border)' }}>
+                <div className="w-4 h-4 rounded flex items-center justify-center shrink-0"
+                  style={{ background: firstBookingFree ? 'var(--color-accent)' : 'transparent', border: `2px solid ${firstBookingFree ? 'var(--color-accent)' : 'var(--color-border)'}` }}>
+                  {firstBookingFree && <span style={{ color: '#fff', fontSize: 10, fontWeight: 700 }}>✓</span>}
+                </div>
+                <span className="text-[13px] font-medium text-[var(--color-text-primary)]">Première réservation offerte</span>
+              </button>
+            </FormField>
             <FormField label="Coachs autorisés" hint="Laisser vide = tous les coachs peuvent proposer ce service">
               <div className="space-y-1">
                 {coaches.map(c => (
@@ -227,7 +345,7 @@ export default function ServicesPage() {
               </div>
             </FormField>
             {error && <p className="text-[13px] text-[var(--color-danger)]">{error}</p>}
-            <Button size="lg" className="w-full" onClick={handleSave} loading={saving}>
+            <Button size="lg" className="w-full" onClick={handleSave} loading={saving} disabled={compressingImage}>
               {sheet === 'create' ? 'Créer le service' : 'Enregistrer'}
             </Button>
           </div>

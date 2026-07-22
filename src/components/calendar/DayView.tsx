@@ -135,7 +135,7 @@ export function DayView({ date, sessions, coachMap, serviceMap, externalEvents =
           {/* Sessions */}
           {laid.map(({ session, top, height, col, numCols }) => {
             const coachColor = session.coachIds[0] ? (coachMap.get(session.coachIds[0])?.color ?? '#6366F1') : '#6366F1'
-            const serviceName = serviceMap.get(session.serviceId)?.name ?? ''
+            const serviceName = serviceMap.get(session.serviceId)?.name ?? session.priceSnapshot?.serviceName ?? ''
             return (
               <div key={session.id} className="absolute inset-x-1 z-10 pointer-events-none" style={{ top, height }}>
                 <SessionBlock

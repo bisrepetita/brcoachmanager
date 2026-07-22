@@ -2,27 +2,27 @@
 
 import { useState, useEffect } from 'react'
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
-import { Save, MessageCircle, Info } from 'lucide-react'
+import { Save, MessageCircle, Info, CalendarClock } from 'lucide-react'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/button'
 import { db } from '@/lib/firebase/firestore'
 
 const DEFAULT_TEMPLATE = 'Bonjour {prenom}, voici votre lien de paiement pour la séance du {date} : {lien}'
 const VARIABLES = ['{prenom}', '{date}', '{lien}']
+const DEFAULT_CANCELLATION_DEADLINE_HOURS = 24
 
 export default function AdminSettingsPage() {
   const [template, setTemplate] = useState('')
+  const [cancellationDeadlineHours, setCancellationDeadlineHours] = useState(DEFAULT_CANCELLATION_DEADLINE_HOURS)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
     getDoc(doc(db, 'settings', 'global')).then(snap => {
-      if (snap.exists() && snap.data().whatsappTemplate) {
-        setTemplate(snap.data().whatsappTemplate)
-      } else {
-        setTemplate(DEFAULT_TEMPLATE)
-      }
+      const data = snap.exists() ? snap.data() : undefined
+      setTemplate(data?.whatsappTemplate || DEFAULT_TEMPLATE)
+      setCancellationDeadlineHours(data?.groupSessionCancellationDeadlineHours ?? DEFAULT_CANCELLATION_DEADLINE_HOURS)
     }).finally(() => setLoading(false))
   }, [])
 
@@ -31,6 +31,7 @@ export default function AdminSettingsPage() {
     try {
       await setDoc(doc(db, 'settings', 'global'), {
         whatsappTemplate: template,
+        groupSessionCancellationDeadlineHours: cancellationDeadlineHours,
         updatedAt: serverTimestamp(),
       }, { merge: true })
       setSaved(true)
@@ -126,17 +127,6 @@ export default function AdminSettingsPage() {
             </div>
           )}
 
-          <div style={{ marginTop: 14 }}>
-            <Button
-              onClick={handleSave}
-              disabled={saving || loading}
-              style={{ display: 'flex', alignItems: 'center', gap: 8 }}
-            >
-              <Save size={15} />
-              {saved ? 'Enregistré ✓' : saving ? 'Enregistrement…' : 'Enregistrer'}
-            </Button>
-          </div>
-
           <button
             onClick={() => setTemplate(DEFAULT_TEMPLATE)}
             style={{
@@ -147,6 +137,45 @@ export default function AdminSettingsPage() {
             Réinitialiser par défaut
           </button>
         </section>
+
+        {/* Séances collectives */}
+        <section>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <CalendarClock size={16} color="#7A7570" />
+            <p style={{ fontSize: 12, fontWeight: 600, color: '#7A7570', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>
+              Séances collectives
+            </p>
+          </div>
+
+          <p style={{ fontSize: 13, color: '#7A7570', margin: '0 0 12px' }}>
+            Délai avant lequel un client peut annuler lui-même son inscription à une séance collective.
+          </p>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input
+              type="number"
+              min={0}
+              value={cancellationDeadlineHours}
+              onChange={e => setCancellationDeadlineHours(Math.max(0, Number(e.target.value)))}
+              style={{
+                width: 90, height: 40, borderRadius: 8, border: '1px solid #E5E1DA',
+                padding: '0 10px', fontSize: 14, color: '#1A1A18', background: '#fff', outline: 'none',
+              }}
+            />
+            <span style={{ fontSize: 14, color: '#1A1A18' }}>heures avant le début</span>
+          </div>
+        </section>
+
+        <div>
+          <Button
+            onClick={handleSave}
+            disabled={saving || loading}
+            style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+          >
+            <Save size={15} />
+            {saved ? 'Enregistré ✓' : saving ? 'Enregistrement…' : 'Enregistrer'}
+          </Button>
+        </div>
 
       </div>
     </>

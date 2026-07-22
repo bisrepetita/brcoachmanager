@@ -105,7 +105,7 @@ export function MonthView({ anchor, sessions, coachMap, serviceMap, onSessionCli
                       <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: coachColor }} />
                       <span className="text-[9px] truncate font-medium" style={{ color: '#1A1A18' }}>
                         {format(session.startAt.toDate(), 'HH:mm')}
-                        {' '}{serviceMap.get(session.serviceId)?.name ?? ''}
+                        {' '}{serviceMap.get(session.serviceId)?.name ?? session.priceSnapshot?.serviceName ?? ''}
                       </span>
                     </button>
                   )

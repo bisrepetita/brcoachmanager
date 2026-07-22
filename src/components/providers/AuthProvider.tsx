@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { onAuthStateChanged, signOut, type User as FirebaseUser } from 'firebase/auth'
-import { doc, getDoc, getDocFromCache } from 'firebase/firestore'
+import { doc, onSnapshot } from 'firebase/firestore'
 import { auth } from '@/lib/firebase/auth'
 import { db } from '@/lib/firebase/firestore'
 import type { User, UserRole } from '@/types'
@@ -13,6 +13,7 @@ interface AuthState {
   loading: boolean
   isAdmin: boolean
   isCoach: boolean
+  isClient: boolean
   logout: () => Promise<void>
 }
 
@@ -33,32 +34,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = React.useState(_cache.loading)
 
   React.useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+    let unsubUserDoc: (() => void) | undefined
+
+    const unsubscribe = onAuthStateChanged(auth, (fbUser) => {
+      unsubUserDoc?.()
+      unsubUserDoc = undefined
+
       _cache.firebaseUser = fbUser
-      _cache.loading = false
       setFirebaseUser(fbUser)
-      setLoading(false)
 
       if (!fbUser) {
         _cache.user = null
+        _cache.loading = false
         setUser(null)
+        setLoading(false)
         return
       }
 
-      try {
-        const userRef = doc(db, 'users', fbUser.uid)
-        let snap = await getDocFromCache(userRef).catch(() => null)
-        if (!snap) snap = await getDoc(userRef).catch(() => null)
-        const resolved = snap?.exists() ? ({ id: snap.id, ...snap.data() } as User) : null
+      // `loading` ne repasse à false qu'une fois le PROFIL chargé (pas juste l'auth Firebase) :
+      // sinon AuthGuard évalue isAdmin/isClient sur un état transitoire (user encore null) et
+      // redirige à tort, y compris pour un compte légitime, à chaque chargement de page frais.
+      // Listener temps réel plutôt qu'une lecture ponctuelle : juste après un signup, le doc
+      // `users/{uid}` peut ne pas encore exister côté serveur (écrit par /api/client-signup,
+      // en parallèle de ce callback) — un onSnapshot se corrige automatiquement dès qu'il
+      // apparaît, alors qu'une lecture unique resterait bloquée sur ce faux négatif.
+      const userRef = doc(db, 'users', fbUser.uid)
+      unsubUserDoc = onSnapshot(userRef, (snap) => {
+        const resolved = snap.exists() ? ({ id: snap.id, ...snap.data() } as User) : null
         _cache.user = resolved
+        _cache.loading = false
         setUser(resolved)
-      } catch {
+        setLoading(false)
+      }, () => {
         _cache.user = null
+        _cache.loading = false
         setUser(null)
-      }
+        setLoading(false)
+      })
     })
 
-    return unsubscribe
+    return () => {
+      unsubscribe()
+      unsubUserDoc?.()
+    }
   }, [])
 
   const logout = React.useCallback(async () => {
@@ -69,9 +87,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const roles: UserRole[] = user?.roles ?? []
   const isAdmin = roles.includes('admin')
   const isCoach = roles.includes('coach')
+  const isClient = roles.includes('client')
 
   return (
-    <AuthContext.Provider value={{ firebaseUser, user, loading, isAdmin, isCoach, logout }}>
+    <AuthContext.Provider value={{ firebaseUser, user, loading, isAdmin, isCoach, isClient, logout }}>
       {children}
     </AuthContext.Provider>
   )

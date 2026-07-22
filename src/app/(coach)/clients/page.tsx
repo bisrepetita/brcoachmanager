@@ -90,6 +90,7 @@ export default function ClientsPage() {
   const [postalCode, setPostalCode] = useState('')
   const [additionalInfo, setAdditionalInfo] = useState('')
   const [visibleCoachIds, setVisibleCoachIds] = useState<string[]>([])
+  const [hasEverBooked, setHasEverBooked] = useState(false)
 
   const filtered = useMemo(() => {
     let result = clients
@@ -113,13 +114,15 @@ export default function ClientsPage() {
     setAddress(''); setCity(''); setPostalCode(''); setAdditionalInfo('')
     // Pré-assigner le coach connecté (sauf admin qui voit tout)
     setVisibleCoachIds(isAdmin ? [] : (user?.id ? [user.id] : []))
+    setHasEverBooked(false)
     setError(null); setSheet('create')
   }
 
   function openEdit(c: Client) {
     setEditing(c); setFirstName(c.firstName); setLastName(c.lastName); setEmail(c.email ?? '')
     setPhone(c.phone ?? ''); setAddress(c.address ?? ''); setCity(c.city ?? '')
-    setPostalCode(c.postalCode ?? ''); setAdditionalInfo(c.additionalInfo ?? ''); setVisibleCoachIds(c.visibleToCoachIds ?? []); setError(null); setSheet('edit')
+    setPostalCode(c.postalCode ?? ''); setAdditionalInfo(c.additionalInfo ?? ''); setVisibleCoachIds(c.visibleToCoachIds ?? [])
+    setHasEverBooked(c.hasEverBooked ?? false); setError(null); setSheet('edit')
   }
 
   function close() { setSheet(null); setEditing(null); setConfirmDelete(false) }
@@ -177,6 +180,7 @@ export default function ClientsPage() {
         firstName: firstName.trim(), lastName: lastName.trim(),
         email, phone, address, city, postalCode, additionalInfo,
         visibleToCoachIds: visibleCoachIds,
+        hasEverBooked,
       }
       if (sheet === 'create') {
         const newId = await createDoc('clients', { ...data, sessionCredits: 0 })
@@ -382,6 +386,17 @@ export default function ClientsPage() {
             </FormField>
             <FormField label="Notes" hint="Visible par les coachs assignés à ce client">
               <Textarea value={additionalInfo} onChange={(e) => setAdditionalInfo(e.target.value)} placeholder="Blessures, préférences, objectifs..." />
+            </FormField>
+            <FormField label="Historique" hint="À cocher pour un client repris d'un autre outil (ex. ClassPass) ou qui a déjà été coaché avant l'app — l'empêche de bénéficier d'une offre « première réservation »">
+              <button type="button" onClick={() => setHasEverBooked(v => !v)}
+                className="w-full flex items-center gap-3 p-3 rounded-[var(--radius-md)] border text-left transition-colors"
+                style={{ background: hasEverBooked ? 'var(--color-accent-subtle)' : 'var(--color-surface)', borderColor: hasEverBooked ? 'var(--color-border-strong)' : 'var(--color-border)' }}>
+                <div className="w-4 h-4 rounded flex items-center justify-center shrink-0"
+                  style={{ background: hasEverBooked ? 'var(--color-accent)' : 'transparent', border: `2px solid ${hasEverBooked ? 'var(--color-accent)' : 'var(--color-border)'}` }}>
+                  {hasEverBooked && <span style={{ color: '#fff', fontSize: 10, fontWeight: 700 }}>✓</span>}
+                </div>
+                <span className="text-[13px] font-medium text-[var(--color-text-primary)]">Client déjà existant (non éligible aux offres 1ère réservation)</span>
+              </button>
             </FormField>
 
             <div>

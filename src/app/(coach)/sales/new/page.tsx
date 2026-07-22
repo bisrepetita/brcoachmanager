@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { orderBy, serverTimestamp, addDoc, collection } from 'firebase/firestore'
 import { ChevronLeft, Search, Users, User, Check, Plus } from 'lucide-react'
@@ -8,7 +8,12 @@ import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { useCollection } from '@/lib/hooks/useCollection'
 import { useAuth } from '@/lib/hooks/useAuth'
 import { db } from '@/lib/firebase/firestore'
-import type { Service, Client, ClientGroup, PricingMode, ClientPayment } from '@/types'
+import { updateDocById } from '@/lib/services/crud.service'
+import {
+  computeDiscountedAmount, matchesScope, findActiveClientDiscount,
+  lookupPromoCode, checkUsageLimits, recordRedemption, discountLabel,
+} from '@/lib/services/discount.service'
+import type { Service, Client, ClientGroup, PricingMode, ClientPayment, Discount } from '@/types'
 
 const label: React.CSSProperties = {
   fontSize: 11, fontWeight: 600, color: '#A09890',
@@ -50,6 +55,11 @@ export default function NewSalePage() {
   const [useCustomPrice, setUseCustomPrice] = useState(false)
   const [note, setNote] = useState('')
   const [saving, setSaving] = useState(false)
+  const [clientDiscounts, setClientDiscounts] = useState<Record<string, Discount>>({})
+  const [promoCodeInput, setPromoCodeInput] = useState('')
+  const [appliedPromoCode, setAppliedPromoCode] = useState<Discount | null>(null)
+  const [promoCodeError, setPromoCodeError] = useState('')
+  const [checkingPromo, setCheckingPromo] = useState(false)
 
   const selectedService = services.find(s => s.id === serviceId)
   const basePrice = isCustomService
@@ -64,6 +74,38 @@ export default function NewSalePage() {
     }
     return selectedClientIds
   }, [clientMode, selectedGroup, uncheckedMemberIds, selectedClientIds])
+
+  // Auto-détection des rabais client actifs (services du catalogue uniquement, pas les services ponctuels)
+  useEffect(() => {
+    setAppliedPromoCode(null); setPromoCodeInput(''); setPromoCodeError('')
+    if (isCustomService || !selectedService || effectiveClientIds.length === 0) { setClientDiscounts({}); return }
+    let cancelled = false
+    Promise.all(effectiveClientIds.map(async (cId) => [cId, await findActiveClientDiscount(cId, selectedService)] as const))
+      .then(results => {
+        if (cancelled) return
+        const map: Record<string, Discount> = {}
+        for (const [cId, d] of results) if (d) map[cId] = d
+        setClientDiscounts(map)
+      })
+    return () => { cancelled = true }
+  }, [isCustomService, selectedService, effectiveClientIds])
+
+  async function handleApplyPromoCode() {
+    if (!promoCodeInput.trim() || isCustomService || !selectedService) return
+    setCheckingPromo(true); setPromoCodeError('')
+    try {
+      const found = await lookupPromoCode(promoCodeInput)
+      if (!found || !matchesScope(found.scope, selectedService)) {
+        setPromoCodeError('Code invalide ou non applicable à ce service.')
+        return
+      }
+      const check = await checkUsageLimits(found, effectiveClientIds[0] ?? '')
+      if (!check.ok) { setPromoCodeError(check.error); return }
+      setAppliedPromoCode(found)
+    } finally {
+      setCheckingPromo(false)
+    }
+  }
 
   // Calcul du prix
   const totalPrice = useCustomPrice && customTotalPrice
@@ -117,11 +159,26 @@ export default function NewSalePage() {
       const serviceName = isCustomService ? customServiceName.trim() : selectedService!.name
       const serviceBasePrice = isCustomService ? (parseFloat(customServicePrice) || 0) : selectedService!.price
 
-      const distribution: ClientPayment[] = effectiveClientIds.map(cId => ({
-        clientId: cId,
-        amountDue: pricePerClient,
-        amountPaid: 0,
-        paymentStatus: 'payment_to_request',
+      const distribution: ClientPayment[] = await Promise.all(effectiveClientIds.map(async (cId) => {
+        if (!isCustomService && selectedService?.firstBookingFree && !clients.find(c => c.id === cId)?.hasEverBooked) {
+          return {
+            clientId: cId, amountDue: 0, amountPaid: 0, paymentStatus: 'offered' as const,
+            originalAmountDue: pricePerClient, discountLabel: 'Première réservation offerte',
+          }
+        }
+        const candidate = clientDiscounts[cId] ?? appliedPromoCode
+        if (!candidate) {
+          return { clientId: cId, amountDue: pricePerClient, amountPaid: 0, paymentStatus: 'payment_to_request' as const }
+        }
+        const check = await checkUsageLimits(candidate, cId)
+        if (!check.ok) {
+          return { clientId: cId, amountDue: pricePerClient, amountPaid: 0, paymentStatus: 'payment_to_request' as const }
+        }
+        return {
+          clientId: cId, amountDue: computeDiscountedAmount(pricePerClient, candidate), amountPaid: 0,
+          paymentStatus: 'payment_to_request' as const,
+          discountId: candidate.id, discountLabel: discountLabel(candidate), originalAmountDue: pricePerClient,
+        }
       }))
 
       const saleData = {
@@ -145,11 +202,22 @@ export default function NewSalePage() {
       }
 
       const ref = await addDoc(collection(db, 'sales'), saleData)
+
+      await Promise.all(distribution
+        .filter(p => p.discountId)
+        .map(p => recordRedemption({
+          discountId: p.discountId!, clientId: p.clientId, context: 'sale', refId: ref.id,
+          amountBefore: p.originalAmountDue!, amountAfter: p.amountDue,
+        })))
+
+      const toMark = effectiveClientIds.filter(id => !clients.find(c => c.id === id)?.hasEverBooked)
+      await Promise.all(toMark.map(id => updateDocById('clients', id, { hasEverBooked: true })))
+
       router.replace(`/sales/${ref.id}` as never)
     } catch {
       setSaving(false)
     }
-  }, [user, canSubmit, isCustomService, selectedService, customServiceName, customServicePrice, effectiveClientIds, pricePerClient, serviceId, clientMode, selectedGroupId, pricingMode, note, useCustomPrice, customTotalPrice])
+  }, [user, canSubmit, isCustomService, selectedService, customServiceName, customServicePrice, effectiveClientIds, pricePerClient, serviceId, clientMode, selectedGroupId, pricingMode, note, useCustomPrice, customTotalPrice, appliedPromoCode, clientDiscounts, clients])
 
   return (
     <>
@@ -408,6 +476,61 @@ export default function NewSalePage() {
                 </p>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Remise — services du catalogue uniquement (pas les services ponctuels) */}
+        {!isCustomService && serviceId && effectiveClientIds.length > 0 && (
+          <div style={card}>
+            <p style={label}>Remise</p>
+            {selectedService?.firstBookingFree && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 8 }}>
+                {effectiveClientIds.filter(id => !clients.find(c => c.id === id)?.hasEverBooked).map(id => {
+                  const c = clients.find(cl => cl.id === id)
+                  return (
+                    <p key={id} style={{ fontSize: 13, color: '#2D7A4F', margin: 0 }}>
+                      {c ? `${c.firstName} ${c.lastName}` : id} — 1ère réservation offerte
+                    </p>
+                  )
+                })}
+              </div>
+            )}
+            {Object.keys(clientDiscounts).length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 8 }}>
+                {effectiveClientIds.filter(id => clientDiscounts[id]).map(id => {
+                  const c = clients.find(cl => cl.id === id)
+                  const d = clientDiscounts[id]!
+                  return (
+                    <p key={id} style={{ fontSize: 13, color: '#2D7A4F', margin: 0 }}>
+                      {c ? `${c.firstName} ${c.lastName}` : id} — {d.discountType === 'percentage' ? `-${d.value}%` : `-${d.value.toFixed(2)} CHF`} ({discountLabel(d)})
+                    </p>
+                  )
+                })}
+              </div>
+            )}
+            {appliedPromoCode ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', background: '#E8F3EE', borderRadius: 8 }}>
+                <span style={{ fontSize: 13, color: '#2D7A4F' }}>Code {appliedPromoCode.code} appliqué</span>
+                <button onClick={() => { setAppliedPromoCode(null); setPromoCodeInput('') }} style={{ background: 'none', border: 'none', color: '#2D7A4F', cursor: 'pointer', fontSize: 12 }}>Retirer</button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input
+                  style={input}
+                  placeholder="Code promo (optionnel)"
+                  value={promoCodeInput}
+                  onChange={(e) => { setPromoCodeInput(e.target.value.toUpperCase()); setPromoCodeError('') }}
+                />
+                <button
+                  onClick={handleApplyPromoCode}
+                  disabled={checkingPromo || !promoCodeInput.trim()}
+                  style={{ padding: '0 14px', borderRadius: 8, border: 'none', background: '#1A1A18', color: '#fff', fontSize: 13, cursor: 'pointer', flexShrink: 0 }}
+                >
+                  {checkingPromo ? '…' : 'Appliquer'}
+                </button>
+              </div>
+            )}
+            {promoCodeError && <p style={{ fontSize: 12, color: '#C0392B', margin: '6px 0 0' }}>{promoCodeError}</p>}
           </div>
         )}
 

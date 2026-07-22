@@ -73,6 +73,23 @@
         { "fieldPath": "userId", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "groupSessions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "isPublic", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "startAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "sessions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clientIds", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "startAt", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

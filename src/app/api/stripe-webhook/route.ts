@@ -28,14 +28,37 @@ export async function POST(req: NextRequest) {
     const referenceId = checkoutSession.client_reference_id
     if (!referenceId) return NextResponse.json({ received: true })
 
+    const adminDb = getAdminDb()
+
+    if (referenceId.startsWith('groupSession__')) {
+      const [, groupSessionId, clientId] = referenceId.split('__')
+      if (!groupSessionId || !clientId) return NextResponse.json({ error: 'Invalid referenceId' }, { status: 400 })
+
+      const amountPaid = (checkoutSession.amount_total ?? 0) / 100
+      const groupSessionRef = adminDb.collection('groupSessions').doc(groupSessionId)
+
+      await adminDb.runTransaction(async (tx) => {
+        const snap = await tx.get(groupSessionRef)
+        if (!snap.exists) return
+        const data = snap.data()!
+        const enrollments = (data['enrollments'] as Record<string, unknown>[] | undefined) ?? []
+        const updated = enrollments.map((e) =>
+          e['clientId'] === clientId
+            ? { ...e, status: 'confirmed', paymentStatus: 'paid', amountPaid, paidAt: new Date(), stripeSessionId: checkoutSession.id }
+            : e
+        )
+        tx.update(groupSessionRef, { enrollments: updated, updatedAt: FieldValue.serverTimestamp() })
+      })
+
+      return NextResponse.json({ received: true })
+    }
+
     const sep = referenceId.lastIndexOf('__')
     if (sep === -1) return NextResponse.json({ error: 'Invalid referenceId' }, { status: 400 })
 
     const docId = referenceId.substring(0, sep)
     const clientId = referenceId.substring(sep + 2)
     const amountPaid = (checkoutSession.amount_total ?? 0) / 100
-
-    const adminDb = getAdminDb()
 
     // Résoudre la collection : sessions en priorité, puis sales
     let docRef = adminDb.collection('sessions').doc(docId)

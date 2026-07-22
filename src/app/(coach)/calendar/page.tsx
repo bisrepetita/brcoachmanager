@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo, useCallback, useEffect, useRef, useReducer } from 'react'
-import { extendInfiniteRecurrences } from '@/lib/services/recurrence.service'
+import { extendInfiniteRecurrences, extendInfiniteGroupSessionRecurrences } from '@/lib/services/recurrence.service'
 import { sendNotification } from '@/lib/services/notification.service'
 import { useRouter } from 'next/navigation'
 import {
@@ -19,6 +19,7 @@ import { DayView } from '@/components/calendar/DayView'
 import { WeekView } from '@/components/calendar/WeekView'
 import { MonthView } from '@/components/calendar/MonthView'
 import { useSessions } from '@/lib/hooks/useSessions'
+import { useGroupSessions } from '@/lib/hooks/useGroupSessions'
 import { useCollection } from '@/lib/hooks/useCollection'
 import type { User, Service, Session, Client, ClientGroup } from '@/types'
 
@@ -89,15 +90,60 @@ export default function CalendarPage() {
 
   const range = useMemo(() => getRange(view, anchor), [view, anchor])
   const { sessions } = useSessions(range.start, range.end)
+  const { groupSessions } = useGroupSessions(range.start, range.end)
   const { data: coaches } = useCollection<User>('users', [orderBy('firstName')])
   const { data: services } = useCollection<Service>('services', [orderBy('name')])
   const { data: clients } = useCollection<Client>('clients', [orderBy('firstName')])
   const { data: groups } = useCollection<ClientGroup>('clientGroups', [orderBy('name')])
 
   const coachMap = useMemo(() => new Map(coaches.map((c) => [c.id, c])), [coaches])
-  const serviceMap = useMemo(() => new Map(services.map((s) => [s.id, s])), [services])
+  const baseServiceMap = useMemo(() => new Map(services.map((s) => [s.id, s])), [services])
   const clientMap = useMemo(() => new Map(clients.map((c) => [c.id, c])), [clients])
-  const groupMap = useMemo(() => new Map(groups.map((g) => [g.id, g])), [groups])
+  const baseGroupMap = useMemo(() => new Map(groups.map((g) => [g.id, g])), [groups])
+
+  // Séances collectives : projetées en objets Session "virtuels" pour être affichées dans
+  // les mêmes vues (Day/Week/Month/SessionBlock) sans dupliquer leur logique de rendu.
+  const groupSessionIds = useMemo(() => new Set(groupSessions.map((gs) => gs.id)), [groupSessions])
+
+  const { virtualSessions, serviceMap, groupMap } = useMemo(() => {
+    const svcMap = new Map(baseServiceMap)
+    const grpMap = new Map(baseGroupMap)
+    const virtuals: Session[] = groupSessions.map((gs) => {
+      const confirmedCount = gs.enrollments.filter((e) => e.status !== 'cancelled').length
+      const fakeId = `__group__${gs.id}`
+      svcMap.set(fakeId, {
+        id: fakeId,
+        name: `${gs.title} (collectif)`,
+        price: gs.price,
+        pricingMode: 'per_person',
+        independentRoomRentalPrice: 0,
+        active: true,
+      } as Service)
+      grpMap.set(fakeId, {
+        id: fakeId,
+        name: `${confirmedCount}/${gs.maxParticipants} inscrits`,
+        clientIds: [],
+      } as unknown as ClientGroup)
+      return {
+        id: gs.id,
+        coachIds: gs.coachIds,
+        clientIds: new Array(confirmedCount).fill('_'),
+        clientGroupId: fakeId,
+        locationId: gs.locationId,
+        serviceId: fakeId,
+        startAt: gs.startAt,
+        endAt: gs.endAt,
+        isIndependent: false,
+        status: gs.status,
+        paymentStatus: 'payment_to_request',
+        paymentDistribution: [],
+        priceSnapshot: { serviceName: gs.title, basePrice: gs.price, pricingMode: 'per_person' },
+        createdAt: gs.createdAt,
+        updatedAt: gs.updatedAt,
+      } as Session
+    })
+    return { virtualSessions: virtuals, serviceMap: svcMap, groupMap: grpMap }
+  }, [groupSessions, baseServiceMap, baseGroupMap])
 
   // Événements Google Calendar
   const [externalEvents, setExternalEvents] = useState<{ uid: string; title: string; start: string; end: string }[]>([])
@@ -134,6 +180,7 @@ export default function CalendarPage() {
   // Prolonge les récurrences infinies si besoin (une fois par chargement de page)
   useEffect(() => {
     extendInfiniteRecurrences().catch(() => {})
+    extendInfiniteGroupSessionRecurrences().catch(() => {})
   }, [])
 
   // Rappels J-1 : cherche les séances de demain sans reminderSentAt
@@ -165,8 +212,12 @@ export default function CalendarPage() {
   }, [user?.id])
 
   const handleSessionClick = useCallback((session: Session) => {
-    router.push(`/sessions/${session.id}` as never)
-  }, [router])
+    if (groupSessionIds.has(session.id)) {
+      router.push(`/manage-group-sessions/${session.id}` as never)
+    } else {
+      router.push(`/sessions/${session.id}` as never)
+    }
+  }, [router, groupSessionIds])
 
   const handleDaySlotClick = useCallback((hour: number) => {
     const d = new Date(anchor)
@@ -190,9 +241,10 @@ export default function CalendarPage() {
   const [showCoachFilter, setShowCoachFilter] = useState(false)
 
   const filteredSessions = useMemo(() => {
-    if (!isAdmin || !visibleCoachIds) return sessions
-    return sessions.filter(s => s.coachIds?.some(id => visibleCoachIds.has(id)))
-  }, [sessions, isAdmin, visibleCoachIds])
+    const merged = [...sessions, ...virtualSessions]
+    if (!isAdmin || !visibleCoachIds) return merged
+    return merged.filter(s => s.coachIds?.some(id => visibleCoachIds.has(id)))
+  }, [sessions, virtualSessions, isAdmin, visibleCoachIds])
 
   const [slideDir, setSlideDir] = useState<'left' | 'right'>('left')
   const [slideKey, setSlideKey] = useState(0)
