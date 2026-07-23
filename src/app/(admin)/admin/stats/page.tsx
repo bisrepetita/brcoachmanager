@@ -18,9 +18,9 @@ interface PaymentLike {
   amountPaid: number
 }
 
-// Un paiement annulé ne doit jamais compter comme CA ni comme encaissé
+// Un paiement annulé ou offert (gratuit, jamais encaissable) ne doit jamais compter comme CA ni comme encaissé
 function paymentsRevenue(payments: PaymentLike[]): number {
-  return payments.filter(p => p.paymentStatus !== 'cancelled').reduce((a, p) => a + (p.amountDue ?? 0), 0)
+  return payments.filter(p => p.paymentStatus !== 'cancelled' && p.paymentStatus !== 'offered').reduce((a, p) => a + (p.amountDue ?? 0), 0)
 }
 function paymentsPaid(payments: PaymentLike[]): number {
   return payments.filter(p => p.paymentStatus !== 'cancelled').reduce((a, p) => a + (p.amountPaid ?? 0), 0)
@@ -289,7 +289,7 @@ export default function StatsPage() {
               ))}
             </div>
             <p style={{ fontSize: 11, color: '#A09890', textAlign: 'center', margin: 0 }}>
-              CA = séances privées + ventes ponctuelles + inscriptions Planning (loyers coachs indépendants inclus, hors loyers offerts)
+              CA = séances privées + ventes ponctuelles + inscriptions Planning (loyers coachs indépendants inclus, hors loyers et séances offerts)
             </p>
 
             {stats.cancelled > 0 && (
