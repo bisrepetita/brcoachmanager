@@ -1,7 +1,8 @@
 'use client'
 
 import * as React from 'react'
-import { useRouter } from 'next/navigation'
+import { Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { signInWithEmailAndPassword, sendPasswordResetEmail, type AuthError } from 'firebase/auth'
 import { doc, getDoc } from 'firebase/firestore'
 import { auth } from '@/lib/firebase/auth'
@@ -20,7 +21,17 @@ const FIREBASE_ERROR_MESSAGES: Record<string, string> = {
 }
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginPageContent />
+    </Suspense>
+  )
+}
+
+function LoginPageContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const redirectTo = searchParams.get('redirect') || undefined
   const [email, setEmail] = React.useState('')
   const [password, setPassword] = React.useState('')
   const [showPassword, setShowPassword] = React.useState(false)
@@ -29,7 +40,7 @@ export default function LoginPage() {
   const [resetMode, setResetMode] = React.useState(false)
   const [resetSent, setResetSent] = React.useState(false)
   const [resetLoading, setResetLoading] = React.useState(false)
-  const { error: googleError, setError: setGoogleError, signIn: signInWithGoogle, signingIn: googleLoading } = useGoogleAuthRedirect()
+  const { error: googleError, setError: setGoogleError, signIn: signInWithGoogle, signingIn: googleLoading } = useGoogleAuthRedirect(redirectTo)
 
   React.useEffect(() => {
     if (googleError) setError(googleError)
@@ -66,7 +77,7 @@ export default function LoginPage() {
       const userSnap = await getDoc(doc(db, 'users', cred.user.uid)).catch(() => null)
       const roles = (userSnap?.data()?.['roles'] as string[] | undefined) ?? []
       const isOnlyClient = roles.includes('client') && !roles.includes('coach') && !roles.includes('admin')
-      router.replace(isOnlyClient ? '/group-sessions' : '/calendar')
+      router.replace((redirectTo || (isOnlyClient ? '/group-sessions' : '/calendar')) as never)
     } catch (err) {
       const code = (err as AuthError).code
       setError(FIREBASE_ERROR_MESSAGES[code] ?? 'Une erreur est survenue. Réessaie.')
@@ -244,7 +255,7 @@ export default function LoginPage() {
 
         {!resetMode && (
           <button
-            type="button" onClick={() => router.push('/signup')}
+            type="button" onClick={() => router.push((redirectTo ? `/signup?redirect=${encodeURIComponent(redirectTo)}` : '/signup') as never)}
             className="w-full text-center text-[13px] mt-4" style={{ color: 'var(--color-text-tertiary)', background: 'none', border: 'none', cursor: 'pointer' }}
           >
             Client Bis Repetita ? Crée ton compte

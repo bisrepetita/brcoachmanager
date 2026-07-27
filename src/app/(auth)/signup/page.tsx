@@ -1,7 +1,8 @@
 'use client'
 
 import * as React from 'react'
-import { useRouter } from 'next/navigation'
+import { Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createUserWithEmailAndPassword, signOut, type AuthError } from 'firebase/auth'
 import { auth } from '@/lib/firebase/auth'
 import { useGoogleAuthRedirect } from '@/lib/hooks/useGoogleAuthRedirect'
@@ -16,7 +17,17 @@ const FIREBASE_ERROR_MESSAGES: Record<string, string> = {
 }
 
 export default function SignupPage() {
+  return (
+    <Suspense fallback={null}>
+      <SignupPageContent />
+    </Suspense>
+  )
+}
+
+function SignupPageContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const redirectTo = searchParams.get('redirect') || undefined
   const [firstName, setFirstName] = React.useState('')
   const [lastName, setLastName] = React.useState('')
   const [email, setEmail] = React.useState('')
@@ -25,7 +36,7 @@ export default function SignupPage() {
   const [showPassword, setShowPassword] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [loading, setLoading] = React.useState(false)
-  const { error: googleError, setError: setGoogleError, signIn: signInWithGoogle, signingIn: googleLoading } = useGoogleAuthRedirect()
+  const { error: googleError, setError: setGoogleError, signIn: signInWithGoogle, signingIn: googleLoading } = useGoogleAuthRedirect(redirectTo)
 
   React.useEffect(() => {
     if (googleError) setError(googleError)
@@ -55,7 +66,7 @@ export default function SignupPage() {
           throw new Error(body.error ?? 'Erreur lors de la création du profil')
         }
         document.cookie = 'br_session=1; path=/; max-age=86400; SameSite=Strict'
-        router.replace('/group-sessions')
+        router.replace((redirectTo || '/group-sessions') as never)
       } catch (linkErr) {
         // Le compte Auth existe mais le profil n'a pas pu être créé : on déconnecte
         // pour éviter un état incohérent, l'utilisateur peut réessayer.
@@ -120,9 +131,9 @@ export default function SignupPage() {
           </div>
 
           <div className="space-y-1.5">
-            <label htmlFor="phone" className="block text-[13px] font-medium" style={{ color: 'var(--color-text-secondary)' }}>Téléphone (optionnel)</label>
+            <label htmlFor="phone" className="block text-[13px] font-medium" style={{ color: 'var(--color-text-secondary)' }}>Téléphone</label>
             <input
-              id="phone" type="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)}
+              id="phone" type="tel" autoComplete="tel" required value={phone} onChange={(e) => setPhone(e.target.value)}
               placeholder="+41 79 000 00 00"
               style={{ borderRadius: 'var(--radius-input)', borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}
               className="w-full h-12 px-4 border text-[14px] outline-none transition-colors focus:border-[var(--color-border-strong)] placeholder:text-[var(--color-text-disabled)]"
@@ -160,7 +171,7 @@ export default function SignupPage() {
           </Button>
 
           <button
-            type="button" onClick={() => router.push('/login')}
+            type="button" onClick={() => router.push((redirectTo ? `/login?redirect=${encodeURIComponent(redirectTo)}` : '/login') as never)}
             className="w-full text-center text-[13px] mt-1" style={{ color: 'var(--color-text-tertiary)', background: 'none', border: 'none', cursor: 'pointer' }}
           >
             J&apos;ai déjà un compte

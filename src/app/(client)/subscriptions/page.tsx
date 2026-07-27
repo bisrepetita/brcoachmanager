@@ -37,6 +37,10 @@ export default function ClientSubscriptionsPage() {
   }, [profile, firebaseUser?.uid])
 
   async function handlePurchase(planId: string) {
+    if (!firebaseUser) {
+      router.push(`/login?redirect=${encodeURIComponent('/subscriptions')}` as never)
+      return
+    }
     setBusyPlanId(planId)
     setError('')
     try {
@@ -138,7 +142,7 @@ export default function ClientSubscriptionsPage() {
                             background: activeSubscription ? '#D5D1C9' : '#1A1A18', color: '#fff', fontSize: 13, fontWeight: 600,
                           }}
                         >
-                          {busyPlanId === plan.id ? 'Chargement...' : activeSubscription ? 'Déjà un abonnement actif' : 'Souscrire'}
+                          {busyPlanId === plan.id ? 'Chargement...' : activeSubscription ? 'Déjà un abonnement actif' : !firebaseUser ? 'Se connecter pour souscrire' : 'Souscrire'}
                         </button>
                       )}
                     </div>

@@ -17,13 +17,30 @@ import {
 } from '@/lib/services/subscription.service'
 import { GROUP_SESSION_LEVEL_LABELS, type GroupSession, type Discount, type ClientSubscription, type Building } from '@/types'
 
+interface PublicGroupSessionView {
+  id: string
+  title: string
+  description?: string
+  coachNames?: string[]
+  startAt: string
+  maxParticipants: number
+  price: number
+  level?: GroupSession['level']
+  confirmedCount: number
+  accessInstructions?: string
+  accessPhotos?: string[]
+}
+
 export default function ClientGroupSessionDetailPage() {
   const params = useParams<{ id: string }>()
   const router = useRouter()
   const { profile, loading: profileLoading } = useClientProfile()
-  const { firebaseUser } = useAuth()
+  const { firebaseUser, loading: authLoading } = useAuth()
   const [groupSession, setGroupSession] = useState<GroupSession | null>(null)
   const [loading, setLoading] = useState(true)
+  const [publicSession, setPublicSession] = useState<PublicGroupSessionView | null>(null)
+  const [publicLoading, setPublicLoading] = useState(true)
+  const [publicLightboxUrl, setPublicLightboxUrl] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [hasOverlap, setHasOverlap] = useState(false)
@@ -38,12 +55,26 @@ export default function ClientGroupSessionDetailPage() {
   const [showAccessInfo, setShowAccessInfo] = useState(false)
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
 
+  // Client connecté : lecture Firestore directe temps réel (comportement existant, inchangé).
+  // Anonyme : les règles Firestore exigent isClient()/isCoach(), donc on ne tente même pas la
+  // lecture — on passe par la route publique redacted à la place (cf. effet suivant).
   useEffect(() => {
+    if (authLoading || !firebaseUser) { setLoading(false); return }
     return onSnapshot(doc(db, 'groupSessions', params.id), snap => {
       setGroupSession(snap.exists() ? ({ id: snap.id, ...snap.data() } as GroupSession) : null)
       setLoading(false)
     }, () => setLoading(false))
-  }, [params.id])
+  }, [params.id, firebaseUser, authLoading])
+
+  useEffect(() => {
+    if (authLoading || firebaseUser) { setPublicLoading(false); return }
+    let cancelled = false
+    fetch(`/api/group-sessions/public/${params.id}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (!cancelled) setPublicSession(data) })
+      .finally(() => { if (!cancelled) setPublicLoading(false) })
+    return () => { cancelled = true }
+  }, [params.id, firebaseUser, authLoading])
 
   useEffect(() => {
     if (!profile) return
@@ -148,6 +179,144 @@ export default function ClientGroupSessionDetailPage() {
     } finally {
       setBusy(false)
     }
+  }
+
+  // Visiteur non connecté : rendu simplifié à partir de la route publique redacted — pas de
+  // vérification abonnement/remise/inscription (nécessitent une identité client), juste le prix
+  // de base et un bouton qui renvoie vers la connexion.
+  if (!authLoading && !firebaseUser) {
+    if (publicLoading) {
+      return (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
+          <p style={{ color: '#A09890', fontSize: 14 }}>Chargement…</p>
+        </div>
+      )
+    }
+    if (!publicSession) {
+      return (
+        <div style={{ padding: 40, textAlign: 'center' }}>
+          <p style={{ color: '#A09890', fontSize: 14 }}>Séance introuvable.</p>
+        </div>
+      )
+    }
+
+    const confirmedCount = publicSession.confirmedCount
+    const isFull = confirmedCount >= publicSession.maxParticipants
+    const date = format(new Date(publicSession.startAt), 'EEEE d MMMM yyyy · HH:mm', { locale: fr })
+    const loginHref = `/login?redirect=${encodeURIComponent(`/group-sessions/${params.id}`)}`
+
+    return (
+      <>
+        <TopBar
+          title={publicSession.title}
+          left={
+            <button onClick={() => router.push('/group-sessions' as never)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
+              <ChevronLeft size={20} color="#1A1A18" />
+            </button>
+          }
+        />
+        <TopBarSpacer />
+
+        <div style={{ padding: '12px 16px 100px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ background: '#fff', borderRadius: 10, padding: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+              <p style={{ fontSize: 13, color: '#7A7570', margin: 0, textTransform: 'capitalize' }}>{date}</p>
+              {publicSession.level && (
+                <span style={{ fontSize: 11, fontWeight: 600, color: '#1A1A18', background: '#F0EDE8', padding: '2px 8px', borderRadius: 20, flexShrink: 0 }}>
+                  {GROUP_SESSION_LEVEL_LABELS[publicSession.level]}
+                </span>
+              )}
+            </div>
+            {publicSession.coachNames && publicSession.coachNames.length > 0 && (
+              <p style={{ fontSize: 13, color: '#7A7570', margin: '4px 0 0' }}>
+                Avec <span style={{ fontWeight: 600, color: '#1A1A18' }}>{publicSession.coachNames.join(' & ')}</span>
+              </p>
+            )}
+            {publicSession.description && (
+              <p style={{ fontSize: 14, color: '#1A1A18', margin: '8px 0 0' }}>{publicSession.description}</p>
+            )}
+            <div style={{ display: 'flex', gap: 16, marginTop: 12 }}>
+              <div>
+                <p style={{ fontSize: 11, color: '#A09890', margin: 0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Places</p>
+                <p style={{ fontSize: 16, fontWeight: 600, color: isFull ? '#C0392B' : '#1A1A18', margin: '2px 0 0', fontFamily: 'monospace' }}>
+                  {confirmedCount}/{publicSession.maxParticipants}
+                </p>
+              </div>
+              <div>
+                <p style={{ fontSize: 11, color: '#A09890', margin: 0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Prix</p>
+                <p style={{ fontSize: 16, fontWeight: 600, margin: '2px 0 0', fontFamily: 'monospace', color: '#1A1A18' }}>
+                  {publicSession.price.toFixed(2)} CHF
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {(publicSession.accessInstructions || (publicSession.accessPhotos && publicSession.accessPhotos.length > 0)) && (
+            <div style={{ background: '#fff', borderRadius: 10, padding: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <MapPin size={15} color="#7A7570" style={{ flexShrink: 0 }} />
+                <span style={{ fontSize: 14, fontWeight: 600, color: '#1A1A18' }}>Comment nous trouver</span>
+              </div>
+              <div style={{ marginTop: 10 }}>
+                {publicSession.accessInstructions && (
+                  <p style={{ fontSize: 13, color: '#1A1A18', margin: 0, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                    {publicSession.accessInstructions}
+                  </p>
+                )}
+                {publicSession.accessPhotos && publicSession.accessPhotos.length > 0 && (
+                  <div style={{ display: 'flex', gap: 6, marginTop: 10, overflowX: 'auto' }}>
+                    {publicSession.accessPhotos.map((url, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => setPublicLightboxUrl(url)}
+                        style={{
+                          width: 90, height: 90, borderRadius: 8, flexShrink: 0, border: 'none', padding: 0, cursor: 'zoom-in',
+                          backgroundImage: `url(${url})`, backgroundSize: 'cover', backgroundPosition: 'center',
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <button
+            onClick={() => router.push(loginHref as never)}
+            disabled={isFull}
+            style={{
+              height: 44, borderRadius: 10, border: 'none', cursor: isFull ? 'not-allowed' : 'pointer',
+              background: isFull ? '#D5D1C9' : '#1A1A18', color: '#fff', fontSize: 14, fontWeight: 600,
+            }}
+          >
+            {isFull ? 'Complet' : 'Se connecter pour réserver'}
+          </button>
+        </div>
+
+        {publicLightboxUrl && (
+          <div
+            onClick={() => setPublicLightboxUrl(null)}
+            style={{
+              position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.9)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+            }}
+          >
+            <button
+              onClick={() => setPublicLightboxUrl(null)}
+              style={{
+                position: 'absolute', top: 16, right: 16, width: 36, height: 36, borderRadius: '50%',
+                background: 'rgba(255,255,255,0.15)', border: 'none', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <X size={18} color="#fff" />
+            </button>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={publicLightboxUrl} alt="" style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 8, objectFit: 'contain' }} />
+          </div>
+        )}
+      </>
+    )
   }
 
   if (loading || profileLoading) {

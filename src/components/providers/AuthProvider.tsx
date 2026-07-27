@@ -19,9 +19,14 @@ interface AuthState {
 
 export const AuthContext = React.createContext<AuthState | null>(null)
 
-// Module-level cache: survives HMR remounts.
-// When Turbopack recreates DynamicAuthProvider and remounts AuthProvider,
-// useState reads from here instead of resetting to loading=true.
+// Module-level cache: survives HMR remounts (when Turbopack recreates DynamicAuthProvider and
+// remounts AuthProvider, useState reads from here instead of resetting to loading=true).
+// UNIQUEMENT lu/écrit côté navigateur : ce module tourne aussi côté serveur (SSR/RSC, 'use client'
+// n'empêche pas le premier rendu serveur) où il vit dans le process Node — un objet mutable au
+// niveau module y est partagé entre TOUTES les requêtes concurrentes de TOUS les visiteurs. Un
+// visiteur anonyme pouvait ainsi hériter, le temps du premier rendu, de l'état d'authentification
+// laissé par une requête précédente d'un autre utilisateur sur ce même process serveur.
+const isBrowser = typeof window !== 'undefined'
 const _cache = {
   loading: true,
   firebaseUser: null as FirebaseUser | null,
@@ -29,9 +34,9 @@ const _cache = {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [firebaseUser, setFirebaseUser] = React.useState<FirebaseUser | null>(_cache.firebaseUser)
-  const [user, setUser] = React.useState<User | null>(_cache.user)
-  const [loading, setLoading] = React.useState(_cache.loading)
+  const [firebaseUser, setFirebaseUser] = React.useState<FirebaseUser | null>(isBrowser ? _cache.firebaseUser : null)
+  const [user, setUser] = React.useState<User | null>(isBrowser ? _cache.user : null)
+  const [loading, setLoading] = React.useState(isBrowser ? _cache.loading : true)
 
   React.useEffect(() => {
     let unsubUserDoc: (() => void) | undefined

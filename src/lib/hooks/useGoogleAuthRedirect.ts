@@ -15,14 +15,16 @@ const GOOGLE_ERROR_MESSAGES: Record<string, string> = {
 
 // Comptes existants → connexion normale (redirection selon rôle) ; comptes inconnus → traités
 // comme un signup client (les coachs sont toujours créés par l'admin en amont, jamais via ce chemin).
-async function finishGoogleSignIn(user: User, router: ReturnType<typeof useRouter>): Promise<string | null> {
+// `redirectTo` (ex: la séance publique consultée avant de se connecter) prend le pas sur la
+// redirection par défaut basée sur le rôle, quand fourni.
+async function finishGoogleSignIn(user: User, router: ReturnType<typeof useRouter>, redirectTo?: string): Promise<string | null> {
   const userSnap = await getDoc(doc(db, 'users', user.uid)).catch(() => null)
 
   if (userSnap?.exists()) {
     document.cookie = 'br_session=1; path=/; max-age=86400; SameSite=Strict'
     const roles = (userSnap.data()?.['roles'] as string[] | undefined) ?? []
     const isOnlyClient = roles.includes('client') && !roles.includes('coach') && !roles.includes('admin')
-    router.replace(isOnlyClient ? '/group-sessions' : '/calendar')
+    router.replace((redirectTo || (isOnlyClient ? '/group-sessions' : '/calendar')) as never)
     return null
   }
 
@@ -39,7 +41,7 @@ async function finishGoogleSignIn(user: User, router: ReturnType<typeof useRoute
       throw new Error(body.error ?? 'Erreur lors de la création du profil.')
     }
     document.cookie = 'br_session=1; path=/; max-age=86400; SameSite=Strict'
-    router.replace('/group-sessions')
+    router.replace((redirectTo || '/group-sessions') as never)
     return null
   } catch (err) {
     await signOut(auth).catch(() => {})
@@ -55,7 +57,7 @@ async function finishGoogleSignIn(user: User, router: ReturnType<typeof useRoute
  * sans être connecté. La popup partage la session du navigateur en cours et évite ce problème.
  * getRedirectResult() reste traité au montage comme filet de sécurité pour d'anciens flows en cours.
  */
-export function useGoogleAuthRedirect() {
+export function useGoogleAuthRedirect(redirectTo?: string) {
   const router = useRouter()
   const [checkingRedirect, setCheckingRedirect] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -68,12 +70,13 @@ export function useGoogleAuthRedirect() {
 
     getRedirectResult(auth).then(async (result) => {
       if (!result) { setCheckingRedirect(false); return }
-      const err = await finishGoogleSignIn(result.user, router)
+      const err = await finishGoogleSignIn(result.user, router, redirectTo)
       if (err) { setError(err); setCheckingRedirect(false) }
     }).catch((err: AuthError) => {
       setError(GOOGLE_ERROR_MESSAGES[err.code] ?? 'Erreur lors de la connexion avec Google.')
       setCheckingRedirect(false)
     })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router])
 
   async function signIn() {
@@ -81,7 +84,7 @@ export function useGoogleAuthRedirect() {
     setSigningIn(true)
     try {
       const result = await signInWithPopup(auth, googleProvider)
-      const err = await finishGoogleSignIn(result.user, router)
+      const err = await finishGoogleSignIn(result.user, router, redirectTo)
       if (err) setError(err)
     } catch (e) {
       const code = (e as AuthError)?.code

@@ -183,9 +183,10 @@ export async function POST(req: NextRequest) {
     })
 
     // Notifications email best-effort (jamais bloquantes) : le coach est informé dès
-    // l'inscription quel que soit le statut de paiement ; le client n'est notifié tout de suite
-    // que si la réservation est déjà définitivement confirmée (gratuite/abonnement) — sinon la
-    // confirmation client partira du webhook Stripe une fois le paiement reçu.
+    // l'inscription quel que soit le statut de paiement. Le client reçoit sa confirmation dès que
+    // la réservation est définitivement acquise — immédiatement ici si gratuite/offerte ou déjà
+    // couverte par un abonnement payé séparément, sinon seulement après paiement Stripe réel via
+    // le webhook (jamais pendant que le paiement est encore en attente).
     const isImmediatelyConfirmed = enrollment.amountDue === 0
     await notifyGroupSessionBooking(adminDb, {
       groupSessionId, clientId,

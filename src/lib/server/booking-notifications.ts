@@ -1,22 +1,12 @@
 import type { Firestore, Timestamp } from 'firebase-admin/firestore'
 import { sendEmail } from './email'
 import { groupSessionConfirmationEmail, coachNewEnrollmentEmail, subscriptionConfirmationEmail } from './email-templates'
+import { resolveAccessInstructions } from './building-admin'
 
 function formatDateTime(d: Date): string {
   const date = d.toLocaleDateString('fr-CH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
   const time = d.toLocaleTimeString('fr-CH', { hour: '2-digit', minute: '2-digit' })
   return `${date} à ${time}`
-}
-
-async function resolveAccessInstructions(adminDb: Firestore, locationId?: string): Promise<string | undefined> {
-  if (!locationId) return undefined
-  const locSnap = await adminDb.collection('locations').doc(locationId).get()
-  if (!locSnap.exists) return undefined
-  const buildingId = locSnap.data()?.['buildingId'] as string | undefined
-  if (!buildingId) return undefined
-  const buildingSnap = await adminDb.collection('buildings').doc(buildingId).get()
-  if (!buildingSnap.exists) return undefined
-  return buildingSnap.data()?.['accessInstructions'] as string | undefined
 }
 
 /**

@@ -5,8 +5,17 @@ import { useRouter } from 'next/navigation'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { useAuth } from '@/lib/hooks/useAuth'
 import { useClientProfile } from '@/lib/hooks/useClientProfile'
+import { AuthGuard } from '@/components/providers/AuthGuard'
 
 export default function ClientProfilePage() {
+  return (
+    <AuthGuard requireClient>
+      <ClientProfileContent />
+    </AuthGuard>
+  )
+}
+
+function ClientProfileContent() {
   const router = useRouter()
   const { logout } = useAuth()
   const { profile, loading } = useClientProfile()

@@ -55,7 +55,13 @@ service cloud.firestore {
     match /clients/{clientId} {
       allow read: if canReadClient(resource.data);
       allow create: if isCoach();
-      allow update: if isAdmin() || (isCoach() && canReadClient(resource.data));
+      // Un client peut renseigner son propre numéro de téléphone (ex: après une connexion Google,
+      // qui ne fournit pas ce champ) — rien d'autre, pour éviter qu'il modifie ses propres crédits,
+      // remises, etc.
+      allow update: if isAdmin() || (isCoach() && canReadClient(resource.data)) || (
+        isClient() && resource.data.uid == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['phone', 'updatedAt'])
+      );
       allow delete: if isAdmin();
     }
 
@@ -90,7 +96,11 @@ service cloud.firestore {
     // ─── subscriptionPlans (catalogue des plans d'abonnement) ────────────────
 
     match /subscriptionPlans/{planId} {
-      allow read: if isAuth();
+      // Consultable sans connexion pour les plans publics et actifs (page /subscriptions), comme
+      // le Planning — la requête côté client filtre explicitement sur ces deux champs, ce qui
+      // permet à Firestore de prouver la requête sûre même pour une requête non authentifiée
+      // (isAuth() est statiquement faux dans ce cas, donc évalué sans avoir besoin des documents).
+      allow read: if isAuth() || (resource.data.isPublic == true && resource.data.active == true);
       allow create, update, delete: if isAdmin();
     }
 

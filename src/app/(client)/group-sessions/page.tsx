@@ -11,11 +11,29 @@ import { fr } from 'date-fns/locale'
 import { Users2, CalendarDays, User, ChevronLeft, ChevronRight, SlidersHorizontal } from 'lucide-react'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { db } from '@/lib/firebase/firestore'
+import { useAuth } from '@/lib/hooks/useAuth'
 import { useClientProfile } from '@/lib/hooks/useClientProfile'
 import { useCollection } from '@/lib/hooks/useCollection'
-import { GROUP_SESSION_LEVEL_LABELS, type GroupSession, type Service } from '@/types'
+import { GROUP_SESSION_LEVEL_LABELS, type GroupSession, type GroupSessionLevel, type Service } from '@/types'
 
 type SortMode = 'date' | 'price_asc' | 'price_desc'
+
+// Vue normalisée commune aux deux sources de données : lecture Firestore directe (client connecté,
+// voit `enrollments` en direct) ou route publique redacted (visiteur non connecté — jamais accès
+// au détail des inscriptions/paiements des autres clients, juste un compteur de places prises).
+interface GroupSessionListItem {
+  id: string
+  title: string
+  description?: string
+  coachNames?: string[]
+  serviceId?: string
+  startAt: Date
+  maxParticipants: number
+  price: number
+  level?: GroupSessionLevel
+  confirmedCount: number
+  isEnrolled: boolean
+}
 
 function dayLabel(date: Date): string {
   if (isToday(date)) return "Aujourd'hui"
@@ -25,8 +43,9 @@ function dayLabel(date: Date): string {
 
 export default function ClientGroupSessionsPage() {
   const router = useRouter()
+  const { firebaseUser, loading: authLoading } = useAuth()
   const { profile } = useClientProfile()
-  const [items, setItems] = useState<GroupSession[]>([])
+  const [items, setItems] = useState<GroupSessionListItem[]>([])
   const [loading, setLoading] = useState(true)
   const { data: services } = useCollection<Service>('services', [])
   const serviceMap = useMemo(() => new Map(services.map(s => [s.id, s])), [services])
@@ -38,18 +57,43 @@ export default function ClientGroupSessionsPage() {
   const [weekAnchor, setWeekAnchor] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }))
 
   useEffect(() => {
-    const q = query(
-      collection(db, 'groupSessions'),
-      where('isPublic', '==', true),
-      where('status', '==', 'planned'),
-      where('startAt', '>=', Timestamp.now()),
-      orderBy('startAt', 'asc'),
-    )
-    return onSnapshot(q, snap => {
-      setItems(snap.docs.map(d => ({ id: d.id, ...d.data() } as GroupSession)))
-      setLoading(false)
-    }, () => setLoading(false))
-  }, [])
+    if (authLoading) return
+
+    // Client connecté : lecture Firestore directe temps réel (comportement existant, inchangé).
+    if (firebaseUser) {
+      const q = query(
+        collection(db, 'groupSessions'),
+        where('isPublic', '==', true),
+        where('status', '==', 'planned'),
+        where('startAt', '>=', Timestamp.now()),
+        orderBy('startAt', 'asc'),
+      )
+      return onSnapshot(q, snap => {
+        const raw = snap.docs.map(d => ({ id: d.id, ...d.data() } as GroupSession))
+        setItems(raw.map(gs => ({
+          id: gs.id, title: gs.title, description: gs.description, coachNames: gs.coachNames,
+          serviceId: gs.serviceId, startAt: gs.startAt.toDate(), maxParticipants: gs.maxParticipants,
+          price: gs.price, level: gs.level,
+          confirmedCount: gs.enrollments.filter(e => e.status !== 'cancelled').length,
+          isEnrolled: !!profile && gs.enrollments.some(e => e.clientId === profile.clientId && e.status !== 'cancelled'),
+        })))
+        setLoading(false)
+      }, () => setLoading(false))
+    }
+
+    // Visiteur non connecté : route publique redacted (pas de lecture Firestore directe possible,
+    // les règles exigent isClient()/isCoach()).
+    let cancelled = false
+    fetch('/api/group-sessions/public-list')
+      .then(r => r.ok ? r.json() : { items: [] })
+      .then(({ items: apiItems }: { items: Array<Omit<GroupSessionListItem, 'startAt' | 'isEnrolled'> & { startAt: string }> }) => {
+        if (cancelled) return
+        setItems((apiItems ?? []).map(it => ({ ...it, startAt: new Date(it.startAt), isEnrolled: false })))
+        setLoading(false)
+      })
+      .catch(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [firebaseUser, authLoading, profile])
 
   // Services proposant au moins une séance à venir — seuls ceux-là apparaissent comme filtres
   const availableServiceIds = useMemo(() => new Set(items.map(gs => gs.serviceId).filter(Boolean)), [items])
@@ -64,32 +108,27 @@ export default function ClientGroupSessionsPage() {
   const filtered = useMemo(() => {
     let result = items
     if (filterServiceId) result = result.filter(gs => gs.serviceId === filterServiceId)
-    if (onlyAvailable) result = result.filter(gs => gs.enrollments.filter(e => e.status !== 'cancelled').length < gs.maxParticipants)
-    result = result.filter(gs => {
-      const d = gs.startAt?.toDate?.()
-      return d ? isWithinInterval(d, { start: weekStart, end: weekEnd }) : false
-    })
+    if (onlyAvailable) result = result.filter(gs => gs.confirmedCount < gs.maxParticipants)
+    result = result.filter(gs => isWithinInterval(gs.startAt, { start: weekStart, end: weekEnd }))
     return result
   }, [items, filterServiceId, onlyAvailable, weekStart, weekEnd])
 
   // Regroupement par jour — le tri choisi ne s'applique qu'à l'intérieur de chaque journée
   const groups = useMemo(() => {
-    const byDay = new Map<string, GroupSession[]>()
+    const byDay = new Map<string, GroupSessionListItem[]>()
     filtered.forEach(gs => {
-      const d = gs.startAt?.toDate?.()
-      if (!d) return
-      const key = format(d, 'yyyy-MM-dd')
+      const key = format(gs.startAt, 'yyyy-MM-dd')
       if (!byDay.has(key)) byDay.set(key, [])
       byDay.get(key)!.push(gs)
     })
     return [...byDay.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([key, dayItems]) => ({
-        date: dayItems[0]!.startAt.toDate(),
+        date: dayItems[0]!.startAt,
         items: [...dayItems].sort((a, b) => {
           if (sortMode === 'price_asc') return a.price - b.price
           if (sortMode === 'price_desc') return b.price - a.price
-          return a.startAt.toMillis() - b.startAt.toMillis()
+          return a.startAt.getTime() - b.startAt.getTime()
         }),
       }))
   }, [filtered, sortMode])
@@ -218,12 +257,12 @@ export default function ClientGroupSessionsPage() {
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {group.items.map(gs => {
-                  const confirmedCount = gs.enrollments.filter(e => e.status !== 'cancelled').length
+                  const confirmedCount = gs.confirmedCount
                   const isFull = confirmedCount >= gs.maxParticipants
                   const spotsLeft = gs.maxParticipants - confirmedCount
                   const isAlmostFull = !isFull && spotsLeft <= 2
-                  const isEnrolled = !!profile && gs.enrollments.some(e => e.clientId === profile.clientId && e.status !== 'cancelled')
-                  const sessionDate = gs.startAt?.toDate ? gs.startAt.toDate() : null
+                  const isEnrolled = gs.isEnrolled
+                  const sessionDate = gs.startAt
                   const fillRatio = gs.maxParticipants > 0 ? Math.min(1, confirmedCount / gs.maxParticipants) : 0
                   const imageUrl = gs.serviceId ? serviceMap.get(gs.serviceId)?.imageUrl : undefined
 

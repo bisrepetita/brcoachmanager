@@ -5,13 +5,16 @@ import { useRouter } from 'next/navigation'
 import { collection, query, where, onSnapshot } from 'firebase/firestore'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { Ticket } from 'lucide-react'
+import { Ticket, Repeat, ChevronRight } from 'lucide-react'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { Badge } from '@/components/ui/badge'
 import { db } from '@/lib/firebase/firestore'
+import { useAuth } from '@/lib/hooks/useAuth'
 import { useClientProfile } from '@/lib/hooks/useClientProfile'
-import { GROUP_SESSION_ENROLLMENT_STATUS_LABELS } from '@/types'
-import type { GroupSession, GroupSessionEnrollmentStatus } from '@/types'
+import { findActiveSubscriptionForClient } from '@/lib/services/subscription.service'
+import { GROUP_SESSION_ENROLLMENT_STATUS_LABELS, DAY_OF_WEEK_LABELS } from '@/types'
+import type { GroupSession, GroupSessionEnrollmentStatus, ClientSubscription } from '@/types'
+import { AuthGuard } from '@/components/providers/AuthGuard'
 
 const BADGE_VARIANT: Record<GroupSessionEnrollmentStatus, 'payment_to_request' | 'paid' | 'cancelled'> = {
   pending_payment: 'payment_to_request',
@@ -20,10 +23,30 @@ const BADGE_VARIANT: Record<GroupSessionEnrollmentStatus, 'payment_to_request' |
 }
 
 export default function MyEnrollmentsPage() {
+  return (
+    <AuthGuard requireClient>
+      <MyEnrollmentsContent />
+    </AuthGuard>
+  )
+}
+
+function MyEnrollmentsContent() {
   const router = useRouter()
+  const { firebaseUser } = useAuth()
   const { profile, loading: profileLoading } = useClientProfile()
   const [items, setItems] = useState<GroupSession[]>([])
   const [loading, setLoading] = useState(true)
+  const [activeSubscription, setActiveSubscription] = useState<ClientSubscription | null>(null)
+  const [subLoading, setSubLoading] = useState(true)
+
+  useEffect(() => {
+    if (!profile || !firebaseUser?.uid) { setActiveSubscription(null); setSubLoading(false); return }
+    let cancelled = false
+    findActiveSubscriptionForClient(profile.clientId, firebaseUser.uid)
+      .then(sub => { if (!cancelled) setActiveSubscription(sub) })
+      .finally(() => { if (!cancelled) setSubLoading(false) })
+    return () => { cancelled = true }
+  }, [profile, firebaseUser?.uid])
 
   useEffect(() => {
     const q = query(
@@ -49,6 +72,45 @@ export default function MyEnrollmentsPage() {
     <>
       <TopBar title="Mes inscriptions" />
       <TopBarSpacer />
+
+      {!subLoading && (
+        <div style={{ padding: '12px 16px 0' }}>
+          {activeSubscription ? (
+            <button
+              onClick={() => router.push('/subscriptions' as never)}
+              style={{
+                width: '100%', textAlign: 'left', background: '#1A1A18', borderRadius: 12, padding: 16,
+                color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12,
+              }}
+            >
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Repeat size={15} />
+                  <p style={{ margin: 0, fontSize: 12, fontWeight: 600, opacity: 0.8 }}>Abonnement actif</p>
+                </div>
+                <p style={{ margin: '6px 0 0', fontSize: 15, fontWeight: 700 }}>{activeSubscription.planSnapshot.name}</p>
+                <p style={{ margin: '3px 0 0', fontSize: 12, opacity: 0.75 }}>
+                  Jusqu&apos;au {format(activeSubscription.endAt.toDate(), 'd MMMM yyyy', { locale: fr })} · {activeSubscription.planSnapshot.sessionsPerWeek}x/semaine
+                  {activeSubscription.planSnapshot.fixedSlot && ` · ${DAY_OF_WEEK_LABELS[activeSubscription.planSnapshot.fixedSlot.dayOfWeek]} ${activeSubscription.planSnapshot.fixedSlot.startTime}`}
+                </p>
+              </div>
+              <ChevronRight size={16} style={{ opacity: 0.7, flexShrink: 0 }} />
+            </button>
+          ) : (
+            <button
+              onClick={() => router.push('/subscriptions' as never)}
+              style={{
+                width: '100%', textAlign: 'left', background: '#fff', borderRadius: 12, padding: 14,
+                border: '1px dashed #C8C4BC', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10,
+              }}
+            >
+              <Repeat size={16} color="#7A7570" style={{ flexShrink: 0 }} />
+              <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: '#1A1A18' }}>Pas d&apos;abonnement — en prendre un</span>
+              <ChevronRight size={16} color="#A09890" style={{ flexShrink: 0 }} />
+            </button>
+          )}
+        </div>
+      )}
 
       {loading || profileLoading ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
