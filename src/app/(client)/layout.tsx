@@ -9,10 +9,10 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         <main style={{ paddingBottom: 'calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px))' }}>
           <AuthGuard requireClient>
             {children}
+            <BottomNavClient />
           </AuthGuard>
         </main>
       </div>
-      <BottomNavClient />
     </ToastProvider>
   )
 }

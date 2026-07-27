@@ -14,10 +14,10 @@ export default function CoachLayout({ children }: { children: React.ReactNode })
               <NotificationProvider>
                 {children}
               </NotificationProvider>
+              <BottomNav />
             </AuthGuard>
           </main>
         </div>
-        <BottomNav />
       </BurgerMenuProvider>
     </ToastProvider>
   )
