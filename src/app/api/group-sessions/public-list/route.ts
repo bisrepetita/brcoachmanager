@@ -15,17 +15,25 @@ export async function GET() {
       .orderBy('startAt', 'asc')
       .get()
 
+    // `services` n'est pas lisible par un visiteur anonyme (règle isAuth()) — on résout l'image de
+    // fond ici, côté serveur (Admin SDK, contourne les règles), pour le widget embed public.
+    const serviceIds = [...new Set(snap.docs.map((doc) => doc.data()['serviceId'] as string | undefined).filter((id): id is string => !!id))]
+    const serviceSnaps = await Promise.all(serviceIds.map((id) => adminDb.collection('services').doc(id).get()))
+    const serviceImageMap = new Map(serviceSnaps.filter((s) => s.exists).map((s) => [s.id, s.data()?.['imageUrl'] as string | undefined]))
+
     const items = snap.docs.map((doc) => {
       const d = doc.data()
       const enrollments = (d['enrollments'] as Array<{ status: string }> | undefined) ?? []
       const confirmedCount = enrollments.filter((e) => e.status !== 'cancelled').length
+      const serviceId = d['serviceId'] as string | undefined
       return {
         id: doc.id,
         title: d['title'],
         description: d['description'],
         coachNames: d['coachNames'],
         locationId: d['locationId'],
-        serviceId: d['serviceId'],
+        serviceId,
+        imageUrl: serviceId ? serviceImageMap.get(serviceId) : undefined,
         startAt: (d['startAt'] as Timestamp).toDate().toISOString(),
         endAt: (d['endAt'] as Timestamp).toDate().toISOString(),
         maxParticipants: d['maxParticipants'],
