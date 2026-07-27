@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback } from 'react'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { orderBy, where, doc, getDoc, updateDoc, collection, addDoc, serverTimestamp, writeBatch } from 'firebase/firestore'
+import { orderBy, where, doc, getDoc, updateDoc, collection, addDoc, serverTimestamp, writeBatch, Timestamp } from 'firebase/firestore'
 import { Check, ChevronRight, X, Gift, Banknote } from 'lucide-react'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { Badge } from '@/components/ui/badge'
@@ -18,7 +18,7 @@ import type { User, Session, RoomRentalPayment } from '@/types'
 async function updateRentalEntry(
   sessionId: string,
   coachId: string,
-  patch: Partial<{ status: 'pending' | 'paid' | 'waived'; paidAt: ReturnType<typeof serverTimestamp> }>
+  patch: Partial<{ status: 'pending' | 'paid' | 'waived'; paidAt: Timestamp }>
 ) {
   const ref = doc(db, 'sessions', sessionId)
   const snap = await getDoc(ref)
@@ -48,11 +48,13 @@ function GlobalPaySheet({
   const [amount, setAmount] = useState(totalPending.toFixed(2))
   const [note, setNote] = useState('')
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
 
   const handlePay = async () => {
     const paid = parseFloat(amount)
     if (!paid || paid <= 0) return
     setSaving(true)
+    setError('')
     try {
       // Marquer les séances les plus anciennes en premier jusqu'à épuisement du montant
       const sorted = [...pendingRows].sort((a, b) =>
@@ -73,7 +75,7 @@ function GlobalPaySheet({
           if (snap.exists()) {
             const session = snap.data() as Session
             const updated = (session.roomRentalSnapshot ?? []).map(e =>
-              e.coachId === coachId ? { ...e, status: 'paid', paidAt: serverTimestamp() } : e
+              e.coachId === coachId ? { ...e, status: 'paid', paidAt: Timestamp.now() } : e
             )
             batch.update(ref, { roomRentalSnapshot: updated })
           }
@@ -94,6 +96,7 @@ function GlobalPaySheet({
       onClose()
     } catch (e) {
       console.error(e)
+      setError(e instanceof Error ? e.message : 'Erreur lors de l\'enregistrement.')
       setSaving(false)
     }
   }
@@ -130,6 +133,7 @@ function GlobalPaySheet({
             style={{ height: 36, border: '1px solid #E5E1DA', borderRadius: 8, padding: '0 10px', fontSize: 14, color: '#1A1A18', background: '#F9F8F6', outline: 'none', width: '100%', boxSizing: 'border-box' }}
           />
         </div>
+        {error && <p style={{ fontSize: 13, color: '#C0392B', margin: 0 }}>{error}</p>}
         <button
           onClick={handlePay}
           disabled={saving}
@@ -167,15 +171,25 @@ export default function IndependentTrackingPage() {
   const handleMarkPaid = useCallback(async (sessionId: string) => {
     if (!selectedCoachId) return
     setActing(sessionId)
-    await updateRentalEntry(sessionId, selectedCoachId, { status: 'paid', paidAt: serverTimestamp() as any })
-    setActing(null)
+    try {
+      await updateRentalEntry(sessionId, selectedCoachId, { status: 'paid', paidAt: Timestamp.now() })
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erreur lors de l\'enregistrement du paiement.')
+    } finally {
+      setActing(null)
+    }
   }, [selectedCoachId])
 
   const handleMarkWaived = useCallback(async (sessionId: string) => {
     if (!selectedCoachId) return
     setActing(sessionId)
-    await updateRentalEntry(sessionId, selectedCoachId, { status: 'waived' })
-    setActing(null)
+    try {
+      await updateRentalEntry(sessionId, selectedCoachId, { status: 'waived' })
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erreur lors de l\'enregistrement.')
+    } finally {
+      setActing(null)
+    }
   }, [selectedCoachId])
 
   const selectedCoach = coaches.find(c => c.id === selectedCoachId)
