@@ -16,15 +16,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Token invalide' }, { status: 401 })
   }
 
-  const { firstName, lastName, phone } = (await req.json()) as {
-    firstName: string
-    lastName: string
-    phone?: string
-  }
+  const body = (await req.json()) as { firstName: string; lastName?: string; phone?: string }
+  const { firstName, phone } = body
+  // Nom de famille optionnel : la connexion Google dérive prénom/nom du displayName du compte,
+  // qui peut n'avoir qu'un seul mot (pas de nom de famille) — ça ne doit pas bloquer la création
+  // du compte, contrairement au signup email/mot de passe qui valide déjà les deux côté formulaire.
+  const lastName = body.lastName?.trim() ?? ''
   const email = tokenEmail
   if (!email) return NextResponse.json({ error: 'Email manquant sur le compte' }, { status: 400 })
-  if (!firstName?.trim() || !lastName?.trim()) {
-    return NextResponse.json({ error: 'Prénom et nom requis' }, { status: 400 })
+  if (!firstName?.trim()) {
+    return NextResponse.json({ error: 'Prénom requis' }, { status: 400 })
   }
 
   try {
