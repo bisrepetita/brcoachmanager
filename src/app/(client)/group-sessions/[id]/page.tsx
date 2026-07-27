@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { doc, onSnapshot, getDoc } from 'firebase/firestore'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { ChevronLeft, Tag, Repeat, MapPin, ChevronDown, ChevronUp } from 'lucide-react'
+import { ChevronLeft, Tag, Repeat, MapPin, ChevronDown, ChevronUp, X } from 'lucide-react'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { db } from '@/lib/firebase/firestore'
 import { useClientProfile } from '@/lib/hooks/useClientProfile'
@@ -36,6 +36,7 @@ export default function ClientGroupSessionDetailPage() {
   const [subscriptionQuotaOk, setSubscriptionQuotaOk] = useState(false)
   const [accessBuilding, setAccessBuilding] = useState<Building | null>(null)
   const [showAccessInfo, setShowAccessInfo] = useState(false)
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
 
   useEffect(() => {
     return onSnapshot(doc(db, 'groupSessions', params.id), snap => {
@@ -260,7 +261,14 @@ export default function ClientGroupSessionDetailPage() {
                 {accessBuilding.photos && accessBuilding.photos.length > 0 && (
                   <div style={{ display: 'flex', gap: 6, marginTop: 10, overflowX: 'auto' }}>
                     {accessBuilding.photos.map((url, idx) => (
-                      <div key={idx} style={{ width: 90, height: 90, borderRadius: 8, flexShrink: 0, backgroundImage: `url(${url})`, backgroundSize: 'cover', backgroundPosition: 'center' }} />
+                      <button
+                        key={idx}
+                        onClick={() => setLightboxUrl(url)}
+                        style={{
+                          width: 90, height: 90, borderRadius: 8, flexShrink: 0, border: 'none', padding: 0, cursor: 'zoom-in',
+                          backgroundImage: `url(${url})`, backgroundSize: 'cover', backgroundPosition: 'center',
+                        }}
+                      />
                     ))}
                   </div>
                 )}
@@ -372,6 +380,29 @@ export default function ClientGroupSessionDetailPage() {
           </div>
         )}
       </div>
+
+      {lightboxUrl && (
+        <div
+          onClick={() => setLightboxUrl(null)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.9)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+          }}
+        >
+          <button
+            onClick={() => setLightboxUrl(null)}
+            style={{
+              position: 'absolute', top: 16, right: 16, width: 36, height: 36, borderRadius: '50%',
+              background: 'rgba(255,255,255,0.15)', border: 'none', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <X size={18} color="#fff" />
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={lightboxUrl} alt="" style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 8, objectFit: 'contain' }} />
+        </div>
+      )}
     </>
   )
 }
