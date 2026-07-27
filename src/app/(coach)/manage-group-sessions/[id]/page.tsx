@@ -5,11 +5,14 @@ import { useParams, useRouter } from 'next/navigation'
 import { doc, onSnapshot, updateDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { ChevronLeft, X, Pencil } from 'lucide-react'
+import { ChevronLeft, X, Pencil, UserPlus } from 'lucide-react'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { FormField } from '@/components/ui/form-field'
 import { db } from '@/lib/firebase/firestore'
-import { adminCancelGroupSessionEnrollment } from '@/lib/services/group-session.service'
+import { adminCancelGroupSessionEnrollment, adminAddGuestToGroupSession } from '@/lib/services/group-session.service'
 import { GROUP_SESSION_LEVEL_LABELS, type GroupSession, type Client, type GroupSessionEnrollmentStatus } from '@/types'
 
 const ENROLLMENT_BADGE_VARIANT: Record<GroupSessionEnrollmentStatus, 'payment_to_request' | 'paid' | 'cancelled'> = {
@@ -24,6 +27,14 @@ const ENROLLMENT_LABEL: Record<GroupSessionEnrollmentStatus, string> = {
   cancelled: 'Annulé',
 }
 
+type GuestPaymentStatus = 'paid' | 'offered' | 'payment_to_request'
+
+const GUEST_PAYMENT_OPTIONS: { value: GuestPaymentStatus; label: string }[] = [
+  { value: 'paid', label: 'Payé' },
+  { value: 'offered', label: 'Offert' },
+  { value: 'payment_to_request', label: 'À encaisser' },
+]
+
 export default function GroupSessionDetailPage() {
   const params = useParams<{ id: string }>()
   const router = useRouter()
@@ -31,7 +42,14 @@ export default function GroupSessionDetailPage() {
   const [clients, setClients] = useState<Record<string, Client>>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [cancellingClientId, setCancellingClientId] = useState<string | null>(null)
+  const [cancellingId, setCancellingId] = useState<string | null>(null)
+
+  const [showAddGuest, setShowAddGuest] = useState(false)
+  const [guestName, setGuestName] = useState('')
+  const [guestPaymentStatus, setGuestPaymentStatus] = useState<GuestPaymentStatus>('paid')
+  const [guestAmount, setGuestAmount] = useState('')
+  const [addingGuest, setAddingGuest] = useState(false)
+  const [guestError, setGuestError] = useState<string | null>(null)
 
   useEffect(() => {
     return onSnapshot(doc(db, 'groupSessions', params.id), snap => {
@@ -42,7 +60,8 @@ export default function GroupSessionDetailPage() {
 
   useEffect(() => {
     if (!groupSession || groupSession.enrollments.length === 0) return
-    const clientIds = groupSession.enrollments.map(e => e.clientId)
+    const clientIds = groupSession.enrollments.map(e => e.clientId).filter((id): id is string => !!id)
+    if (clientIds.length === 0) return
     getDocs(query(collection(db, 'clients'), where('__name__', 'in', clientIds.slice(0, 10))))
       .then(snap => {
         const map: Record<string, Client> = {}
@@ -65,19 +84,44 @@ export default function GroupSessionDetailPage() {
     }
   }
 
-  async function cancelEnrollment(clientId: string, alreadyPaid: boolean) {
-    if (cancellingClientId) return
+  async function cancelEnrollment(target: { clientId?: string; enrollmentId?: string }, alreadyPaid: boolean) {
+    if (cancellingId) return
     const warning = alreadyPaid
-      ? 'Ce client a déjà payé — aucun remboursement automatique ne sera déclenché. Annuler quand même son inscription ?'
-      : 'Annuler l\'inscription de ce client ?'
+      ? 'Ce participant a déjà payé — aucun remboursement automatique ne sera déclenché. Annuler quand même son inscription ?'
+      : 'Annuler l\'inscription de ce participant ?'
     if (!confirm(warning)) return
-    setCancellingClientId(clientId)
+    const id = target.clientId ?? target.enrollmentId!
+    setCancellingId(id)
     try {
-      await adminCancelGroupSessionEnrollment(params.id, clientId)
+      await adminCancelGroupSessionEnrollment(params.id, target)
     } catch (err) {
       alert((err as Error).message)
     } finally {
-      setCancellingClientId(null)
+      setCancellingId(null)
+    }
+  }
+
+  function openAddGuest() {
+    setGuestName(''); setGuestPaymentStatus('paid')
+    setGuestAmount(groupSession ? String(groupSession.price) : '')
+    setGuestError(null)
+    setShowAddGuest(true)
+  }
+
+  async function handleAddGuest() {
+    if (!guestName.trim()) { setGuestError('Le nom est requis.'); return }
+    setAddingGuest(true); setGuestError(null)
+    try {
+      await adminAddGuestToGroupSession(params.id, {
+        guestName: guestName.trim(),
+        paymentStatus: guestPaymentStatus,
+        ...(guestPaymentStatus === 'paid' ? { amountPaid: parseFloat(guestAmount) || 0 } : {}),
+      })
+      setShowAddGuest(false)
+    } catch (err) {
+      setGuestError((err as Error).message)
+    } finally {
+      setAddingGuest(false)
     }
   }
 
@@ -113,6 +157,7 @@ export default function GroupSessionDetailPage() {
   }
 
   const confirmedCount = groupSession.enrollments.filter(e => e.status !== 'cancelled').length
+  const isFull = confirmedCount >= groupSession.maxParticipants
   const date = groupSession.startAt?.toDate ? format(groupSession.startAt.toDate(), 'EEEE d MMMM yyyy · HH:mm', { locale: fr }) : '—'
 
   return (
@@ -167,26 +212,46 @@ export default function GroupSessionDetailPage() {
         </div>
 
         <div style={{ background: '#fff', borderRadius: 10, padding: '12px 14px' }}>
-          <p style={{ fontSize: 11, fontWeight: 600, color: '#A09890', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>
-            Inscrits ({groupSession.enrollments.filter(e => e.status !== 'cancelled').length})
-          </p>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <p style={{ fontSize: 11, fontWeight: 600, color: '#A09890', textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0 }}>
+              Inscrits ({confirmedCount})
+            </p>
+            {groupSession.status === 'planned' && (
+              <button
+                onClick={openAddGuest}
+                disabled={isFull}
+                title={isFull ? 'Séance complète' : 'Ajouter un invité'}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none',
+                  cursor: isFull ? 'not-allowed' : 'pointer', color: isFull ? '#C8C4BC' : '#1A1A18',
+                  fontSize: 12, fontWeight: 600, padding: 0,
+                }}
+              >
+                <UserPlus size={14} /> Ajouter
+              </button>
+            )}
+          </div>
           {groupSession.enrollments.length === 0 ? (
             <p style={{ fontSize: 13, color: '#A09890', margin: 0 }}>Aucune inscription pour l&apos;instant.</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {groupSession.enrollments.map(e => {
-                const client = clients[e.clientId]
-                const isCancelling = cancellingClientId === e.clientId
+                const client = e.clientId ? clients[e.clientId] : undefined
+                const displayName = client ? `${client.firstName} ${client.lastName}` : e.guestName ?? e.clientId ?? '—'
+                const key = e.id ?? e.clientId ?? displayName
+                const cancelTarget = e.clientId ? { clientId: e.clientId } : { enrollmentId: e.id }
+                const isCancelling = cancellingId === (e.clientId ?? e.id)
                 return (
-                  <div key={e.clientId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0' }}>
-                    <span style={{ fontSize: 14, color: '#1A1A18' }}>
-                      {client ? `${client.firstName} ${client.lastName}` : e.clientId}
+                  <div key={key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0' }}>
+                    <span style={{ fontSize: 14, color: '#1A1A18', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {displayName}
+                      {!e.clientId && <Badge variant="muted">Invité</Badge>}
                     </span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <Badge variant={ENROLLMENT_BADGE_VARIANT[e.status]}>{ENROLLMENT_LABEL[e.status]}</Badge>
                       {e.status !== 'cancelled' && (
                         <button
-                          onClick={() => cancelEnrollment(e.clientId, e.paymentStatus === 'paid')}
+                          onClick={() => cancelEnrollment(cancelTarget, e.paymentStatus === 'paid')}
                           disabled={isCancelling}
                           title="Annuler cette inscription"
                           style={{
@@ -231,6 +296,50 @@ export default function GroupSessionDetailPage() {
           </div>
         )}
       </div>
+
+      {showAddGuest && (
+        <div className="fixed inset-0 z-[60] flex flex-col justify-end">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowAddGuest(false)} />
+          <div className="relative bg-[var(--color-surface)] rounded-t-[20px] p-6 space-y-4 max-h-[90dvh] overflow-y-auto" style={{ boxShadow: 'var(--shadow-sheet)' }}>
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-[17px] font-semibold">Ajouter un invité</h2>
+              <button onClick={() => setShowAddGuest(false)} className="text-[13px] text-[var(--color-text-tertiary)]">Annuler</button>
+            </div>
+
+            <p className="text-[12px] text-[var(--color-text-tertiary)] -mt-2">
+              Pour une personne de passage — aucune fiche client n&apos;est créée.
+            </p>
+
+            <FormField label="Nom" required>
+              <Input value={guestName} onChange={(e) => setGuestName(e.target.value)} placeholder="Prénom Nom" autoFocus />
+            </FormField>
+
+            <div>
+              <p className="text-[11px] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wide mb-2">Paiement</p>
+              <div className="flex gap-2">
+                {GUEST_PAYMENT_OPTIONS.map(opt => (
+                  <button key={opt.value} type="button" onClick={() => setGuestPaymentStatus(opt.value)}
+                    className="flex-1 py-2 rounded-[var(--radius-md)] border text-[13px] font-medium"
+                    style={{ background: guestPaymentStatus === opt.value ? '#1A1A18' : 'var(--color-surface)', color: guestPaymentStatus === opt.value ? '#fff' : 'var(--color-text-primary)', borderColor: guestPaymentStatus === opt.value ? '#1A1A18' : 'var(--color-border)' }}>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {guestPaymentStatus === 'paid' && (
+              <FormField label="Montant encaissé (CHF)">
+                <Input type="number" min="0" step="0.5" value={guestAmount} onChange={(e) => setGuestAmount(e.target.value)} />
+              </FormField>
+            )}
+
+            {guestError && <p className="text-[13px] text-[var(--color-danger)]">{guestError}</p>}
+            <Button size="lg" className="w-full" onClick={handleAddGuest} loading={addingGuest}>
+              Ajouter à la séance
+            </Button>
+          </div>
+        </div>
+      )}
     </>
   )
 }

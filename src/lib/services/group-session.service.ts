@@ -1,6 +1,6 @@
 import { getAuth } from 'firebase/auth'
 import { firebaseApp } from '@/lib/firebase/config'
-import type { GroupSessionEnrollment } from '@/types'
+import type { GroupSessionEnrollment, PaymentStatus } from '@/types'
 
 async function callApi<T>(path: string, body: Record<string, unknown>): Promise<T> {
   const auth = getAuth(firebaseApp)
@@ -31,9 +31,17 @@ export function cancelGroupSessionEnrollment(groupSessionId: string): Promise<{ 
   return callApi('/api/group-sessions/cancel', { groupSessionId })
 }
 
-/** Annulation d'un client par le coach/admin — pas de délai, pas de vérification que c'est "son" inscription. */
-export function adminCancelGroupSessionEnrollment(groupSessionId: string, clientId: string): Promise<{ ok: true }> {
-  return callApi('/api/group-sessions/admin-cancel-enrollment', { groupSessionId, clientId })
+/** Annulation d'un participant par le coach/admin — pas de délai, pas de vérification que c'est
+ * "son" inscription. `target.enrollmentId` pour un invité (pas de clientId), sinon `target.clientId`. */
+export function adminCancelGroupSessionEnrollment(groupSessionId: string, target: { clientId?: string; enrollmentId?: string }): Promise<{ ok: true }> {
+  return callApi('/api/group-sessions/admin-cancel-enrollment', { groupSessionId, ...target })
+}
+
+/** Ajoute un invité (pas de fiche `clients` créée) à une séance collective — réservé coach/admin. */
+export function adminAddGuestToGroupSession(
+  groupSessionId: string, opts: { guestName: string; paymentStatus: PaymentStatus; amountPaid?: number }
+): Promise<{ enrollment: GroupSessionEnrollment }> {
+  return callApi('/api/group-sessions/admin-add-guest', { groupSessionId, ...opts })
 }
 
 export function requestGroupSessionPaymentLink(groupSessionId: string): Promise<{ checkoutUrl: string }> {

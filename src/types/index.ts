@@ -210,7 +210,14 @@ export type GroupSessionLevel = 'debutant' | 'intermediaire' | 'avance' | 'tous_
 export type GroupSessionEnrollmentStatus = 'pending_payment' | 'confirmed' | 'cancelled'
 
 export interface GroupSessionEnrollment {
-  clientId: string
+  // Identifiant stable de l'inscription — obligatoire pour un invité (pas de clientId), sert alors
+  // à l'identifier pour l'annulation (voir admin-cancel-enrollment). Absent sur les inscriptions
+  // client historiques, qui restent identifiées par clientId.
+  id?: string
+  // Absent pour un invité ajouté manuellement par le coach/admin (guestName renseigné à la place) —
+  // ce participant n'a pas de fiche dans la collection `clients`.
+  clientId?: string
+  guestName?: string
   status: GroupSessionEnrollmentStatus
   amountDue: number
   amountPaid: number

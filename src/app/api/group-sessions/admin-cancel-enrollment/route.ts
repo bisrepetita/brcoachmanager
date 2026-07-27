@@ -3,7 +3,7 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { getAdminDb, getAdminAuth } from '@/lib/firebase/admin'
 import { findConsumptionRefsInTransaction, removeConsumptionsInTransaction } from '@/lib/server/subscription-admin'
 
-type ServerEnrollment = Record<string, unknown> & { clientId: string; status: string; paymentStatus: string; amountPaid: number; subscriptionId?: string }
+type ServerEnrollment = Record<string, unknown> & { id?: string; clientId?: string; status: string; paymentStatus: string; amountPaid: number; subscriptionId?: string }
 
 export async function POST(req: NextRequest) {
   const token = req.headers.get('authorization')?.replace('Bearer ', '')
@@ -16,8 +16,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Token invalide' }, { status: 401 })
   }
 
-  const { groupSessionId, clientId } = (await req.json()) as { groupSessionId?: string; clientId?: string }
-  if (!groupSessionId || !clientId) return NextResponse.json({ error: 'groupSessionId et clientId requis' }, { status: 400 })
+  // `enrollmentId` identifie un invité (pas de clientId) — cf. admin-add-guest.
+  const { groupSessionId, clientId, enrollmentId } = (await req.json()) as { groupSessionId?: string; clientId?: string; enrollmentId?: string }
+  if (!groupSessionId || (!clientId && !enrollmentId)) {
+    return NextResponse.json({ error: 'groupSessionId et clientId ou enrollmentId requis' }, { status: 400 })
+  }
 
   try {
     const adminDb = getAdminDb()
@@ -36,8 +39,10 @@ export async function POST(req: NextRequest) {
 
       const data = snap.data()!
       const enrollments = (data['enrollments'] as ServerEnrollment[] | undefined) ?? []
-      const idx = enrollments.findIndex((e) => e.clientId === clientId && e.status !== 'cancelled')
-      if (idx === -1) throw new HttpError(404, 'Aucune inscription active pour ce client')
+      const idx = enrollments.findIndex((e) =>
+        (enrollmentId ? e.id === enrollmentId : e.clientId === clientId) && e.status !== 'cancelled'
+      )
+      if (idx === -1) throw new HttpError(404, 'Aucune inscription active pour ce participant')
 
       const entry = enrollments[idx]!
 
@@ -57,13 +62,14 @@ export async function POST(req: NextRequest) {
     })
 
     if (cancelledEntry.paymentStatus === 'paid') {
+      const target = clientId ? `client ${clientId}` : `invité "${cancelledEntry.guestName as string | undefined}"`
       await adminDb.collection('activityLogs').add({
         userId: uid,
         userFirstName: '',
         userLastName: '',
         action: 'group_session_cancelled_after_payment',
-        description: `Inscription annulée manuellement par le coach après paiement (${cancelledEntry.amountPaid} CHF) — client ${clientId}, séance ${groupSessionId}`,
-        clientId,
+        description: `Inscription annulée manuellement par le coach après paiement (${cancelledEntry.amountPaid} CHF) — ${target}, séance ${groupSessionId}`,
+        ...(clientId ? { clientId } : {}),
         createdAt: FieldValue.serverTimestamp(),
       })
     }
