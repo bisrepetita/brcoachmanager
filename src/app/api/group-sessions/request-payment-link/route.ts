@@ -40,6 +40,7 @@ export async function POST(req: NextRequest) {
       title: `${data['title']} — ${clientDoc['firstName']} ${clientDoc['lastName']}`,
       amountCHF: entry['amountDue'] as number,
       clientEmail: clientDoc['email'] as string | undefined,
+      baseUrl: req.nextUrl.origin,
     })
 
     const updated = enrollments.map((e) =>

@@ -9,12 +9,13 @@ export async function createGroupSessionCheckout(opts: {
   title: string
   amountCHF: number
   clientEmail?: string
+  baseUrl: string
 }): Promise<{ url: string; id: string }> {
   const stripeKey = process.env.STRIPE_SECRET_KEY
   if (!stripeKey) throw new Error('STRIPE_SECRET_KEY manquant')
 
   const stripe = new Stripe(stripeKey, { apiVersion })
-  const successUrl = process.env.STRIPE_SUCCESS_URL || 'https://g.page/r/CWNO2cYqxHNDEAE/review'
+  const successUrl = process.env.STRIPE_SUCCESS_URL || `${opts.baseUrl}/paiement-confirme`
   const cancelUrl = process.env.STRIPE_RETURN_URL || 'https://bisrepetita.ch'
 
   const checkoutSession = await stripe.checkout.sessions.create({

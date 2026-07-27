@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
     const clientSnap = await adminDb.collection('clients').doc(clientId).get()
     const client = clientSnap.data() as { firstName: string; lastName: string; email?: string } | undefined
     const clientName = client ? `${client.firstName} ${client.lastName}` : clientId
-    const successUrl = process.env.STRIPE_SUCCESS_URL ?? 'https://g.page/r/CWNO2cYqxHNDEAE/review'
+    const successUrl = process.env.STRIPE_SUCCESS_URL || `${req.nextUrl.origin}/paiement-confirme`
     const cancelUrl = process.env.STRIPE_RETURN_URL ?? 'https://bisrepetita.ch'
 
     // Label produit : pour une séance on inclut la date, pour une vente non

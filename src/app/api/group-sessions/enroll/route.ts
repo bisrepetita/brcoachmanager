@@ -157,6 +157,7 @@ export async function POST(req: NextRequest) {
       title: `${groupSessionData['title']} — ${clientDoc['firstName']} ${clientDoc['lastName']}`,
       amountCHF: enrollment.amountDue as number,
       clientEmail: clientDoc['email'] as string | undefined,
+      baseUrl: req.nextUrl.origin,
     })
 
     const enrollments = (groupSessionData['enrollments'] as Record<string, unknown>[])
