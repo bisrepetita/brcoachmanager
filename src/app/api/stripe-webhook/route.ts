@@ -3,6 +3,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 import Stripe from 'stripe'
 import { getAdminDb } from '@/lib/firebase/admin'
 import { activateSubscriptionFromWebhookInTransaction } from '@/lib/server/subscription-admin'
+import { notifyGroupSessionBooking, notifySubscriptionPurchase } from '@/lib/server/booking-notifications'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2026-05-27.dahlia' as any })
@@ -51,6 +52,14 @@ export async function POST(req: NextRequest) {
         tx.update(groupSessionRef, { enrollments: updated, updatedAt: FieldValue.serverTimestamp() })
       })
 
+      // Confirmation client best-effort (le coach a déjà été notifié à l'inscription) — le
+      // paiement vient d'arriver, la réservation n'était encore que 'pending_payment'.
+      await notifyGroupSessionBooking(adminDb, {
+        groupSessionId, clientId,
+        notifyCoaches: false, notifyClient: true,
+        amountPaid, paymentLabel: 'Payé',
+      })
+
       return NextResponse.json({ received: true })
     }
 
@@ -59,11 +68,22 @@ export async function POST(req: NextRequest) {
       if (!clientSubscriptionId || !clientId) return NextResponse.json({ error: 'Invalid referenceId' }, { status: 400 })
 
       const amountPaid = (checkoutSession.amount_total ?? 0) / 100
-      await adminDb.runTransaction((tx) =>
+      const result = await adminDb.runTransaction((tx) =>
         activateSubscriptionFromWebhookInTransaction(tx, adminDb, {
           clientSubscriptionId, clientId, stripeSessionId: checkoutSession.id, amountPaid,
         })
       )
+
+      if (result === 'activated') {
+        const subSnap = await adminDb.collection('clientSubscriptions').doc(clientSubscriptionId).get()
+        const planSnapshot = subSnap.data()?.['planSnapshot'] as { name: string; price: number } | undefined
+        const endAt = subSnap.data()?.['endAt']
+        if (planSnapshot && endAt) {
+          await notifySubscriptionPurchase(adminDb, {
+            clientId, planName: planSnapshot.name, price: planSnapshot.price, endAt,
+          })
+        }
+      }
 
       return NextResponse.json({ received: true })
     }

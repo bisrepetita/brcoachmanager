@@ -10,10 +10,22 @@ import {
   findActiveSubscriptionInTransaction, matchesCoverage,
   countWeeklyConsumptionsInTransaction, recordConsumptionInTransaction,
 } from '@/lib/server/subscription-admin'
+import { notifyGroupSessionBooking } from '@/lib/server/booking-notifications'
 
 // Type "loose" côté serveur : le type partagé GroupSessionEnrollment (src/types) pointe sur le
 // Timestamp du SDK client, incompatible avec firebase-admin/firestore côté API route.
 type ServerEnrollment = Record<string, unknown> & { clientId: string; status: string }
+
+function paymentLabelFor(paymentStatus: string): string {
+  switch (paymentStatus) {
+    case 'credits': return 'Abonnement'
+    case 'offered': return 'Offert'
+    case 'paid': return 'Payé'
+    case 'payment_to_request':
+    case 'link_sent': return 'Paiement en attente'
+    default: return paymentStatus
+  }
+}
 
 export async function POST(req: NextRequest) {
   const token = req.headers.get('authorization')?.replace('Bearer ', '')
@@ -170,9 +182,22 @@ export async function POST(req: NextRequest) {
       return newEnrollment
     })
 
+    // Notifications email best-effort (jamais bloquantes) : le coach est informé dès
+    // l'inscription quel que soit le statut de paiement ; le client n'est notifié tout de suite
+    // que si la réservation est déjà définitivement confirmée (gratuite/abonnement) — sinon la
+    // confirmation client partira du webhook Stripe une fois le paiement reçu.
+    const isImmediatelyConfirmed = enrollment.amountDue === 0
+    await notifyGroupSessionBooking(adminDb, {
+      groupSessionId, clientId,
+      notifyCoaches: true,
+      notifyClient: isImmediatelyConfirmed,
+      amountPaid: (enrollment.amountPaid as number) ?? 0,
+      paymentLabel: paymentLabelFor(enrollment.paymentStatus as string),
+    })
+
     // Séance offerte (1ère réservation) : déjà confirmée dans la transaction, pas de paiement à
     // générer — on court-circuite Stripe entièrement.
-    if (enrollment.amountDue === 0) {
+    if (isImmediatelyConfirmed) {
       return NextResponse.json({ enrollment })
     }
 
