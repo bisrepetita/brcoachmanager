@@ -213,6 +213,7 @@ export default function EditGroupSessionPage() {
       serviceId, title: title.trim(), description: description.trim(),
       coachIds, coachNames, locationId, maxParticipants, price,
       level: level || deleteField(),
+      dayOfWeek: startDate.getDay(), startTime,
       startAt: Timestamp.fromDate(startDate),
       endAt: Timestamp.fromDate(endDate),
       updatedAt: serverTimestamp(),
@@ -221,7 +222,7 @@ export default function EditGroupSessionPage() {
       userId: user!.id, userFirstName: user!.firstName, userLastName: user!.lastName,
       action: 'session_edited', description: `Séance collective "${title.trim()}"`, sessionId: groupSessionId,
     })
-  }, [selectedService, buildStartEnd, groupSessionId, serviceId, title, description, coachIds, coachNames, locationId, maxParticipants, price, level, user])
+  }, [selectedService, buildStartEnd, groupSessionId, serviceId, title, description, coachIds, coachNames, locationId, maxParticipants, price, level, startTime, user])
 
   const doSaveWithNewRecurrence = useCallback(async () => {
     if (!selectedService || recurrence === 'none') return
@@ -258,6 +259,7 @@ export default function EditGroupSessionPage() {
       serviceId, title: title.trim(), description: description.trim(),
       coachIds, coachNames, locationId, maxParticipants, price,
       level: level || deleteField(),
+      dayOfWeek: startDate.getDay(), startTime,
       startAt: Timestamp.fromDate(startDate),
       endAt: Timestamp.fromDate(addMinutes(startDate, duration)),
       recurrenceId: recurrenceRef.id,
@@ -272,6 +274,7 @@ export default function EditGroupSessionPage() {
         ...(description.trim() ? { description: description.trim() } : {}),
         coachIds, coachNames, locationId, maxParticipants, price,
         ...(level ? { level } : {}),
+        dayOfWeek: occDate.getDay(), startTime,
         status: 'planned', isPublic: true,
         enrollments: [], recurrenceId: recurrenceRef.id, createdBy: user!.id,
         startAt: Timestamp.fromDate(occDate),
@@ -299,6 +302,7 @@ export default function EditGroupSessionPage() {
         serviceId, title: title.trim(), description: description.trim(),
         coachIds, coachNames, locationId, maxParticipants, price,
         level: level || deleteField(),
+        dayOfWeek: startDate.getDay(), startTime,
         startAt: Timestamp.fromDate(startDate),
         endAt: Timestamp.fromDate(endDate),
         updatedAt: serverTimestamp(),
@@ -322,6 +326,7 @@ export default function EditGroupSessionPage() {
           serviceId, title: title.trim(), description: description.trim(),
           coachIds, coachNames, locationId, maxParticipants, price,
           level: level || deleteField(),
+          dayOfWeek: newStart.getDay(), startTime,
           startAt: Timestamp.fromDate(newStart),
           endAt: Timestamp.fromDate(newEnd),
           updatedAt: serverTimestamp(),

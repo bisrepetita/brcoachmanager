@@ -1,15 +1,20 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { doc, getDoc, collection, query, where, getDocs, orderBy } from 'firebase/firestore'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { ChevronLeft, ChevronRight, Phone, Mail, MapPin, CreditCard } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Phone, Mail, MapPin, CreditCard, Repeat, X } from 'lucide-react'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { db } from '@/lib/firebase/firestore'
 import { useCollection } from '@/lib/hooks/useCollection'
-import type { Client, Session, Service } from '@/types'
+import { useAuth } from '@/lib/hooks/useAuth'
+import {
+  findActiveSubscriptionForClient, activateClientSubscriptionManually, cancelClientSubscription,
+} from '@/lib/services/subscription.service'
+import { SUBSCRIPTION_DURATION_UNIT_LABELS, DAY_OF_WEEK_LABELS } from '@/types'
+import type { Client, Session, Service, SubscriptionPlan, ClientSubscription, PaymentStatus } from '@/types'
 
 const PAYMENT_STATUS_LABELS: Record<string, string> = {
   payment_to_request: 'À demander',
@@ -41,6 +46,25 @@ export default function ClientDetailPage() {
 
   const { data: services } = useCollection<Service>('services', [orderBy('name')])
   const serviceMap = useMemo(() => new Map(services.map(s => [s.id, s])), [services])
+  const { data: plans } = useCollection<SubscriptionPlan>('subscriptionPlans', [])
+  const assignablePlans = useMemo(() => plans.filter(p => p.active), [plans])
+
+  const { user } = useAuth()
+  const [activeSubscription, setActiveSubscription] = useState<ClientSubscription | null>(null)
+  const [subLoading, setSubLoading] = useState(true)
+  const [showAssignSheet, setShowAssignSheet] = useState(false)
+  const [assignPlanId, setAssignPlanId] = useState('')
+  const [assignPaymentStatus, setAssignPaymentStatus] = useState<PaymentStatus>('paid')
+  const [assigning, setAssigning] = useState(false)
+  const [assignError, setAssignError] = useState('')
+
+  const reloadSubscription = useCallback(() => {
+    if (!clientId) return
+    setSubLoading(true)
+    findActiveSubscriptionForClient(clientId)
+      .then(setActiveSubscription)
+      .finally(() => setSubLoading(false))
+  }, [clientId])
 
   useEffect(() => {
     if (!clientId) return
@@ -56,7 +80,43 @@ export default function ClientDetailPage() {
         data.sort((a, b) => b.startAt.seconds - a.startAt.seconds)
         setSessions(data)
       }).catch(() => {})
-  }, [clientId])
+    reloadSubscription()
+  }, [clientId, reloadSubscription])
+
+  function openAssignSheet() {
+    setAssignPlanId(assignablePlans[0]?.id ?? '')
+    setAssignPaymentStatus('paid')
+    setAssignError('')
+    setShowAssignSheet(true)
+  }
+
+  async function handleAssign() {
+    const plan = assignablePlans.find(p => p.id === assignPlanId)
+    if (!plan || !user) { setAssignError('Choisis un plan.'); return }
+    setAssigning(true); setAssignError('')
+    try {
+      await activateClientSubscriptionManually({
+        clientId,
+        plan,
+        paymentStatus: assignPaymentStatus,
+        amountPaid: assignPaymentStatus === 'paid' || assignPaymentStatus === 'credits' ? plan.price : 0,
+        createdBy: user.id,
+      })
+      setShowAssignSheet(false)
+      reloadSubscription()
+    } catch (err) {
+      setAssignError(err instanceof Error ? err.message : 'Erreur lors de l\'attribution.')
+    } finally {
+      setAssigning(false)
+    }
+  }
+
+  async function handleCancelSubscription() {
+    if (!activeSubscription) return
+    if (!confirm('Annuler l\'abonnement actif de ce client ?')) return
+    await cancelClientSubscription(activeSubscription.id, clientId)
+    reloadSubscription()
+  }
 
   const doneSessions = useMemo(() => sessions.filter(s => s.status === 'done'), [sessions])
   const plannedSessions = useMemo(() => sessions.filter(s => s.status === 'planned'), [sessions])
@@ -109,6 +169,37 @@ export default function ClientDetailPage() {
             <CreditCard size={14} color="#A09890" />
             <p style={{ margin: 0, fontSize: 14, color: '#1A1A18' }}>{client.sessionCredits} crédit{client.sessionCredits !== 1 ? 's' : ''}</p>
           </div>
+        </div>
+
+        {/* Abonnement */}
+        <div style={{ background: '#fff', borderRadius: 12, padding: '12px 14px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: activeSubscription || !subLoading ? 8 : 0 }}>
+            <Repeat size={14} color="#A09890" />
+            <p style={{ margin: 0, fontSize: 11, fontWeight: 600, color: '#A09890', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Abonnement</p>
+          </div>
+          {subLoading ? (
+            <p style={{ margin: 0, fontSize: 13, color: '#A09890' }}>Chargement…</p>
+          ) : activeSubscription ? (
+            <div>
+              <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#1A1A18' }}>{activeSubscription.planSnapshot.name}</p>
+              <p style={{ margin: '2px 0 8px', fontSize: 12, color: '#7A7570' }}>
+                Actif jusqu'au {format(activeSubscription.endAt.toDate(), 'd MMMM yyyy', { locale: fr })} · {activeSubscription.planSnapshot.sessionsPerWeek}x/semaine
+                {activeSubscription.planSnapshot.fixedSlot && ` · ${DAY_OF_WEEK_LABELS[activeSubscription.planSnapshot.fixedSlot.dayOfWeek]} ${activeSubscription.planSnapshot.fixedSlot.startTime}`}
+              </p>
+              <button onClick={handleCancelSubscription}
+                style={{ padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 500, background: '#FDECEA', color: '#C0392B' }}>
+                Annuler l'abonnement
+              </button>
+            </div>
+          ) : (
+            <div>
+              <p style={{ margin: '0 0 8px', fontSize: 13, color: '#A09890' }}>Aucun abonnement actif.</p>
+              <button onClick={openAssignSheet} disabled={assignablePlans.length === 0}
+                style={{ padding: '6px 12px', borderRadius: 8, border: 'none', cursor: assignablePlans.length === 0 ? 'default' : 'pointer', fontSize: 12, fontWeight: 500, background: '#1A1A18', color: '#fff', opacity: assignablePlans.length === 0 ? 0.4 : 1 }}>
+                Attribuer un abonnement
+              </button>
+            </div>
+          )}
         </div>
 
         {/* KPIs paiement */}
@@ -175,6 +266,48 @@ export default function ClientDetailPage() {
           })}
         </div>
       </div>
+
+      {showAssignSheet && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+          <div onClick={() => setShowAssignSheet(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }} />
+          <div style={{ position: 'relative', background: '#fff', borderRadius: '16px 16px 0 0', padding: '20px 16px 32px', maxHeight: '85dvh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <p style={{ fontSize: 16, fontWeight: 700, color: '#1A1A18', margin: 0 }}>Attribuer un abonnement</p>
+              <button onClick={() => setShowAssignSheet(false)} style={{ padding: 4, background: 'none', border: 'none', cursor: 'pointer', color: '#7A7570' }}><X size={20} /></button>
+            </div>
+
+            <p style={{ fontSize: 12, fontWeight: 600, color: '#A09890', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 8px' }}>Plan</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
+              {assignablePlans.map(plan => (
+                <button key={plan.id} onClick={() => setAssignPlanId(plan.id)}
+                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2, padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${assignPlanId === plan.id ? '#1A1A18' : '#E5E1DA'}`, background: assignPlanId === plan.id ? '#F5F3F0' : '#fff', cursor: 'pointer', textAlign: 'left' }}>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: '#1A1A18' }}>{plan.name}</span>
+                  <span style={{ fontSize: 12, color: '#7A7570' }}>
+                    CHF {plan.price.toFixed(2)} · {plan.durationValue} {SUBSCRIPTION_DURATION_UNIT_LABELS[plan.durationUnit]} · {plan.sessionsPerWeek}x/semaine
+                    {plan.fixedSlot && ` · ${DAY_OF_WEEK_LABELS[plan.fixedSlot.dayOfWeek]} ${plan.fixedSlot.startTime}`}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            <p style={{ fontSize: 12, fontWeight: 600, color: '#A09890', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 8px' }}>Statut du paiement</p>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
+              {(['paid', 'payment_to_request', 'offered', 'credits'] as PaymentStatus[]).map(status => (
+                <button key={status} onClick={() => setAssignPaymentStatus(status)}
+                  style={{ padding: '6px 12px', borderRadius: 20, border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 600, background: assignPaymentStatus === status ? '#1A1A18' : '#F0EDE8', color: assignPaymentStatus === status ? '#fff' : '#1A1A18' }}>
+                  {PAYMENT_STATUS_LABELS[status]}
+                </button>
+              ))}
+            </div>
+
+            {assignError && <p style={{ fontSize: 13, color: '#C0392B', margin: '0 0 12px' }}>{assignError}</p>}
+            <button onClick={handleAssign} disabled={assigning || !assignPlanId}
+              style={{ width: '100%', height: 46, borderRadius: 10, border: 'none', cursor: 'pointer', background: '#1A1A18', color: '#fff', fontSize: 14, fontWeight: 600, opacity: assigning || !assignPlanId ? 0.6 : 1 }}>
+              {assigning ? 'Attribution…' : 'Attribuer'}
+            </button>
+          </div>
+        </div>
+      )}
     </>
   )
 }

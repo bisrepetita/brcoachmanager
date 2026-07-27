@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { getAdminDb, getAdminAuth } from '@/lib/firebase/admin'
+import { findConsumptionRefsInTransaction, removeConsumptionsInTransaction } from '@/lib/server/subscription-admin'
 
 // Type "loose" côté serveur : le type partagé GroupSessionEnrollment (src/types) pointe sur le
 // Timestamp du SDK client, incompatible avec firebase-admin/firestore côté API route.
-type ServerEnrollment = Record<string, unknown> & { clientId: string; status: string; paymentStatus: string; amountPaid: number }
+type ServerEnrollment = Record<string, unknown> & { clientId: string; status: string; paymentStatus: string; amountPaid: number; subscriptionId?: string }
 
 const DEFAULT_DEADLINE_HOURS = 24
 
@@ -53,6 +54,15 @@ export async function POST(req: NextRequest) {
       }
 
       const entry = enrollments[idx]!
+
+      // Contrairement aux remises (qui restent "consommées" même après annulation), un quota
+      // hebdomadaire d'abonnement est une ressource récurrente activement payée — on le libère.
+      const consumptionRefs = entry.subscriptionId
+        ? await findConsumptionRefsInTransaction(
+            tx, adminDb.collection('clientSubscriptions').doc(entry.subscriptionId), groupSessionId
+          )
+        : []
+
       const updated = [...enrollments]
       updated[idx] = { ...entry, status: 'cancelled', cancelledAt: Timestamp.now() }
 
@@ -60,6 +70,7 @@ export async function POST(req: NextRequest) {
         enrollments: updated,
         updatedAt: FieldValue.serverTimestamp(),
       })
+      removeConsumptionsInTransaction(tx, consumptionRefs)
 
       return entry
     })

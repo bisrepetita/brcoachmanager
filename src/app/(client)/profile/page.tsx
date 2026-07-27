@@ -1,6 +1,6 @@
 'use client'
 
-import { ChevronLeft, LogOut, User } from 'lucide-react'
+import { ChevronLeft, LogOut, User, Repeat, ChevronRight } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { useAuth } from '@/lib/hooks/useAuth'
@@ -40,6 +40,19 @@ export default function ClientProfilePage() {
         ) : (
           <p style={{ fontSize: 13, color: '#A09890' }}>Profil introuvable.</p>
         )}
+
+        <button
+          onClick={() => router.push('/subscriptions' as never)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            height: 52, borderRadius: 10, border: '1px solid #E5E1DA', cursor: 'pointer',
+            background: '#fff', padding: '0 14px',
+          }}
+        >
+          <Repeat size={16} color="#7A7570" />
+          <span style={{ flex: 1, textAlign: 'left', fontSize: 14, fontWeight: 500, color: '#1A1A18' }}>Mon abonnement</span>
+          <ChevronRight size={16} color="#A09890" />
+        </button>
 
         <button
           onClick={logout}

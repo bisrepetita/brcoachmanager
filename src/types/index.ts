@@ -39,6 +39,7 @@ export interface Client {
   visibleToCoachIds: string[]
   uid?: string
   hasEverBooked?: boolean
+  activeSubscriptionId?: string
   createdAt: Timestamp
   updatedAt: Timestamp
 }
@@ -208,6 +209,7 @@ export interface GroupSessionEnrollment {
   discountLabel?: string
   originalAmountDue?: number
   offeredReason?: string
+  subscriptionId?: string
 }
 
 export interface GroupSession {
@@ -220,6 +222,11 @@ export interface GroupSession {
   serviceId?: string
   startAt: Timestamp
   endAt: Timestamp
+  // Dénormalisés depuis startAt au moment de la création (heure locale du navigateur) — évite
+  // tout recalcul de jour/heure depuis le Timestamp côté serveur (Admin SDK tourne en UTC, pas
+  // en Europe/Zurich), nécessaire pour matcher un créneau fixe d'abonnement de façon fiable.
+  dayOfWeek?: number
+  startTime?: string
   maxParticipants: number
   price: number
   level?: GroupSessionLevel
@@ -249,6 +256,76 @@ export interface GroupSessionRecurrence {
   rule: RecurrenceRule
   createdAt: Timestamp
   updatedAt: Timestamp
+}
+
+// ─── Abonnements ────────────────────────────────────────────────────────────
+
+export type SubscriptionDurationUnit = 'weeks' | 'months'
+
+export interface SubscriptionFixedSlot {
+  dayOfWeek: number // convention JS : 0=dimanche .. 6=samedi (comme RecurrenceRule.dayOfWeek)
+  startTime: string // "HH:mm"
+  serviceId: string
+}
+
+export interface SubscriptionPlan {
+  id: string
+  name: string
+  description?: string
+  durationValue: number
+  durationUnit: SubscriptionDurationUnit
+  serviceIds: string[]
+  sessionsPerWeek: number
+  fixedSlot?: SubscriptionFixedSlot
+  price: number
+  isPublic: boolean
+  active: boolean
+  createdBy: string
+  createdAt: Timestamp
+  updatedAt: Timestamp
+}
+
+export interface ClientSubscriptionPlanSnapshot {
+  name: string
+  serviceIds: string[]
+  sessionsPerWeek: number
+  fixedSlot?: SubscriptionFixedSlot
+  durationValue: number
+  durationUnit: SubscriptionDurationUnit
+  price: number
+}
+
+// 'pending_payment' : créé par l'achat en self-service, en attente de confirmation du webhook
+// Stripe — jamais posé comme Client.activeSubscriptionId tant qu'il n'est pas passé à 'active'.
+export type ClientSubscriptionStatus = 'pending_payment' | 'active' | 'cancelled'
+
+export interface ClientSubscription {
+  id: string
+  clientId: string
+  uid?: string
+  planId: string
+  planSnapshot: ClientSubscriptionPlanSnapshot
+  startAt: Timestamp
+  endAt: Timestamp
+  status: ClientSubscriptionStatus
+  paymentStatus: PaymentStatus
+  amountDue: number
+  amountPaid: number
+  source: 'manual' | 'self_purchase'
+  stripeCheckoutUrl?: string
+  stripeSessionId?: string
+  createdBy: string
+  createdAt: Timestamp
+  updatedAt: Timestamp
+}
+
+export interface SubscriptionConsumption {
+  id: string
+  clientId: string
+  uid: string
+  groupSessionId: string
+  sessionStartAt: Timestamp
+  consumedAt: Timestamp
 }
 
 // ─── Vente hors séance ────────────────────────────────────────────────────────
@@ -399,6 +476,21 @@ export const GROUP_SESSION_LEVEL_LABELS: Record<GroupSessionLevel, string> = {
   intermediaire: 'Intermédiaire',
   avance: 'Avancé',
   tous_niveaux: 'Tous niveaux',
+}
+
+export const SUBSCRIPTION_DURATION_UNIT_LABELS: Record<SubscriptionDurationUnit, string> = {
+  weeks: 'semaine(s)',
+  months: 'mois',
+}
+
+export const DAY_OF_WEEK_LABELS: Record<number, string> = {
+  0: 'Dimanche',
+  1: 'Lundi',
+  2: 'Mardi',
+  3: 'Mercredi',
+  4: 'Jeudi',
+  5: 'Vendredi',
+  6: 'Samedi',
 }
 
 export const GROUP_SESSION_ENROLLMENT_STATUS_LABELS: Record<GroupSessionEnrollmentStatus, string> = {

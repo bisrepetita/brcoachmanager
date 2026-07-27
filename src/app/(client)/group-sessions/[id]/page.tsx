@@ -5,18 +5,23 @@ import { useParams, useRouter } from 'next/navigation'
 import { doc, onSnapshot, getDoc } from 'firebase/firestore'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { ChevronLeft, Tag } from 'lucide-react'
+import { ChevronLeft, Tag, Repeat } from 'lucide-react'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { db } from '@/lib/firebase/firestore'
 import { useClientProfile } from '@/lib/hooks/useClientProfile'
+import { useAuth } from '@/lib/hooks/useAuth'
 import { enrollInGroupSession, cancelGroupSessionEnrollment, requestGroupSessionPaymentLink, checkGroupSessionOverlap } from '@/lib/services/group-session.service'
 import { findActiveClientDiscount, computeDiscountedAmount, discountLabel } from '@/lib/services/discount.service'
-import { GROUP_SESSION_LEVEL_LABELS, type GroupSession, type Discount } from '@/types'
+import {
+  findActiveSubscriptionForClient, matchesSubscriptionCoverage, countWeeklySubscriptionConsumptions,
+} from '@/lib/services/subscription.service'
+import { GROUP_SESSION_LEVEL_LABELS, type GroupSession, type Discount, type ClientSubscription } from '@/types'
 
 export default function ClientGroupSessionDetailPage() {
   const params = useParams<{ id: string }>()
   const router = useRouter()
   const { profile, loading: profileLoading } = useClientProfile()
+  const { firebaseUser } = useAuth()
   const [groupSession, setGroupSession] = useState<GroupSession | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -26,6 +31,9 @@ export default function ClientGroupSessionDetailPage() {
   const [firstBookingFree, setFirstBookingFree] = useState(false)
   const [showPromoInput, setShowPromoInput] = useState(false)
   const [promoCodeInput, setPromoCodeInput] = useState('')
+  const [activeSubscription, setActiveSubscription] = useState<ClientSubscription | null>(null)
+  const [subscriptionCovers, setSubscriptionCovers] = useState(false)
+  const [subscriptionQuotaOk, setSubscriptionQuotaOk] = useState(false)
 
   useEffect(() => {
     return onSnapshot(doc(db, 'groupSessions', params.id), snap => {
@@ -39,10 +47,32 @@ export default function ClientGroupSessionDetailPage() {
     checkGroupSessionOverlap(params.id).then(({ hasOverlap }) => setHasOverlap(hasOverlap)).catch(() => {})
   }, [params.id, profile])
 
-  // Gratuité "1ère réservation" (prioritaire) puis, à défaut, rabais client auto-attribué —
-  // un code promo ne sera proposé que si ni l'un ni l'autre ne s'applique déjà (pas de cumul).
+  // Couverture abonnement — vérifiée en premier (revenu déjà encaissé), avant la gratuité
+  // "1ère réservation" et les remises (pas de cumul, même priorité que côté serveur).
   useEffect(() => {
-    if (!profile || !groupSession?.serviceId) { setClientDiscount(null); setFirstBookingFree(false); return }
+    if (!profile || !groupSession || !firebaseUser?.uid) { setActiveSubscription(null); setSubscriptionCovers(false); setSubscriptionQuotaOk(false); return }
+    const uid = firebaseUser.uid
+    let cancelled = false
+    findActiveSubscriptionForClient(profile.clientId, uid).then(async sub => {
+      if (cancelled) return
+      setActiveSubscription(sub)
+      if (!sub) { setSubscriptionCovers(false); setSubscriptionQuotaOk(false); return }
+      const covers = matchesSubscriptionCoverage(sub.planSnapshot, groupSession)
+      setSubscriptionCovers(covers)
+      if (!covers) { setSubscriptionQuotaOk(false); return }
+      const used = await countWeeklySubscriptionConsumptions(sub.id, groupSession.startAt.toDate(), uid)
+      if (!cancelled) setSubscriptionQuotaOk(used < sub.planSnapshot.sessionsPerWeek)
+    })
+    return () => { cancelled = true }
+  }, [profile, groupSession, firebaseUser?.uid])
+
+  // Gratuité "1ère réservation" (à défaut d'un abonnement qui couvre déjà la séance) puis, à
+  // défaut, rabais client auto-attribué — un code promo ne sera proposé que si rien d'autre ne
+  // s'applique déjà (pas de cumul).
+  useEffect(() => {
+    if (!profile || !groupSession?.serviceId || (subscriptionCovers && subscriptionQuotaOk)) {
+      setClientDiscount(null); setFirstBookingFree(false); return
+    }
     let cancelled = false
     getDoc(doc(db, 'services', groupSession.serviceId)).then(async serviceSnap => {
       if (cancelled || !serviceSnap.exists()) return
@@ -57,7 +87,7 @@ export default function ClientGroupSessionDetailPage() {
       if (!cancelled) setClientDiscount(d ?? null)
     })
     return () => { cancelled = true }
-  }, [profile, groupSession?.serviceId])
+  }, [profile, groupSession?.serviceId, subscriptionCovers, subscriptionQuotaOk])
 
   async function handleEnroll() {
     setBusy(true)
@@ -161,15 +191,16 @@ export default function ClientGroupSessionDetailPage() {
             <div>
               <p style={{ fontSize: 11, color: '#A09890', margin: 0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Prix</p>
               {(() => {
+                const subscriptionCoveredNow = subscriptionCovers && subscriptionQuotaOk
                 const originalPrice = myEnrollment
                   ? myEnrollment.originalAmountDue
-                  : (firstBookingFree || clientDiscount) ? groupSession.price : undefined
+                  : (subscriptionCoveredNow || firstBookingFree || clientDiscount) ? groupSession.price : undefined
                 const finalPrice = myEnrollment
                   ? myEnrollment.amountDue
-                  : firstBookingFree ? 0 : clientDiscount ? computeDiscountedAmount(groupSession.price, clientDiscount) : groupSession.price
+                  : subscriptionCoveredNow ? 0 : firstBookingFree ? 0 : clientDiscount ? computeDiscountedAmount(groupSession.price, clientDiscount) : groupSession.price
                 const label = myEnrollment
                   ? myEnrollment.discountLabel
-                  : firstBookingFree ? 'Première réservation offerte' : clientDiscount ? discountLabel(clientDiscount) : undefined
+                  : subscriptionCoveredNow ? 'Abonnement' : firstBookingFree ? 'Première réservation offerte' : clientDiscount ? discountLabel(clientDiscount) : undefined
                 return (
                   <>
                     <p style={{ fontSize: 16, fontWeight: 600, margin: '2px 0 0', fontFamily: 'monospace' }}>
@@ -241,7 +272,21 @@ export default function ClientGroupSessionDetailPage() {
           )
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {!clientDiscount && !firstBookingFree && !isFull && (
+            {activeSubscription && !(subscriptionCovers && subscriptionQuotaOk) && (
+              <div style={{ display: 'flex', gap: 8, padding: '10px 12px', borderRadius: 8, background: '#F0EDE8', color: '#1A1A18', fontSize: 13 }}>
+                <Repeat size={14} style={{ flexShrink: 0, marginTop: 2, color: '#7A7570' }} />
+                <p style={{ margin: 0 }}>
+                  {subscriptionCovers
+                    ? 'Tu as déjà utilisé toutes tes séances de la semaine avec ton abonnement.'
+                    : 'Cette séance n\'est pas incluse dans ton abonnement actuel.'}
+                  {' '}Tu peux payer le prix normal ci-dessous, ou{' '}
+                  <button onClick={() => router.push('/subscriptions' as never)} style={{ background: 'none', border: 'none', padding: 0, color: '#1A1A18', fontWeight: 600, textDecoration: 'underline', cursor: 'pointer', fontSize: 13 }}>
+                    voir les abonnements
+                  </button>.
+                </p>
+              </div>
+            )}
+            {!(subscriptionCovers && subscriptionQuotaOk) && !clientDiscount && !firstBookingFree && !isFull && (
               showPromoInput ? (
                 <input
                   autoFocus
@@ -272,7 +317,7 @@ export default function ClientGroupSessionDetailPage() {
                 background: isFull ? '#D5D1C9' : '#1A1A18', color: '#fff', fontSize: 14, fontWeight: 600,
               }}
             >
-              {isFull ? 'Complet' : busy ? 'Inscription...' : firstBookingFree ? 'S\'inscrire gratuitement' : 'S\'inscrire'}
+              {isFull ? 'Complet' : busy ? 'Inscription...' : (subscriptionCovers && subscriptionQuotaOk) ? 'Réserver avec mon abonnement' : firstBookingFree ? 'S\'inscrire gratuitement' : 'S\'inscrire'}
             </button>
           </div>
         )}

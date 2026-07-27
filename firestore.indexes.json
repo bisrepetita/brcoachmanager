@@ -90,6 +90,14 @@
         { "fieldPath": "clientIds", "arrayConfig": "CONTAINS" },
         { "fieldPath": "startAt", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "consumptions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "uid", "order": "ASCENDING" },
+        { "fieldPath": "sessionStartAt", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

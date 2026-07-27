@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { FieldValue } from 'firebase-admin/firestore'
 import Stripe from 'stripe'
 import { getAdminDb } from '@/lib/firebase/admin'
+import { activateSubscriptionFromWebhookInTransaction } from '@/lib/server/subscription-admin'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2026-05-27.dahlia' as any })
@@ -49,6 +50,20 @@ export async function POST(req: NextRequest) {
         )
         tx.update(groupSessionRef, { enrollments: updated, updatedAt: FieldValue.serverTimestamp() })
       })
+
+      return NextResponse.json({ received: true })
+    }
+
+    if (referenceId.startsWith('subscription__')) {
+      const [, clientSubscriptionId, clientId] = referenceId.split('__')
+      if (!clientSubscriptionId || !clientId) return NextResponse.json({ error: 'Invalid referenceId' }, { status: 400 })
+
+      const amountPaid = (checkoutSession.amount_total ?? 0) / 100
+      await adminDb.runTransaction((tx) =>
+        activateSubscriptionFromWebhookInTransaction(tx, adminDb, {
+          clientSubscriptionId, clientId, stripeSessionId: checkoutSession.id, amountPaid,
+        })
+      )
 
       return NextResponse.json({ received: true })
     }

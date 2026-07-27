@@ -80,6 +80,13 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
+    // ─── subscriptionPlans (catalogue des plans d'abonnement) ────────────────
+
+    match /subscriptionPlans/{planId} {
+      allow read: if isAuth();
+      allow create, update, delete: if isAdmin();
+    }
+
     // ─── discounts (codes promo & rabais clients) ───────────────────────────
 
     match /discounts/{discountId} {
@@ -99,6 +106,29 @@ service cloud.firestore {
 
       match /redemptions/{redemptionId} {
         allow read, create: if isCoach();
+      }
+    }
+
+    // ─── clientSubscriptions (abonnements attribués/achetés par un client) ──
+
+    match /clientSubscriptions/{subscriptionId} {
+      // Comparaison directe sur resource.data.uid (pas de get()) : cf. commentaire identique sur
+      // consumptions ci-dessous — nécessaire pour que la requête `list` côté client (avec un filtre
+      // explicite where('uid','==',...)) soit prouvable sûre par Firestore, même à résultat vide.
+      allow read: if isCoach() || (isClient() && resource.data.uid == request.auth.uid);
+      // L'attribution manuelle passe par une transaction client (voir subscription.service.ts) qui
+      // annule l'abonnement actif précédent puis active le nouveau — réservé à l'admin, comme les
+      // remises. L'achat en self-service est activé côté serveur (Admin SDK) par le webhook Stripe,
+      // qui contourne ces règles.
+      allow create, update, delete: if isAdmin();
+
+      match /consumptions/{consumptionId} {
+        // Comparaison directe sur resource.data.uid (pas de get()) : une règle qui a besoin d'un
+        // get() pour vérifier l'accès empêche Firestore de prouver qu'une requête `list` est sûre
+        // sans filtre explicite correspondant, même quand le résultat est vide — la requête
+        // côté client filtre donc explicitement where('uid','==', request.auth.uid).
+        allow read: if isCoach() || (isClient() && resource.data.uid == request.auth.uid);
+        allow write: if isAdmin();
       }
     }
 

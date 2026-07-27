@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { FieldValue, Timestamp } from 'firebase-admin/firestore'
+import { FieldValue, Timestamp, type DocumentReference } from 'firebase-admin/firestore'
 import { getAdminDb, getAdminAuth } from '@/lib/firebase/admin'
 import { createGroupSessionCheckout } from '@/lib/server/group-session-stripe'
 import {
   resolveDiscountInTransaction, applyDiscountInTransaction,
   computeDiscountedAmount, discountLabelAdmin,
 } from '@/lib/server/discount-admin'
+import {
+  findActiveSubscriptionInTransaction, matchesCoverage,
+  countWeeklyConsumptionsInTransaction, recordConsumptionInTransaction,
+} from '@/lib/server/subscription-admin'
 
 // Type "loose" côté serveur : le type partagé GroupSessionEnrollment (src/types) pointe sur le
 // Timestamp du SDK client, incompatible avec firebase-admin/firestore côté API route.
@@ -63,12 +67,27 @@ export async function POST(req: NextRequest) {
 
       const clientTxSnap = await tx.get(clientDocRef)
       const hasEverBooked = clientTxSnap.data()?.['hasEverBooked'] === true
-
-      // Remise : rabais client auto-détecté, ou code promo fourni (pas de cumul des deux).
       const serviceId = data['serviceId'] as string | undefined
+
+      // Couverture abonnement : vérifiée avant tout (revenu déjà encaissé à l'achat de
+      // l'abonnement) — si couverte, on ne regarde même pas la gratuité "1ère réservation" ni
+      // les remises, pas de cumul.
+      const activeSub = await findActiveSubscriptionInTransaction(tx, adminDb, clientId)
+      let subscriptionRef: DocumentReference | null = null
+      if (activeSub && matchesCoverage(activeSub.data.planSnapshot, {
+        serviceId, dayOfWeek: data['dayOfWeek'] as number | undefined, startTime: data['startTime'] as string | undefined,
+      })) {
+        const usedThisWeek = await countWeeklyConsumptionsInTransaction(tx, activeSub.ref, startAt)
+        if (usedThisWeek < activeSub.data.planSnapshot.sessionsPerWeek) {
+          subscriptionRef = activeSub.ref
+        }
+      }
+
+      // Remise : rabais client auto-détecté, ou code promo fourni (pas de cumul des deux, ni avec
+      // un abonnement qui couvre déjà la séance).
       let service: { id: string; isPublic?: boolean } | null = null
       let serviceFirstBookingFree = false
-      if (serviceId) {
+      if (!subscriptionRef && serviceId) {
         const serviceSnap = await tx.get(adminDb.collection('services').doc(serviceId))
         if (serviceSnap.exists) {
           service = { id: serviceSnap.id, isPublic: serviceSnap.data()!['isPublic'] as boolean | undefined }
@@ -77,47 +96,56 @@ export async function POST(req: NextRequest) {
       }
 
       const basePrice = data['price'] as number
-      const firstBookingFree = serviceFirstBookingFree && !hasEverBooked
+      const firstBookingFree = !subscriptionRef && serviceFirstBookingFree && !hasEverBooked
 
-      // Ne recherche/valide une remise que si la gratuité "1ère réservation" ne s'applique pas déjà.
-      const discountResult = firstBookingFree
+      const discountResult = (subscriptionRef || firstBookingFree)
         ? null
         : await resolveDiscountInTransaction(tx, adminDb, { clientId, promoCode, service })
       if (discountResult && 'error' in discountResult) {
         throw new HttpError(400, discountResult.error)
       }
 
-      const newEnrollment: ServerEnrollment = firstBookingFree
+      const newEnrollment: ServerEnrollment = subscriptionRef
         ? {
             clientId,
             status: 'confirmed',
             amountDue: 0,
             amountPaid: 0,
-            paymentStatus: 'offered',
+            paymentStatus: 'credits',
             enrolledAt: Timestamp.now(),
-            originalAmountDue: basePrice,
-            discountLabel: 'Première réservation offerte',
+            subscriptionId: subscriptionRef.id,
           }
-        : discountResult
+        : firstBookingFree
           ? {
               clientId,
-              status: 'pending_payment',
-              amountDue: computeDiscountedAmount(basePrice, discountResult.data),
+              status: 'confirmed',
+              amountDue: 0,
               amountPaid: 0,
-              paymentStatus: 'payment_to_request',
+              paymentStatus: 'offered',
               enrolledAt: Timestamp.now(),
-              discountId: discountResult.ref.id,
-              discountLabel: discountLabelAdmin(discountResult.data),
               originalAmountDue: basePrice,
+              discountLabel: 'Première réservation offerte',
             }
-          : {
-              clientId,
-              status: 'pending_payment',
-              amountDue: basePrice,
-              amountPaid: 0,
-              paymentStatus: 'payment_to_request',
-              enrolledAt: Timestamp.now(),
-            }
+          : discountResult
+            ? {
+                clientId,
+                status: 'pending_payment',
+                amountDue: computeDiscountedAmount(basePrice, discountResult.data),
+                amountPaid: 0,
+                paymentStatus: 'payment_to_request',
+                enrolledAt: Timestamp.now(),
+                discountId: discountResult.ref.id,
+                discountLabel: discountLabelAdmin(discountResult.data),
+                originalAmountDue: basePrice,
+              }
+            : {
+                clientId,
+                status: 'pending_payment',
+                amountDue: basePrice,
+                amountPaid: 0,
+                paymentStatus: 'payment_to_request',
+                enrolledAt: Timestamp.now(),
+              }
 
       tx.update(groupSessionRef, {
         enrollments: [...enrollments, newEnrollment],
@@ -126,6 +154,10 @@ export async function POST(req: NextRequest) {
 
       if (!hasEverBooked) {
         tx.update(clientDocRef, { hasEverBooked: true, updatedAt: FieldValue.serverTimestamp() })
+      }
+
+      if (subscriptionRef) {
+        recordConsumptionInTransaction(tx, subscriptionRef, { clientId, uid, groupSessionId, sessionStartAt: startAt })
       }
 
       if (discountResult) {

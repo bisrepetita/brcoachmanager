@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { getAdminDb, getAdminAuth } from '@/lib/firebase/admin'
+import { findConsumptionRefsInTransaction, removeConsumptionsInTransaction } from '@/lib/server/subscription-admin'
 
-type ServerEnrollment = Record<string, unknown> & { clientId: string; status: string; paymentStatus: string; amountPaid: number }
+type ServerEnrollment = Record<string, unknown> & { clientId: string; status: string; paymentStatus: string; amountPaid: number; subscriptionId?: string }
 
 export async function POST(req: NextRequest) {
   const token = req.headers.get('authorization')?.replace('Bearer ', '')
@@ -39,10 +40,18 @@ export async function POST(req: NextRequest) {
       if (idx === -1) throw new HttpError(404, 'Aucune inscription active pour ce client')
 
       const entry = enrollments[idx]!
+
+      const consumptionRefs = entry.subscriptionId
+        ? await findConsumptionRefsInTransaction(
+            tx, adminDb.collection('clientSubscriptions').doc(entry.subscriptionId), groupSessionId
+          )
+        : []
+
       const updated = [...enrollments]
       updated[idx] = { ...entry, status: 'cancelled', cancelledAt: Timestamp.now() }
 
       tx.update(groupSessionRef, { enrollments: updated, updatedAt: FieldValue.serverTimestamp() })
+      removeConsumptionsInTransaction(tx, consumptionRefs)
 
       return entry
     })

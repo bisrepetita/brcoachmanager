@@ -396,6 +396,7 @@ function NewSessionForm() {
           maxParticipants,
           price,
           ...(level ? { level } : {}),
+          startTime,
           status: 'planned' as const,
           isPublic: true,
         }
@@ -403,6 +404,7 @@ function NewSessionForm() {
         if (recurrence === 'none') {
           const groupSessionId = await createDoc('groupSessions', {
             ...baseGroupData,
+            dayOfWeek: startDate.getDay(),
             startAt: Timestamp.fromDate(startDate),
             endAt: Timestamp.fromDate(endDate),
             enrollments: [],
@@ -468,6 +470,7 @@ function NewSessionForm() {
           if (!firstGroupSessionId) firstGroupSessionId = gsRef.id
           groupBatch.set(gsRef, {
             ...baseGroupData,
+            dayOfWeek: occDate.getDay(),
             startAt: Timestamp.fromDate(occDate),
             endAt: Timestamp.fromDate(addMinutes(occDate, duration)),
             enrollments: [],

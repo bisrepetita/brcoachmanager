@@ -149,6 +149,8 @@ export async function extendInfiniteGroupSessionRecurrences(): Promise<void> {
         maxParticipants: rec.maxParticipants,
         price: rec.price,
         ...(rec.level ? { level: rec.level } : {}),
+        dayOfWeek: occDate.getDay(),
+        startTime: rec.rule.startTime,
         status: 'planned',
         isPublic: rec.isPublic,
         enrollments: [],
