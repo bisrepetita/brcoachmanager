@@ -11,7 +11,7 @@ function layout(bodyHtml: string): string {
       <div style="background:#fff;border-radius:12px;padding:24px;">
         ${bodyHtml}
       </div>
-      <p style="font-size:11px;color:#A09890;margin:16px 4px 0;">Bis Repetita · Swiss Gun Center</p>
+      <p style="font-size:11px;color:#A09890;margin:16px 4px 0;">Bis Repetita</p>
     </div>
   </body>
 </html>`
