@@ -189,6 +189,8 @@ export interface Session {
 
 export type GroupSessionStatus = 'planned' | 'done' | 'cancelled'
 
+export type GroupSessionLevel = 'debutant' | 'intermediaire' | 'avance' | 'tous_niveaux'
+
 export type GroupSessionEnrollmentStatus = 'pending_payment' | 'confirmed' | 'cancelled'
 
 export interface GroupSessionEnrollment {
@@ -220,6 +222,7 @@ export interface GroupSession {
   endAt: Timestamp
   maxParticipants: number
   price: number
+  level?: GroupSessionLevel
   status: GroupSessionStatus
   isPublic: boolean
   enrollments: GroupSessionEnrollment[]
@@ -240,6 +243,7 @@ export interface GroupSessionRecurrence {
   serviceId?: string
   maxParticipants: number
   price: number
+  level?: GroupSessionLevel
   isPublic: boolean
   createdBy: string
   rule: RecurrenceRule
@@ -388,6 +392,13 @@ export const GROUP_SESSION_STATUS_LABELS: Record<GroupSessionStatus, string> = {
   planned: 'Planifié',
   done: 'Effectué',
   cancelled: 'Annulé',
+}
+
+export const GROUP_SESSION_LEVEL_LABELS: Record<GroupSessionLevel, string> = {
+  debutant: 'Débutant',
+  intermediaire: 'Intermédiaire',
+  avance: 'Avancé',
+  tous_niveaux: 'Tous niveaux',
 }
 
 export const GROUP_SESSION_ENROLLMENT_STATUS_LABELS: Record<GroupSessionEnrollmentStatus, string> = {

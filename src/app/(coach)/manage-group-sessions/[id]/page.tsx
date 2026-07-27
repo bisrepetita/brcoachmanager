@@ -10,7 +10,7 @@ import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { Badge } from '@/components/ui/badge'
 import { db } from '@/lib/firebase/firestore'
 import { adminCancelGroupSessionEnrollment } from '@/lib/services/group-session.service'
-import type { GroupSession, Client, GroupSessionEnrollmentStatus } from '@/types'
+import { GROUP_SESSION_LEVEL_LABELS, type GroupSession, type Client, type GroupSessionEnrollmentStatus } from '@/types'
 
 const ENROLLMENT_BADGE_VARIANT: Record<GroupSessionEnrollmentStatus, 'payment_to_request' | 'paid' | 'cancelled'> = {
   pending_payment: 'payment_to_request',
@@ -132,6 +132,7 @@ export default function GroupSessionDetailPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <p style={{ fontSize: 13, color: '#7A7570', margin: 0, textTransform: 'capitalize' }}>{date}</p>
             {groupSession.recurrenceId && <Badge variant="muted">Récurrente</Badge>}
+            {groupSession.level && <Badge variant="muted">{GROUP_SESSION_LEVEL_LABELS[groupSession.level]}</Badge>}
           </div>
           {groupSession.description && (
             <p style={{ fontSize: 14, color: '#1A1A18', margin: '8px 0 0' }}>{groupSession.description}</p>

@@ -13,7 +13,7 @@ import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { db } from '@/lib/firebase/firestore'
 import { useClientProfile } from '@/lib/hooks/useClientProfile'
 import { useCollection } from '@/lib/hooks/useCollection'
-import type { GroupSession, Service } from '@/types'
+import { GROUP_SESSION_LEVEL_LABELS, type GroupSession, type Service } from '@/types'
 
 type SortMode = 'date' | 'price_asc' | 'price_desc'
 
@@ -288,17 +288,27 @@ export default function ClientGroupSessionsPage() {
                       {/* Content */}
                       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 5 }}>
                         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-                          <p style={{ fontSize: 15, fontWeight: 600, color: theme.title, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          <p style={{ fontSize: 15, fontWeight: 600, color: theme.title, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
                             {gs.title}
                           </p>
-                          {isEnrolled && (
-                            <span style={{
-                              fontSize: 10, fontWeight: 700, color: theme.badgeText, background: theme.badgeBg,
-                              padding: '2px 7px', borderRadius: 20, flexShrink: 0, letterSpacing: 0.2,
-                            }}>
-                              INSCRIT
-                            </span>
-                          )}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                            {gs.level && (
+                              <span style={{
+                                fontSize: 10, fontWeight: 600, color: theme.secondary, background: theme.chipBg,
+                                padding: '2px 7px', borderRadius: 20, whiteSpace: 'nowrap',
+                              }}>
+                                {GROUP_SESSION_LEVEL_LABELS[gs.level]}
+                              </span>
+                            )}
+                            {isEnrolled && (
+                              <span style={{
+                                fontSize: 10, fontWeight: 700, color: theme.badgeText, background: theme.badgeBg,
+                                padding: '2px 7px', borderRadius: 20, letterSpacing: 0.2,
+                              }}>
+                                INSCRIT
+                              </span>
+                            )}
+                          </div>
                         </div>
 
                         {gs.coachNames && gs.coachNames.length > 0 && (

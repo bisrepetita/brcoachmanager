@@ -11,7 +11,7 @@ import { db } from '@/lib/firebase/firestore'
 import { useClientProfile } from '@/lib/hooks/useClientProfile'
 import { enrollInGroupSession, cancelGroupSessionEnrollment, requestGroupSessionPaymentLink, checkGroupSessionOverlap } from '@/lib/services/group-session.service'
 import { findActiveClientDiscount, computeDiscountedAmount, discountLabel } from '@/lib/services/discount.service'
-import type { GroupSession, Discount } from '@/types'
+import { GROUP_SESSION_LEVEL_LABELS, type GroupSession, type Discount } from '@/types'
 
 export default function ClientGroupSessionDetailPage() {
   const params = useParams<{ id: string }>()
@@ -135,7 +135,14 @@ export default function ClientGroupSessionDetailPage() {
 
       <div style={{ padding: '12px 16px 100px', display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div style={{ background: '#fff', borderRadius: 10, padding: 14 }}>
-          <p style={{ fontSize: 13, color: '#7A7570', margin: 0, textTransform: 'capitalize' }}>{date}</p>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <p style={{ fontSize: 13, color: '#7A7570', margin: 0, textTransform: 'capitalize' }}>{date}</p>
+            {groupSession.level && (
+              <span style={{ fontSize: 11, fontWeight: 600, color: '#1A1A18', background: '#F0EDE8', padding: '2px 8px', borderRadius: 20, flexShrink: 0 }}>
+                {GROUP_SESSION_LEVEL_LABELS[groupSession.level]}
+              </span>
+            )}
+          </div>
           {groupSession.coachNames && groupSession.coachNames.length > 0 && (
             <p style={{ fontSize: 13, color: '#7A7570', margin: '4px 0 0' }}>
               Avec <span style={{ fontWeight: 600, color: '#1A1A18' }}>{groupSession.coachNames.join(' & ')}</span>

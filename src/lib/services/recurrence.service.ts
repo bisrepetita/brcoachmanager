@@ -148,6 +148,7 @@ export async function extendInfiniteGroupSessionRecurrences(): Promise<void> {
         locationId: rec.locationId,
         maxParticipants: rec.maxParticipants,
         price: rec.price,
+        ...(rec.level ? { level: rec.level } : {}),
         status: 'planned',
         isPublic: rec.isPublic,
         enrollments: [],

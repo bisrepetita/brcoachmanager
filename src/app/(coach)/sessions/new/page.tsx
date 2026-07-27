@@ -18,7 +18,7 @@ import {
 } from '@/lib/services/discount.service'
 import { format as formatDate } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import type { Service, Location, User, Client, ClientGroup, ClientPayment, Discount } from '@/types'
+import { GROUP_SESSION_LEVEL_LABELS, type Service, type Location, type User, type Client, type ClientGroup, type ClientPayment, type Discount, type GroupSessionLevel } from '@/types'
 
 // ─── Styles partagés ─────────────────────────────────────────────────────────
 
@@ -158,6 +158,7 @@ function NewSessionForm() {
   const [description, setDescription] = useState('')
   const [maxParticipants, setMaxParticipants] = useState(8)
   const [price, setPrice] = useState(20)
+  const [level, setLevel] = useState<GroupSessionLevel | ''>('')
   const [serviceId, setServiceId] = useState('')
   const [locationId, setLocationId] = useState('')
   const [coachIds, setCoachIds] = useState<string[]>([])
@@ -394,6 +395,7 @@ function NewSessionForm() {
           locationId,
           maxParticipants,
           price,
+          ...(level ? { level } : {}),
           status: 'planned' as const,
           isPublic: true,
         }
@@ -437,6 +439,7 @@ function NewSessionForm() {
           locationId,
           maxParticipants,
           price,
+          ...(level ? { level } : {}),
           isPublic: true,
           createdBy: user!.id,
           rule: {
@@ -816,6 +819,23 @@ function NewSessionForm() {
                 onChange={(e) => setPrice(Math.max(0, Number(e.target.value)))}
               />
             </Row>
+          </Section>
+        )}
+
+        {/* Niveau — mode public uniquement, optionnel */}
+        {!isTraining && isPublic && (
+          <Section title="Niveau">
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {(Object.entries(GROUP_SESSION_LEVEL_LABELS) as [GroupSessionLevel, string][]).map(([val, label]) => (
+                <button
+                  key={val}
+                  onClick={() => setLevel(l => l === val ? '' : val)}
+                  style={{ padding: '6px 14px', borderRadius: 20, border: 'none', cursor: 'pointer', fontSize: 13, backgroundColor: level === val ? '#1A1A18' : '#F0EDE8', color: level === val ? '#fff' : '#1A1A18' }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </Section>
         )}
 
