@@ -6,7 +6,7 @@ import {
   startOfWeek, endOfWeek, addWeeks, subWeeks,
 } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { Users2, ArrowUpRight, ChevronLeft, ChevronRight, SlidersHorizontal } from 'lucide-react'
+import { Users2, User, ChevronLeft, ChevronRight, SlidersHorizontal } from 'lucide-react'
 import { GROUP_SESSION_LEVEL_LABELS, type GroupSessionLevel } from '@/types'
 
 type SortMode = 'date' | 'price_asc' | 'price_desc'
@@ -181,18 +181,24 @@ export default function EmbedPlanningPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
           {groups.map(group => (
             <div key={group.date.toISOString()}>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 10, padding: '0 2px' }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8, padding: '0 2px' }}>
                 <p style={{ fontSize: 13, fontWeight: 700, color: '#1A1A18', margin: 0, textTransform: 'capitalize' }}>
                   {dayLabel(group.date)}
                 </p>
-                <div style={{ flex: 1, height: 1, background: 'rgba(0,0,0,0.08)' }} />
+                <div style={{ flex: 1, height: 1, background: '#E5E1DA' }} />
+                <p style={{ fontSize: 11, color: '#A09890', margin: 0 }}>
+                  {group.items.length} séance{group.items.length > 1 ? 's' : ''}
+                </p>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12 }}>
                 {group.items.map(gs => {
-                  const isFull = gs.confirmedCount >= gs.maxParticipants
-                  const spotsLeft = gs.maxParticipants - gs.confirmedCount
+                  const confirmedCount = gs.confirmedCount
+                  const isFull = confirmedCount >= gs.maxParticipants
+                  const spotsLeft = gs.maxParticipants - confirmedCount
+                  const isAlmostFull = !isFull && spotsLeft <= 2
                   const sessionDate = new Date(gs.startAt)
+                  const fillRatio = gs.maxParticipants > 0 ? Math.min(1, confirmedCount / gs.maxParticipants) : 0
                   const imageUrl = gs.imageUrl
 
                   const theme = imageUrl ? {
@@ -202,6 +208,10 @@ export default function EmbedPlanningPage() {
                     title: '#FFFFFF',
                     secondary: 'rgba(255,255,255,0.82)',
                     price: '#FFFFFF',
+                    barTrack: 'rgba(255,255,255,0.25)',
+                    neutralFill: '#FFFFFF',
+                    almostFill: '#FFC978',
+                    fullFill: '#FF8A7A',
                   } : {
                     cardBackground: '#fff',
                     border: '1px solid #EEEAE3',
@@ -209,7 +219,12 @@ export default function EmbedPlanningPage() {
                     title: '#1A1A18',
                     secondary: '#7A7570',
                     price: '#1A1A18',
+                    barTrack: '#F0EDE8',
+                    neutralFill: '#1A1A18',
+                    almostFill: '#B8792E',
+                    fullFill: '#C0392B',
                   }
+                  const fillColor = isFull ? theme.fullFill : isAlmostFull ? theme.almostFill : theme.neutralFill
 
                   return (
                     <a
@@ -249,30 +264,39 @@ export default function EmbedPlanningPage() {
                         </div>
 
                         {gs.coachNames && gs.coachNames.length > 0 && (
-                          <p style={{ margin: 0, fontSize: 12, color: theme.secondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            Avec {gs.coachNames.join(' & ')}
-                          </p>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: theme.secondary, overflow: 'hidden' }}>
+                            <User size={11} strokeWidth={2} style={{ flexShrink: 0 }} />
+                            <span style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {gs.coachNames.join(' & ')}
+                            </span>
+                          </div>
                         )}
 
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 2 }}>
-                          <span style={{ fontSize: 13, fontWeight: 600, color: theme.price, fontFamily: 'monospace' }}>
-                            {gs.price.toFixed(2)} CHF
+                          <span style={{ fontSize: 12.5, color: theme.secondary, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {gs.description}
                           </span>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
                             {isFull ? (
-                              <span style={{ fontSize: 11, fontWeight: 600, color: imageUrl ? '#FF8A7A' : '#C0392B' }}>Complet</span>
-                            ) : (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                                <Users2 size={12} color={theme.secondary} />
-                                <span style={{ fontSize: 12, color: theme.secondary, fontVariantNumeric: 'tabular-nums' }}>
-                                  {spotsLeft} place{spotsLeft > 1 ? 's' : ''}
-                                </span>
-                              </div>
-                            )}
-                            <span style={{ display: 'flex', alignItems: 'center', gap: 2, fontSize: 12, fontWeight: 600, color: theme.title }}>
-                              Réserver <ArrowUpRight size={13} />
-                            </span>
+                              <span style={{ fontSize: 11, fontWeight: 600, color: theme.fullFill }}>Complet</span>
+                            ) : isAlmostFull ? (
+                              <span style={{ fontSize: 11, fontWeight: 600, color: theme.almostFill }}>
+                                {spotsLeft} place{spotsLeft > 1 ? 's' : ''}
+                              </span>
+                            ) : null}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <Users2 size={12} color={fillColor} />
+                              <span style={{ fontSize: 12, color: fillColor, fontVariantNumeric: 'tabular-nums' }}>
+                                {confirmedCount}/{gs.maxParticipants}
+                              </span>
+                            </div>
                           </div>
+                        </div>
+
+                        {/* Barre de capacité */}
+                        <div style={{ height: 3, borderRadius: 2, background: theme.barTrack, overflow: 'hidden', marginTop: 1 }}>
+                          <div style={{ height: '100%', width: `${fillRatio * 100}%`, background: fillColor, borderRadius: 2, transition: 'width 0.2s' }} />
                         </div>
                       </div>
                     </a>
