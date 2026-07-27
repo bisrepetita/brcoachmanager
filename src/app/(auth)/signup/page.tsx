@@ -2,8 +2,8 @@
 
 import * as React from 'react'
 import { useRouter } from 'next/navigation'
-import { createUserWithEmailAndPassword, signInWithRedirect, signOut, type AuthError } from 'firebase/auth'
-import { auth, googleProvider } from '@/lib/firebase/auth'
+import { createUserWithEmailAndPassword, signOut, type AuthError } from 'firebase/auth'
+import { auth } from '@/lib/firebase/auth'
 import { useGoogleAuthRedirect } from '@/lib/hooks/useGoogleAuthRedirect'
 import { Button } from '@/components/ui/button'
 import { Eye, EyeOff } from 'lucide-react'
@@ -25,21 +25,15 @@ export default function SignupPage() {
   const [showPassword, setShowPassword] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [loading, setLoading] = React.useState(false)
-  const { error: googleError, setError: setGoogleError } = useGoogleAuthRedirect()
-  const [googleLoading, setGoogleLoading] = React.useState(false)
+  const { error: googleError, setError: setGoogleError, signIn: signInWithGoogle, signingIn: googleLoading } = useGoogleAuthRedirect()
 
   React.useEffect(() => {
     if (googleError) setError(googleError)
   }, [googleError])
 
   async function handleGoogleSignIn() {
-    setError(null); setGoogleError(null); setGoogleLoading(true)
-    try {
-      await signInWithRedirect(auth, googleProvider)
-    } catch {
-      setError('Erreur lors de la connexion avec Google.')
-      setGoogleLoading(false)
-    }
+    setError(null); setGoogleError(null)
+    await signInWithGoogle()
   }
 
   async function handleSubmit(e: React.FormEvent) {

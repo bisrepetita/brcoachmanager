@@ -2,9 +2,9 @@
 
 import * as React from 'react'
 import { useRouter } from 'next/navigation'
-import { signInWithEmailAndPassword, signInWithRedirect, sendPasswordResetEmail, type AuthError } from 'firebase/auth'
+import { signInWithEmailAndPassword, sendPasswordResetEmail, type AuthError } from 'firebase/auth'
 import { doc, getDoc } from 'firebase/firestore'
-import { auth, googleProvider } from '@/lib/firebase/auth'
+import { auth } from '@/lib/firebase/auth'
 import { db } from '@/lib/firebase/firestore'
 import { useGoogleAuthRedirect } from '@/lib/hooks/useGoogleAuthRedirect'
 import { Button } from '@/components/ui/button'
@@ -29,21 +29,15 @@ export default function LoginPage() {
   const [resetMode, setResetMode] = React.useState(false)
   const [resetSent, setResetSent] = React.useState(false)
   const [resetLoading, setResetLoading] = React.useState(false)
-  const { error: googleError, setError: setGoogleError } = useGoogleAuthRedirect()
-  const [googleLoading, setGoogleLoading] = React.useState(false)
+  const { error: googleError, setError: setGoogleError, signIn: signInWithGoogle, signingIn: googleLoading } = useGoogleAuthRedirect()
 
   React.useEffect(() => {
     if (googleError) setError(googleError)
   }, [googleError])
 
   async function handleGoogleSignIn() {
-    setError(null); setGoogleError(null); setGoogleLoading(true)
-    try {
-      await signInWithRedirect(auth, googleProvider)
-    } catch {
-      setError('Erreur lors de la connexion avec Google.')
-      setGoogleLoading(false)
-    }
+    setError(null); setGoogleError(null)
+    await signInWithGoogle()
   }
 
   async function handleReset(e: React.FormEvent) {
