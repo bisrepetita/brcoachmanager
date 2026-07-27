@@ -73,6 +73,13 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
+    // ─── buildings (regroupe des Lieux au même endroit géographique) ────────
+
+    match /buildings/{buildingId} {
+      allow read: if isAuth();
+      allow create, update, delete: if isAdmin();
+    }
+
     // ─── services ────────────────────────────────────────────────────────────
 
     match /services/{serviceId} {

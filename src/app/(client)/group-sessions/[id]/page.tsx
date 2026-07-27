@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { doc, onSnapshot, getDoc } from 'firebase/firestore'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { ChevronLeft, Tag, Repeat } from 'lucide-react'
+import { ChevronLeft, Tag, Repeat, MapPin, ChevronDown, ChevronUp } from 'lucide-react'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { db } from '@/lib/firebase/firestore'
 import { useClientProfile } from '@/lib/hooks/useClientProfile'
@@ -15,7 +15,7 @@ import { findActiveClientDiscount, computeDiscountedAmount, discountLabel } from
 import {
   findActiveSubscriptionForClient, matchesSubscriptionCoverage, countWeeklySubscriptionConsumptions,
 } from '@/lib/services/subscription.service'
-import { GROUP_SESSION_LEVEL_LABELS, type GroupSession, type Discount, type ClientSubscription } from '@/types'
+import { GROUP_SESSION_LEVEL_LABELS, type GroupSession, type Discount, type ClientSubscription, type Building } from '@/types'
 
 export default function ClientGroupSessionDetailPage() {
   const params = useParams<{ id: string }>()
@@ -34,6 +34,8 @@ export default function ClientGroupSessionDetailPage() {
   const [activeSubscription, setActiveSubscription] = useState<ClientSubscription | null>(null)
   const [subscriptionCovers, setSubscriptionCovers] = useState(false)
   const [subscriptionQuotaOk, setSubscriptionQuotaOk] = useState(false)
+  const [accessBuilding, setAccessBuilding] = useState<Building | null>(null)
+  const [showAccessInfo, setShowAccessInfo] = useState(false)
 
   useEffect(() => {
     return onSnapshot(doc(db, 'groupSessions', params.id), snap => {
@@ -46,6 +48,25 @@ export default function ClientGroupSessionDetailPage() {
     if (!profile) return
     checkGroupSessionOverlap(params.id).then(({ hasOverlap }) => setHasOverlap(hasOverlap)).catch(() => {})
   }, [params.id, profile])
+
+  // Instructions d'accès du bâtiment (partagées entre plusieurs Lieux au même endroit) — dépliées
+  // par défaut pour un client qui n'a jamais réservé, repliées (juste un lien) pour les habitués.
+  useEffect(() => {
+    if (!groupSession?.locationId) { setAccessBuilding(null); return }
+    let cancelled = false
+    getDoc(doc(db, 'locations', groupSession.locationId)).then(async locSnap => {
+      if (cancelled || !locSnap.exists()) return
+      const buildingId = locSnap.data()['buildingId'] as string | undefined
+      if (!buildingId) { setAccessBuilding(null); return }
+      const buildingSnap = await getDoc(doc(db, 'buildings', buildingId))
+      if (!cancelled) setAccessBuilding(buildingSnap.exists() ? ({ id: buildingSnap.id, ...buildingSnap.data() } as Building) : null)
+    })
+    return () => { cancelled = true }
+  }, [groupSession?.locationId])
+
+  useEffect(() => {
+    if (profile) setShowAccessInfo(!profile.hasEverBooked)
+  }, [profile])
 
   // Couverture abonnement — vérifiée en premier (revenu déjà encaissé), avant la gratuité
   // "1ère réservation" et les remises (pas de cumul, même priorité que côté serveur).
@@ -218,6 +239,35 @@ export default function ClientGroupSessionDetailPage() {
             </div>
           </div>
         </div>
+
+        {accessBuilding && (accessBuilding.accessInstructions || (accessBuilding.photos && accessBuilding.photos.length > 0)) && (
+          <div style={{ background: '#fff', borderRadius: 10, padding: 14 }}>
+            <button
+              onClick={() => setShowAccessInfo(v => !v)}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+            >
+              <MapPin size={15} color="#7A7570" style={{ flexShrink: 0 }} />
+              <span style={{ flex: 1, textAlign: 'left', fontSize: 14, fontWeight: 600, color: '#1A1A18' }}>Comment nous trouver</span>
+              {showAccessInfo ? <ChevronUp size={16} color="#A09890" /> : <ChevronDown size={16} color="#A09890" />}
+            </button>
+            {showAccessInfo && (
+              <div style={{ marginTop: 10 }}>
+                {accessBuilding.accessInstructions && (
+                  <p style={{ fontSize: 13, color: '#1A1A18', margin: 0, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                    {accessBuilding.accessInstructions}
+                  </p>
+                )}
+                {accessBuilding.photos && accessBuilding.photos.length > 0 && (
+                  <div style={{ display: 'flex', gap: 6, marginTop: 10, overflowX: 'auto' }}>
+                    {accessBuilding.photos.map((url, idx) => (
+                      <div key={idx} style={{ width: 90, height: 90, borderRadius: 8, flexShrink: 0, backgroundImage: `url(${url})`, backgroundSize: 'cover', backgroundPosition: 'center' }} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {error && (
           <div style={{ padding: '10px 12px', borderRadius: 8, background: '#FDECEA', color: '#C0392B', fontSize: 13 }}>

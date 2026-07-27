@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { writeBatch, doc } from 'firebase/firestore'
+import { writeBatch, doc, deleteField } from 'firebase/firestore'
 import { useCollection } from '@/lib/hooks/useCollection'
 import { createDoc, updateDocById, deleteDocById } from '@/lib/services/crud.service'
 import { db } from '@/lib/firebase/firestore'
@@ -13,7 +13,7 @@ import { FormField } from '@/components/ui/form-field'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ListSkeleton } from '@/components/shared/LoadingSkeleton'
 import { useRouter } from 'next/navigation'
-import { Plus, ArrowLeft, MapPin, Pencil, Trash2, GripVertical, Dumbbell } from 'lucide-react'
+import { Plus, ArrowLeft, MapPin, Pencil, Trash2, GripVertical, Dumbbell, Building2 } from 'lucide-react'
 import {
   DndContext, closestCenter, PointerSensor, TouchSensor,
   useSensor, useSensors, type DragEndEvent,
@@ -22,9 +22,9 @@ import {
   SortableContext, useSortable, verticalListSortingStrategy, arrayMove,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import type { Location } from '@/types'
+import type { Location, Building } from '@/types'
 
-function SortableRow({ loc, onEdit, onDelete }: { loc: Location; onEdit: () => void; onDelete: () => void }) {
+function SortableRow({ loc, buildingName, onEdit, onDelete }: { loc: Location; buildingName?: string; onEdit: () => void; onDelete: () => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: loc.id })
   return (
     <div
@@ -42,6 +42,7 @@ function SortableRow({ loc, onEdit, onDelete }: { loc: Location; onEdit: () => v
       <div className="flex-1 min-w-0">
         <p className="text-[14px] font-medium text-[var(--color-text-primary)]">{loc.name}</p>
         <p className="text-[12px] text-[var(--color-text-tertiary)] truncate">
+          {buildingName ? `${buildingName} · ` : ''}
           {loc.address ? `${loc.address} · ` : ''}
           {loc.allowMultipleBookings
             ? loc.maxSimultaneous === 0 ? 'Sans limite' : `${loc.maxSimultaneous} max simultanés`
@@ -64,6 +65,8 @@ function SortableRow({ loc, onEdit, onDelete }: { loc: Location; onEdit: () => v
 export default function LocationsPage() {
   const router = useRouter()
   const { data: raw, loading } = useCollection<Location>('locations', [])
+  const { data: buildings } = useCollection<Building>('buildings', [])
+  const buildingMap = new Map(buildings.map(b => [b.id, b.name]))
   const [ordered, setOrdered] = useState<Location[]>([])
 
   useEffect(() => {
@@ -101,6 +104,7 @@ export default function LocationsPage() {
   const [name, setName] = useState('')
   const [address, setAddress] = useState('')
   const [notes, setNotes] = useState('')
+  const [buildingId, setBuildingId] = useState('')
   const [allowMultiple, setAllowMultiple] = useState(false)
   const [unlimited, setUnlimited] = useState(false)
   const [maxSimultaneous, setMaxSimultaneous] = useState('')
@@ -108,12 +112,13 @@ export default function LocationsPage() {
   const [error, setError] = useState<string | null>(null)
 
   function openCreate() {
-    setEditing(null); setName(''); setAddress(''); setNotes('')
+    setEditing(null); setName(''); setAddress(''); setNotes(''); setBuildingId('')
     setAllowMultiple(false); setUnlimited(false); setMaxSimultaneous('')
     setAllowCoachTraining(false); setError(null); setSheet('create')
   }
   function openEdit(l: Location) {
     setEditing(l); setName(l.name); setAddress(l.address ?? ''); setNotes(l.notes ?? '')
+    setBuildingId(l.buildingId ?? '')
     setAllowMultiple(l.allowMultipleBookings ?? false)
     setUnlimited((l.maxSimultaneous ?? 1) === 0)
     setMaxSimultaneous((l.maxSimultaneous && l.maxSimultaneous > 0) ? String(l.maxSimultaneous) : '')
@@ -126,7 +131,11 @@ export default function LocationsPage() {
     if (!name.trim()) { setError('Le nom est requis.'); return }
     setSaving(true); setError(null)
     const max = !allowMultiple ? 1 : unlimited ? 0 : (parseInt(maxSimultaneous) || 2)
-    const data = { name: name.trim(), address, notes, allowMultipleBookings: allowMultiple, maxSimultaneous: max, allowCoachTraining }
+    const data = {
+      name: name.trim(), address, notes,
+      ...(buildingId ? { buildingId } : (sheet === 'edit' ? { buildingId: deleteField() } : {})),
+      allowMultipleBookings: allowMultiple, maxSimultaneous: max, allowCoachTraining,
+    }
     try {
       if (sheet === 'create') await createDoc('locations', data)
       else if (editing) await updateDocById('locations', editing.id, data)
@@ -156,7 +165,7 @@ export default function LocationsPage() {
           <SortableContext items={ordered.map(l => l.id)} strategy={verticalListSortingStrategy}>
             <div className="p-4 space-y-2">
               {ordered.map(l => (
-                <SortableRow key={l.id} loc={l} onEdit={() => openEdit(l)} onDelete={() => setConfirmDelete(l.id)} />
+                <SortableRow key={l.id} loc={l} buildingName={l.buildingId ? buildingMap.get(l.buildingId) : undefined} onEdit={() => openEdit(l)} onDelete={() => setConfirmDelete(l.id)} />
               ))}
             </div>
           </SortableContext>
@@ -194,6 +203,25 @@ export default function LocationsPage() {
             <FormField label="Notes">
               <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Accès, code, informations utiles..." />
             </FormField>
+
+            {buildings.length > 0 && (
+              <FormField label="Bâtiment" hint="Regroupe ce lieu avec d'autres au même endroit pour partager les instructions d'accès affichées au client">
+                <div className="flex flex-wrap gap-1.5">
+                  <button type="button" onClick={() => setBuildingId('')}
+                    className="px-3 py-1.5 rounded-full border text-[12px] font-medium"
+                    style={{ background: !buildingId ? '#1A1A18' : 'var(--color-surface)', color: !buildingId ? '#fff' : 'var(--color-text-primary)', borderColor: !buildingId ? '#1A1A18' : 'var(--color-border)' }}>
+                    Aucun
+                  </button>
+                  {buildings.map(b => (
+                    <button key={b.id} type="button" onClick={() => setBuildingId(b.id)}
+                      className="px-3 py-1.5 rounded-full border text-[12px] font-medium"
+                      style={{ background: buildingId === b.id ? '#1A1A18' : 'var(--color-surface)', color: buildingId === b.id ? '#fff' : 'var(--color-text-primary)', borderColor: buildingId === b.id ? '#1A1A18' : 'var(--color-border)' }}>
+                      {b.name}
+                    </button>
+                  ))}
+                </div>
+              </FormField>
+            )}
 
             <div>
               <p className="text-[11px] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wide mb-2">Réservations simultanées</p>

@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation'
 import { useAuth } from '@/lib/hooks/useAuth'
 import {
   Users, MapPin, Briefcase, UsersRound, BarChart2,
-  Settings, ScrollText, LogOut, User, X, ChevronRight, Users2, Percent, Repeat,
+  Settings, ScrollText, LogOut, User, X, ChevronRight, Users2, Percent, Repeat, Building2,
 } from 'lucide-react'
 
 interface BurgerMenuCtx {
@@ -24,6 +24,7 @@ export function useBurgerMenu() {
 const ADMIN_LINKS = [
   { href: '/admin/coaches',              label: 'Coachs',               description: 'Gérer les coachs',            icon: Users },
   { href: '/admin/locations',            label: 'Lieux',                description: 'Salles et espaces',           icon: MapPin },
+  { href: '/admin/buildings',            label: 'Bâtiments',            description: 'Instructions d\'accès pour les clients', icon: Building2 },
   { href: '/admin/services',             label: 'Services',             description: 'Types de séances et tarifs',  icon: Briefcase },
   { href: '/admin/discounts',            label: 'Remises',              description: 'Codes promo et rabais clients', icon: Percent },
   { href: '/admin/subscriptions',        label: 'Abonnements',          description: 'Plans et attribution aux clients', icon: Repeat },

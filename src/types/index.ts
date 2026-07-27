@@ -55,6 +55,20 @@ export interface ClientGroup {
   updatedAt: Timestamp
 }
 
+// ─── Bâtiment ─────────────────────────────────────────────────────────────────
+// Regroupe plusieurs Lieux au même endroit géographique (ex: Ring / Fitness 1 / Fitness 2
+// sont 3 Lieux dans le même bâtiment Swiss Gun Center) — les instructions d'accès sont
+// rattachées ici plutôt que sur chaque Lieu pour éviter de les dupliquer.
+
+export interface Building {
+  id: string
+  name: string
+  accessInstructions?: string
+  photos?: string[] // data URLs compressées côté client, comme Service.imageUrl — pas d'hébergement
+  createdAt: Timestamp
+  updatedAt: Timestamp
+}
+
 // ─── Lieu ─────────────────────────────────────────────────────────────────────
 
 export interface Location {
@@ -62,6 +76,7 @@ export interface Location {
   name: string
   address?: string
   notes?: string
+  buildingId?: string
   active: boolean
   allowMultipleBookings: boolean
   maxSimultaneous: number

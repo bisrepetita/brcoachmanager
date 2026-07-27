@@ -15,7 +15,8 @@ export async function createSubscriptionCheckout(opts: {
   if (!stripeKey) throw new Error('STRIPE_SECRET_KEY manquant')
 
   const stripe = new Stripe(stripeKey, { apiVersion })
-  const successUrl = process.env.STRIPE_SUCCESS_URL || `${opts.baseUrl}/paiement-confirme`
+  const successUrl = new URL(process.env.STRIPE_SUCCESS_URL || `${opts.baseUrl}/paiement-confirme`)
+  successUrl.searchParams.set('type', 'subscription')
   const cancelUrl = process.env.STRIPE_RETURN_URL || 'https://bisrepetita.ch'
 
   const checkoutSession = await stripe.checkout.sessions.create({
@@ -29,7 +30,7 @@ export async function createSubscriptionCheckout(opts: {
       },
       quantity: 1,
     }],
-    success_url: successUrl,
+    success_url: successUrl.toString(),
     cancel_url: cancelUrl,
     client_reference_id: `subscription__${opts.clientSubscriptionId}__${opts.clientId}`,
   })

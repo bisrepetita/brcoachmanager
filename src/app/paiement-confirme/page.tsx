@@ -1,8 +1,28 @@
 'use client'
 
+import { Suspense, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { CheckCircle2 } from 'lucide-react'
 
-export default function PaiementConfirmePage() {
+const REDIRECT_DELAY_MS = 2500
+
+function destinationFor(type: string | null, id: string | null): string | null {
+  if (type === 'groupSession' && id) return `/group-sessions/${id}`
+  if (type === 'subscription') return '/subscriptions'
+  return null
+}
+
+function PaiementConfirmeContent() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const destination = destinationFor(searchParams.get('type'), searchParams.get('id'))
+
+  useEffect(() => {
+    if (!destination) return
+    const timer = setTimeout(() => router.replace(destination as never), REDIRECT_DELAY_MS)
+    return () => clearTimeout(timer)
+  }, [destination, router])
+
   return (
     <div style={{
       minHeight: '100dvh', display: 'flex', flexDirection: 'column',
@@ -19,5 +39,13 @@ export default function PaiementConfirmePage() {
         </p>
       </div>
     </div>
+  )
+}
+
+export default function PaiementConfirmePage() {
+  return (
+    <Suspense fallback={null}>
+      <PaiementConfirmeContent />
+    </Suspense>
   )
 }
