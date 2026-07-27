@@ -20,6 +20,7 @@ export async function GET() {
     const serviceIds = [...new Set(snap.docs.map((doc) => doc.data()['serviceId'] as string | undefined).filter((id): id is string => !!id))]
     const serviceSnaps = await Promise.all(serviceIds.map((id) => adminDb.collection('services').doc(id).get()))
     const serviceImageMap = new Map(serviceSnaps.filter((s) => s.exists).map((s) => [s.id, s.data()?.['imageUrl'] as string | undefined]))
+    const serviceNameMap = new Map(serviceSnaps.filter((s) => s.exists).map((s) => [s.id, s.data()?.['name'] as string | undefined]))
 
     const items = snap.docs.map((doc) => {
       const d = doc.data()
@@ -33,6 +34,7 @@ export async function GET() {
         coachNames: d['coachNames'],
         locationId: d['locationId'],
         serviceId,
+        serviceName: serviceId ? serviceNameMap.get(serviceId) : undefined,
         imageUrl: serviceId ? serviceImageMap.get(serviceId) : undefined,
         startAt: (d['startAt'] as Timestamp).toDate().toISOString(),
         endAt: (d['endAt'] as Timestamp).toDate().toISOString(),

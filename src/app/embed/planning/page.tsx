@@ -1,16 +1,23 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { format, isToday, isTomorrow } from 'date-fns'
+import {
+  format, isToday, isTomorrow, isSameDay, isWithinInterval,
+  startOfWeek, endOfWeek, addWeeks, subWeeks,
+} from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { Users2, ArrowUpRight } from 'lucide-react'
+import { Users2, ArrowUpRight, ChevronLeft, ChevronRight, SlidersHorizontal } from 'lucide-react'
 import { GROUP_SESSION_LEVEL_LABELS, type GroupSessionLevel } from '@/types'
+
+type SortMode = 'date' | 'price_asc' | 'price_desc'
 
 interface EmbedSession {
   id: string
   title: string
   description?: string
   coachNames?: string[]
+  serviceId?: string
+  serviceName?: string
   imageUrl?: string
   startAt: string
   maxParticipants: number
@@ -33,6 +40,11 @@ function dayLabel(date: Date): string {
 export default function EmbedPlanningPage() {
   const [items, setItems] = useState<EmbedSession[]>([])
   const [loading, setLoading] = useState(true)
+  const [sortMode, setSortMode] = useState<SortMode>('date')
+  const [filterServiceId, setFilterServiceId] = useState('')
+  const [onlyAvailable, setOnlyAvailable] = useState(false)
+  const [showFilters, setShowFilters] = useState(false)
+  const [weekAnchor, setWeekAnchor] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }))
 
   useEffect(() => {
     document.documentElement.style.background = 'transparent'
@@ -43,9 +55,26 @@ export default function EmbedPlanningPage() {
       .finally(() => setLoading(false))
   }, [])
 
+  const filterableServices = useMemo(() => {
+    const seen = new Map<string, string>()
+    items.forEach(it => { if (it.serviceId && it.serviceName && !seen.has(it.serviceId)) seen.set(it.serviceId, it.serviceName) })
+    return [...seen.entries()].map(([id, name]) => ({ id, name }))
+  }, [items])
+
+  const weekStart = weekAnchor
+  const weekEnd = endOfWeek(weekAnchor, { weekStartsOn: 1 })
+
+  const filtered = useMemo(() => {
+    let result = items
+    if (filterServiceId) result = result.filter(gs => gs.serviceId === filterServiceId)
+    if (onlyAvailable) result = result.filter(gs => gs.confirmedCount < gs.maxParticipants)
+    result = result.filter(gs => isWithinInterval(new Date(gs.startAt), { start: weekStart, end: weekEnd }))
+    return result
+  }, [items, filterServiceId, onlyAvailable, weekStart, weekEnd])
+
   const groups = useMemo(() => {
     const byDay = new Map<string, EmbedSession[]>()
-    items.forEach(it => {
+    filtered.forEach(it => {
       const key = format(new Date(it.startAt), 'yyyy-MM-dd')
       if (!byDay.has(key)) byDay.set(key, [])
       byDay.get(key)!.push(it)
@@ -54,16 +83,100 @@ export default function EmbedPlanningPage() {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([, dayItems]) => ({
         date: new Date(dayItems[0]!.startAt),
-        items: dayItems.sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime()),
+        items: [...dayItems].sort((a, b) => {
+          if (sortMode === 'price_asc') return a.price - b.price
+          if (sortMode === 'price_desc') return b.price - a.price
+          return new Date(a.startAt).getTime() - new Date(b.startAt).getTime()
+        }),
       }))
-  }, [items])
+  }, [filtered, sortMode])
+
+  const activeFilterCount = (sortMode !== 'date' ? 1 : 0) + (onlyAvailable ? 1 : 0)
 
   return (
-    <div style={{ background: 'transparent', width: '100%', boxSizing: 'border-box', padding: '8px 4px', fontFamily: 'var(--font-sans, sans-serif)' }}>
+    <div style={{ background: 'transparent', width: '100%', boxSizing: 'border-box', padding: '4px', fontFamily: 'var(--font-sans, sans-serif)' }}>
+      {/* Navigation semaine + filtres */}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 }}>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fff', border: '1px solid #EEEAE3', borderRadius: 10, padding: '8px 10px' }}>
+          <button onClick={() => setWeekAnchor(w => subWeeks(w, 1))} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
+            <ChevronLeft size={18} color="#7A7570" />
+          </button>
+          <p style={{ fontSize: 13, fontWeight: 600, color: '#1A1A18', margin: 0, textTransform: 'capitalize' }}>
+            {isSameDay(weekStart, startOfWeek(new Date(), { weekStartsOn: 1 }))
+              ? 'Cette semaine'
+              : `${format(weekStart, 'd MMM', { locale: fr })} – ${format(weekEnd, 'd MMM', { locale: fr })}`}
+          </p>
+          <button onClick={() => setWeekAnchor(w => addWeeks(w, 1))} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
+            <ChevronRight size={18} color="#7A7570" />
+          </button>
+        </div>
+        <button
+          aria-label="Filtres"
+          onClick={() => setShowFilters(v => !v)}
+          style={{
+            position: 'relative', width: 36, height: 36, borderRadius: 8, flexShrink: 0,
+            border: `1px solid ${showFilters || activeFilterCount > 0 ? '#1A1A18' : '#EEEAE3'}`,
+            background: showFilters ? '#1A1A18' : '#fff', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <SlidersHorizontal size={15} color={showFilters ? '#fff' : '#1A1A18'} />
+          {activeFilterCount > 0 && !showFilters && (
+            <span style={{ position: 'absolute', top: -3, right: -3, width: 15, height: 15, borderRadius: 8, background: '#C0392B', color: '#fff', fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {activeFilterCount}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {filterableServices.length > 0 && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+          <button onClick={() => setFilterServiceId('')}
+            style={{ padding: '6px 12px', borderRadius: 20, border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 600, background: !filterServiceId ? '#1A1A18' : '#F0EDE8', color: !filterServiceId ? '#fff' : '#1A1A18' }}>
+            Tous
+          </button>
+          {filterableServices.map(s => (
+            <button key={s.id} onClick={() => setFilterServiceId(s.id)}
+              style={{ padding: '6px 12px', borderRadius: 20, border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 600, background: filterServiceId === s.id ? '#1A1A18' : '#F0EDE8', color: filterServiceId === s.id ? '#fff' : '#1A1A18' }}>
+              {s.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {showFilters && (
+        <div style={{ background: '#fff', border: '1px solid #EEEAE3', borderRadius: 10, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 10 }}>
+          <div>
+            <p style={{ fontSize: 11, fontWeight: 600, color: '#A09890', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 8px' }}>Trier par</p>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {([['date', 'Date'], ['price_asc', 'Prix ↑'], ['price_desc', 'Prix ↓']] as [SortMode, string][]).map(([v, label]) => (
+                <button key={v} onClick={() => setSortMode(v)}
+                  style={{ flex: 1, padding: '6px 0', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 600, background: sortMode === v ? '#1A1A18' : '#F0EDE8', color: sortMode === v ? '#fff' : '#1A1A18' }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <button onClick={() => setOnlyAvailable(v => !v)}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+            <div style={{
+              width: 18, height: 18, borderRadius: 5, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: onlyAvailable ? '#1A1A18' : 'transparent', border: `1.5px solid ${onlyAvailable ? '#1A1A18' : '#C8C4BC'}`,
+            }}>
+              {onlyAvailable && <span style={{ color: '#fff', fontSize: 11, fontWeight: 700 }}>✓</span>}
+            </div>
+            <span style={{ fontSize: 13, color: '#1A1A18' }}>Uniquement les places disponibles</span>
+          </button>
+        </div>
+      )}
+
       {loading ? (
         <p style={{ color: '#A09890', fontSize: 14, textAlign: 'center', padding: 24 }}>Chargement…</p>
       ) : groups.length === 0 ? (
-        <p style={{ color: '#A09890', fontSize: 14, textAlign: 'center', padding: 24 }}>Aucune séance à venir</p>
+        <p style={{ color: '#A09890', fontSize: 14, textAlign: 'center', padding: 24 }}>
+          {items.length > 0 ? 'Aucune séance ne correspond à ces filtres cette semaine.' : 'Aucune séance cette semaine.'}
+        </p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
           {groups.map(group => (
