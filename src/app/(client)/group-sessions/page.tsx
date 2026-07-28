@@ -56,6 +56,16 @@ export default function ClientGroupSessionsPage() {
   const [onlyAvailable, setOnlyAvailable] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
   const [weekAnchor, setWeekAnchor] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }))
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
+
+  const toggleExpanded = (id: string) => {
+    setExpandedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   useEffect(() => {
     if (authLoading) return
@@ -266,6 +276,8 @@ export default function ClientGroupSessionsPage() {
                   const sessionDate = gs.startAt
                   const fillRatio = gs.maxParticipants > 0 ? Math.min(1, confirmedCount / gs.maxParticipants) : 0
                   const imageUrl = gs.imageUrl ?? (gs.serviceId ? serviceMap.get(gs.serviceId)?.imageUrl : undefined)
+                  const isExpanded = expandedIds.has(gs.id)
+                  const isLongDescription = (gs.description?.length ?? 0) > 60
 
                   const theme = imageUrl ? {
                     cardBackground: `linear-gradient(180deg, rgba(10,10,10,0.20) 0%, rgba(10,10,10,0.82) 100%), url(${imageUrl}) center/100% auto no-repeat`,
@@ -301,9 +313,17 @@ export default function ClientGroupSessionsPage() {
                   const fillColor = isFull ? theme.fullFill : isAlmostFull ? theme.almostFill : theme.neutralFill
 
                   return (
-                    <button
+                    <div
                       key={gs.id}
+                      role="button"
+                      tabIndex={0}
                       onClick={() => router.push(`/group-sessions/${gs.id}` as never)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          router.push(`/group-sessions/${gs.id}` as never)
+                        }
+                      }}
                       className="press-effect"
                       style={{
                         background: theme.cardBackground, borderRadius: 14, padding: 14,
@@ -360,25 +380,49 @@ export default function ClientGroupSessionsPage() {
                           </div>
                         )}
 
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 2 }}>
-                          <span style={{ fontSize: 12.5, color: theme.secondary, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {gs.description}
-                          </span>
+                        {gs.description && (
+                          <div style={{ marginTop: 1 }}>
+                            <p style={{
+                              fontSize: 12.5, color: theme.secondary, margin: 0, lineHeight: 1.4,
+                              ...(isExpanded
+                                ? { whiteSpace: 'pre-wrap' as const }
+                                : {
+                                    display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const,
+                                    overflow: 'hidden',
+                                  }),
+                            }}>
+                              {gs.description}
+                            </p>
+                            {isLongDescription && (
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); toggleExpanded(gs.id) }}
+                                onKeyDown={(e) => e.stopPropagation()}
+                                style={{
+                                  background: 'none', border: 'none', padding: 0, marginTop: 2,
+                                  fontSize: 11, fontWeight: 600, color: theme.secondary, cursor: 'pointer',
+                                  textDecoration: 'underline', textUnderlineOffset: 2,
+                                }}
+                              >
+                                {isExpanded ? 'Réduire' : 'Voir plus'}
+                              </button>
+                            )}
+                          </div>
+                        )}
 
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
-                            {isFull ? (
-                              <span style={{ fontSize: 11, fontWeight: 600, color: theme.fullFill }}>Complet</span>
-                            ) : isAlmostFull ? (
-                              <span style={{ fontSize: 11, fontWeight: 600, color: theme.almostFill }}>
-                                {spotsLeft} place{spotsLeft > 1 ? 's' : ''}
-                              </span>
-                            ) : null}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                              <Users2 size={12} color={fillColor} />
-                              <span style={{ fontSize: 12, color: fillColor, fontVariantNumeric: 'tabular-nums' }}>
-                                {confirmedCount}/{gs.maxParticipants}
-                              </span>
-                            </div>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 5, marginTop: 2 }}>
+                          {isFull ? (
+                            <span style={{ fontSize: 11, fontWeight: 600, color: theme.fullFill }}>Complet</span>
+                          ) : isAlmostFull ? (
+                            <span style={{ fontSize: 11, fontWeight: 600, color: theme.almostFill }}>
+                              {spotsLeft} place{spotsLeft > 1 ? 's' : ''}
+                            </span>
+                          ) : null}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <Users2 size={12} color={fillColor} />
+                            <span style={{ fontSize: 12, color: fillColor, fontVariantNumeric: 'tabular-nums' }}>
+                              {confirmedCount}/{gs.maxParticipants}
+                            </span>
                           </div>
                         </div>
 
@@ -387,7 +431,7 @@ export default function ClientGroupSessionsPage() {
                           <div style={{ height: '100%', width: `${fillRatio * 100}%`, background: fillColor, borderRadius: 2, transition: 'width 0.2s' }} />
                         </div>
                       </div>
-                    </button>
+                    </div>
                   )
                 })}
               </div>
