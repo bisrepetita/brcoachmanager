@@ -58,6 +58,7 @@ export async function POST(req: NextRequest) {
         groupSessionId, clientId,
         notifyCoaches: false, notifyClient: true,
         amountPaid, paymentLabel: 'Payé',
+        baseUrl: req.nextUrl.origin,
       })
 
       return NextResponse.json({ received: true })

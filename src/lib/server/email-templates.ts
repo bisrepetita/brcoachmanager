@@ -31,6 +31,7 @@ export function groupSessionConfirmationEmail(opts: {
   amountPaid: number
   paymentLabel: string
   accessInstructions?: string
+  groupSessionUrl?: string
 }): { subject: string; html: string } {
   const body = `
     <p style="font-size:16px;font-weight:700;color:#1A1A18;margin:0 0 4px;">Inscription confirmée ✓</p>
@@ -44,6 +45,7 @@ export function groupSessionConfirmationEmail(opts: {
     <div style="background:#F5F3F0;border-radius:8px;padding:14px;">
       <p style="font-size:13px;font-weight:600;color:#1A1A18;margin:0 0 6px;">Comment nous trouver</p>
       <p style="font-size:13px;color:#1A1A18;margin:0;white-space:pre-wrap;line-height:1.5;">${escapeHtml(opts.accessInstructions)}</p>
+      ${opts.groupSessionUrl ? `<a href="${opts.groupSessionUrl}#acces" style="display:inline-block;font-size:13px;font-weight:600;color:#1A1A18;text-decoration:underline;margin-top:10px;">Voir le plan d'accès et les photos →</a>` : ''}
     </div>` : ''}
   `
   return { subject: `Inscription confirmée — ${opts.sessionTitle}`, html: layout(body) }

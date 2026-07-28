@@ -100,6 +100,14 @@ export default function ClientGroupSessionDetailPage() {
     if (profile) setShowAccessInfo(!profile.hasEverBooked)
   }, [profile])
 
+  // Lien "Voir le plan d'accès" du mail de confirmation — force le dépliage et scrolle jusqu'à la
+  // section, même pour un habitué (profil déjà venu) chez qui elle est repliée par défaut.
+  useEffect(() => {
+    if (!accessBuilding || window.location.hash !== '#acces') return
+    setShowAccessInfo(true)
+    document.getElementById('acces')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [accessBuilding])
+
   // Couverture abonnement — vérifiée en premier (revenu déjà encaissé), avant la gratuité
   // "1ère réservation" et les remises (pas de cumul, même priorité que côté serveur).
   useEffect(() => {
@@ -252,7 +260,7 @@ export default function ClientGroupSessionDetailPage() {
           </div>
 
           {(publicSession.accessInstructions || (publicSession.accessPhotos && publicSession.accessPhotos.length > 0)) && (
-            <div style={{ background: '#fff', borderRadius: 10, padding: 14 }}>
+            <div id="acces" style={{ background: '#fff', borderRadius: 10, padding: 14 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <MapPin size={15} color="#7A7570" style={{ flexShrink: 0 }} />
                 <span style={{ fontSize: 14, fontWeight: 600, color: '#1A1A18' }}>Comment nous trouver</span>
@@ -411,7 +419,7 @@ export default function ClientGroupSessionDetailPage() {
         </div>
 
         {accessBuilding && (accessBuilding.accessInstructions || (accessBuilding.photos && accessBuilding.photos.length > 0)) && (
-          <div style={{ background: '#fff', borderRadius: 10, padding: 14 }}>
+          <div id="acces" style={{ background: '#fff', borderRadius: 10, padding: 14 }}>
             <button
               onClick={() => setShowAccessInfo(v => !v)}
               style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}

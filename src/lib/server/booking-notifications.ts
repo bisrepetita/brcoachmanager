@@ -23,6 +23,7 @@ export async function notifyGroupSessionBooking(adminDb: Firestore, opts: {
   notifyCoaches: boolean
   amountPaid: number
   paymentLabel: string
+  baseUrl: string
 }): Promise<void> {
   try {
     const [gsSnap, clientSnap] = await Promise.all([
@@ -45,6 +46,7 @@ export async function notifyGroupSessionBooking(adminDb: Firestore, opts: {
         const { subject, html } = groupSessionConfirmationEmail({
           clientFirstName, sessionTitle, dateStr,
           amountPaid: opts.amountPaid, paymentLabel: opts.paymentLabel, accessInstructions,
+          groupSessionUrl: `${opts.baseUrl}/group-sessions/${opts.groupSessionId}`,
         })
         await sendEmail({ to: clientEmail, subject, html })
       }

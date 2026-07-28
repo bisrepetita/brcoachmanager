@@ -194,6 +194,7 @@ export async function POST(req: NextRequest) {
       notifyClient: isImmediatelyConfirmed,
       amountPaid: (enrollment.amountPaid as number) ?? 0,
       paymentLabel: paymentLabelFor(enrollment.paymentStatus as string),
+      baseUrl: req.nextUrl.origin,
     })
 
     // Séance offerte (1ère réservation) : déjà confirmée dans la transaction, pas de paiement à
