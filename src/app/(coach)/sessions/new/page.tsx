@@ -130,7 +130,7 @@ async function markClientsAsBooked(clientIds: string[], clients: Client[]): Prom
   await Promise.all(toMark.map(id => updateDocById('clients', id, { hasEverBooked: true })))
 }
 
-const DURATIONS = [30, 45, 60, 75, 90, 120] as const
+const DURATIONS = [30, 45, 50, 60, 75, 90, 120] as const
 type SessionMode = 'standard' | 'training'
 type ClientMode = 'individual' | 'group'
 type RecurrenceVal = 'none' | 'weekly' | 'biweekly' | 'monthly'

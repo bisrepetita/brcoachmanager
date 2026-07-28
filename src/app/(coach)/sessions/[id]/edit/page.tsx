@@ -57,7 +57,7 @@ function SelectItem({ label, sub, selected, onSelect, multi = false }: {
 
 type Scope = 'single' | 'following' | 'all'
 
-const DURATIONS = [30, 45, 60, 75, 90, 120] as const
+const DURATIONS = [30, 45, 50, 60, 75, 90, 120] as const
 
 export default function EditSessionPage() {
   const router = useRouter()

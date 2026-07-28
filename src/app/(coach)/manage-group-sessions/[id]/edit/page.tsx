@@ -113,7 +113,7 @@ function generateOccurrenceDates(
   return dates
 }
 
-const DURATIONS = [30, 45, 60, 75, 90, 120] as const
+const DURATIONS = [30, 45, 50, 60, 75, 90, 120] as const
 type Scope = 'single' | 'following' | 'all'
 type RecurrenceVal = 'none' | 'weekly' | 'biweekly' | 'monthly'
 type RecurrenceEndType = 'infinite' | '3months' | '6months' | '1year' | 'count'
