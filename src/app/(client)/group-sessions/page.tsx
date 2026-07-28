@@ -280,7 +280,7 @@ export default function ClientGroupSessionsPage() {
                   const isLongDescription = (gs.description?.length ?? 0) > 60
 
                   const theme = imageUrl ? {
-                    cardBackground: `linear-gradient(180deg, rgba(10,10,10,0.20) 0%, rgba(10,10,10,0.82) 100%), url(${imageUrl}) center/100% auto no-repeat`,
+                    cardBackground: `linear-gradient(180deg, rgba(10,10,10,0.20) 0%, rgba(10,10,10,0.82) 100%), url(${imageUrl}) center/cover no-repeat`,
                     border: isEnrolled ? '1px solid rgba(255,255,255,0.85)' : '1px solid rgba(255,255,255,0.12)',
                     chipBg: 'rgba(255,255,255,0.16)',
                     chipDay: '#FFFFFF',
