@@ -431,6 +431,10 @@ export default function ClientGroupSessionsPage() {
                           <div style={{ height: '100%', width: `${fillRatio * 100}%`, background: fillColor, borderRadius: 2, transition: 'width 0.2s' }} />
                         </div>
                       </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+                        <ChevronRight size={16} color={theme.secondary} strokeWidth={2} />
+                      </div>
                     </div>
                   )
                 })}
