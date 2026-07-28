@@ -28,7 +28,12 @@ export function useIndependentSessions(coachId: string | null) {
       })
   }, [allSessions, coachId])
 
-  const pending = useMemo(() => rows.filter(r => r.entry.status === 'pending'), [rows])
+  // Ordre croissant (plus proche en premier) — l'ordre inverse hérité de la requête (plus récent
+  // d'abord) convient à l'historique "resolved", mais pas à une liste "à venir/en attente".
+  const pending = useMemo(() =>
+    rows.filter(r => r.entry.status === 'pending')
+      .sort((a, b) => a.session.startAt.toMillis() - b.session.startAt.toMillis()),
+  [rows])
   const resolved = useMemo(() => rows.filter(r => r.entry.status !== 'pending'), [rows])
   const totalPending = useMemo(() => pending.reduce((sum, r) => sum + r.entry.amountDueToCompany, 0), [pending])
 
