@@ -404,7 +404,7 @@ export default function ClientGroupSessionsPage() {
                                   textDecoration: 'underline', textUnderlineOffset: 2,
                                 }}
                               >
-                                {isExpanded ? 'Réduire' : 'Voir plus'}
+                                {isExpanded ? 'Réduire' : 'Lire la suite'}
                               </button>
                             )}
                           </div>
