@@ -27,6 +27,7 @@ interface GroupSessionListItem {
   description?: string
   coachNames?: string[]
   serviceId?: string
+  imageUrl?: string
   startAt: Date
   maxParticipants: number
   price: number
@@ -264,7 +265,7 @@ export default function ClientGroupSessionsPage() {
                   const isEnrolled = gs.isEnrolled
                   const sessionDate = gs.startAt
                   const fillRatio = gs.maxParticipants > 0 ? Math.min(1, confirmedCount / gs.maxParticipants) : 0
-                  const imageUrl = gs.serviceId ? serviceMap.get(gs.serviceId)?.imageUrl : undefined
+                  const imageUrl = gs.imageUrl ?? (gs.serviceId ? serviceMap.get(gs.serviceId)?.imageUrl : undefined)
 
                   const theme = imageUrl ? {
                     cardBackground: `linear-gradient(180deg, rgba(10,10,10,0.20) 0%, rgba(10,10,10,0.82) 100%), url(${imageUrl}) center/100% auto no-repeat`,
