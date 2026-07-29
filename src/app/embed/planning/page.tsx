@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import {
   format, isToday, isTomorrow, isSameDay, isWithinInterval,
   startOfWeek, endOfWeek, addWeeks, subWeeks,
@@ -38,6 +39,21 @@ function dayLabel(date: Date): string {
 // dans l'iframe elle-même (pas de connexion/réservation ici, trop à l'étroit) : chaque séance
 // ouvre l'app dans un nouvel onglet, où le client se connecte et réserve normalement.
 export default function EmbedPlanningPage() {
+  return (
+    <Suspense fallback={null}>
+      <EmbedPlanningContent />
+    </Suspense>
+  )
+}
+
+function EmbedPlanningContent() {
+  // Le fond de l'iframe est transparent (s'intègre à n'importe quel site) — mais le séparateur de
+  // date et les textes d'état sont posés directement dessus, sans fond propre. Sur une page hôte au
+  // fond sombre, leurs couleurs par défaut (pensées pour un fond clair) deviennent illisibles. Le
+  // site intégrateur ajoute `?theme=dark` à l'URL de l'iframe pour les sections à fond sombre.
+  const searchParams = useSearchParams()
+  const isDark = searchParams.get('theme') === 'dark'
+
   const [items, setItems] = useState<EmbedSession[]>([])
   const [loading, setLoading] = useState(true)
   const [sortMode, setSortMode] = useState<SortMode>('date')
@@ -191,9 +207,9 @@ export default function EmbedPlanningPage() {
       )}
 
       {loading ? (
-        <p style={{ color: '#A09890', fontSize: 14, textAlign: 'center', padding: 24 }}>Chargement…</p>
+        <p style={{ color: isDark ? 'rgba(255,255,255,0.65)' : '#A09890', fontSize: 14, textAlign: 'center', padding: 24 }}>Chargement…</p>
       ) : groups.length === 0 ? (
-        <p style={{ color: '#A09890', fontSize: 14, textAlign: 'center', padding: 24 }}>
+        <p style={{ color: isDark ? 'rgba(255,255,255,0.65)' : '#A09890', fontSize: 14, textAlign: 'center', padding: 24 }}>
           {items.length > 0 ? 'Aucune séance ne correspond à ces filtres cette semaine.' : 'Aucune séance cette semaine.'}
         </p>
       ) : (
@@ -201,11 +217,11 @@ export default function EmbedPlanningPage() {
           {groups.map(group => (
             <div key={group.date.toISOString()}>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8, padding: '0 2px' }}>
-                <p style={{ fontSize: 13, fontWeight: 700, color: '#1A1A18', margin: 0, textTransform: 'capitalize' }}>
+                <p style={{ fontSize: 13, fontWeight: 700, color: isDark ? '#FFFFFF' : '#1A1A18', margin: 0, textTransform: 'capitalize' }}>
                   {dayLabel(group.date)}
                 </p>
-                <div style={{ flex: 1, height: 1, background: '#E5E1DA' }} />
-                <p style={{ fontSize: 11, color: '#A09890', margin: 0 }}>
+                <div style={{ flex: 1, height: 1, background: isDark ? 'rgba(255,255,255,0.25)' : '#E5E1DA' }} />
+                <p style={{ fontSize: 11, color: isDark ? 'rgba(255,255,255,0.65)' : '#A09890', margin: 0 }}>
                   {group.items.length} séance{group.items.length > 1 ? 's' : ''}
                 </p>
               </div>
