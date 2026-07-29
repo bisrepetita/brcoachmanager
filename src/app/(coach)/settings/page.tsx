@@ -72,7 +72,7 @@ export default function SettingsPage() {
   }, [user?.googleCalendarUrl])
 
   const icalUrl = user?.id && user?.icalSecret
-    ? `${typeof window !== 'undefined' ? window.location.origin : 'https://brcoachmanager.vercel.app'}/api/ical/${user.id}?secret=${user.icalSecret}`
+    ? `${typeof window !== 'undefined' ? window.location.origin : 'https://app.bisrepetita.ch'}/api/ical/${user.id}?secret=${user.icalSecret}`
     : null
 
   async function copyIcalUrl() {
