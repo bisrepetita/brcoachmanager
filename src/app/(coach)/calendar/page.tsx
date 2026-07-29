@@ -91,7 +91,7 @@ export default function CalendarPage() {
   const range = useMemo(() => getRange(view, anchor), [view, anchor])
   const { sessions } = useSessions(range.start, range.end)
   const { groupSessions } = useGroupSessions(range.start, range.end)
-  const { data: coaches } = useCollection<User>('users', [orderBy('firstName')])
+  const { data: coaches } = useCollection<User>('users', [where('roles', 'array-contains', 'coach'), orderBy('firstName')])
   const { data: services } = useCollection<Service>('services', [orderBy('name')])
   const { data: clients } = useCollection<Client>('clients', [orderBy('firstName')])
   const { data: groups } = useCollection<ClientGroup>('clientGroups', [orderBy('name')])

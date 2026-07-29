@@ -53,7 +53,7 @@ export default function StatsPage() {
   const [filterServiceId, setFilterServiceId] = useState('')
   const [view, setView] = useState<'summary' | 'daily'>('summary')
 
-  const { data: coaches } = useCollection<User>('users', [orderBy('firstName')])
+  const { data: coaches } = useCollection<User>('users', [where('roles', 'array-contains', 'coach'), orderBy('firstName')])
   const { data: services } = useCollection<Service>('services', [orderBy('name')])
 
   useEffect(() => {

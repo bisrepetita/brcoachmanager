@@ -16,7 +16,7 @@ import type { Session, User, Service, Client } from '@/types'
 export default function UpcomingPage() {
   const router = useRouter()
   const { user, isAdmin } = useAuth()
-  const { data: coaches } = useCollection<User>('users', [orderBy('firstName')])
+  const { data: coaches } = useCollection<User>('users', [where('roles', 'array-contains', 'coach'), orderBy('firstName')])
   const { data: services } = useCollection<Service>('services', [orderBy('name')])
   const { data: clients } = useCollection<Client>('clients', [orderBy('firstName')])
 

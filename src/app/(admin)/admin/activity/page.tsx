@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { collection, query, orderBy, limit, getDocs, startAfter, Timestamp, type QueryDocumentSnapshot } from 'firebase/firestore'
+import { collection, query, orderBy, where, limit, getDocs, startAfter, Timestamp, type QueryDocumentSnapshot } from 'firebase/firestore'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { ChevronLeft, Filter } from 'lucide-react'
@@ -76,7 +76,7 @@ export default function ActivityPage() {
   const [filterAction, setFilterAction] = useState<ActivityAction | ''>('')
   const [showFilters, setShowFilters] = useState(false)
 
-  const { data: coaches } = useCollection<User>('users', [orderBy('firstName')])
+  const { data: coaches } = useCollection<User>('users', [where('roles', 'array-contains', 'coach'), orderBy('firstName')])
 
   async function fetchLogs(reset = false) {
     setLoading(true)

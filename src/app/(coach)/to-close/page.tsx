@@ -19,7 +19,7 @@ export default function ToClosePage() {
   const [loading, setLoading] = useState(true)
   const [coachFilter, setCoachFilter] = useState<string>('all')
 
-  const { data: coaches } = useCollection<User>('users', [orderBy('firstName')])
+  const { data: coaches } = useCollection<User>('users', [where('roles', 'array-contains', 'coach'), orderBy('firstName')])
   const { data: services } = useCollection<Service>('services', [orderBy('name')])
   const { data: clients } = useCollection<Client>('clients', [orderBy('firstName')])
   const { data: groups } = useCollection<ClientGroup>('clientGroups', [orderBy('name')])

@@ -155,7 +155,7 @@ export default function IndependentTrackingPage() {
   const [acting, setActing] = useState<string | null>(null)
   const [showHistory, setShowHistory] = useState(false)
 
-  const { data: allCoaches } = useCollection<User>('users', [orderBy('firstName')])
+  const { data: allCoaches } = useCollection<User>('users', [where('roles', 'array-contains', 'coach'), orderBy('firstName')])
   const coaches = useMemo(() => allCoaches.filter(c => c.active !== false), [allCoaches])
 
   const paymentConstraints = useMemo(() =>
