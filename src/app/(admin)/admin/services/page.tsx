@@ -82,7 +82,7 @@ function SortableServiceRow({ s, coaches, onEdit, onDelete }: { s: Service; coac
 export default function ServicesPage() {
   const router = useRouter()
   const { data: raw, loading } = useCollection<Service>('services', [])
-  const { data: coaches } = useCollection<User>('users', [])
+  const { data: coaches } = useCollection<User>('users', [where('roles', 'array-contains', 'coach')])
   const [ordered, setOrdered] = useState<Service[]>([])
 
   useEffect(() => {

@@ -192,7 +192,7 @@ export default function AvailabilityPage() {
   const [sheet, setSheet] = useState<'none' | 'choice' | 'once' | 'recurring'>('none')
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  const { data: allCoaches } = useCollection<User>('users', [orderBy('firstName')])
+  const { data: allCoaches } = useCollection<User>('users', [where('roles', 'array-contains', 'coach'), orderBy('firstName')])
   const coaches = useMemo(() => allCoaches.filter(c => c.active !== false), [allCoaches])
 
   const activeCoachId = isAdmin ? (selectedCoachId ?? user?.id ?? '') : (user?.id ?? '')

@@ -98,6 +98,14 @@
         { "fieldPath": "uid", "order": "ASCENDING" },
         { "fieldPath": "sessionStartAt", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "users",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "roles", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "firstName", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

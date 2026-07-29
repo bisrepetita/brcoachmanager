@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { orderBy } from 'firebase/firestore'
+import { orderBy, where } from 'firebase/firestore'
 import { useCollection } from '@/lib/hooks/useCollection'
 import { createCoach, updateCoach, toggleCoachActive } from '@/lib/services/user.service'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
@@ -27,7 +27,7 @@ type SheetMode = 'create' | 'edit' | null
 
 export default function CoachesPage() {
   const router = useRouter()
-  const { data: coaches, loading } = useCollection<User>('users', [orderBy('firstName')])
+  const { data: coaches, loading } = useCollection<User>('users', [where('roles', 'array-contains', 'coach'), orderBy('firstName')])
   const [sheet, setSheet] = useState<SheetMode>(null)
   const [editing, setEditing] = useState<User | null>(null)
   const [saving, setSaving] = useState(false)

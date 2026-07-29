@@ -150,7 +150,7 @@ export default function EditGroupSessionPage() {
 
   const { data: allServices } = useCollection<Service>('services', [orderBy('name')])
   const { data: allLocations } = useCollection<Location>('locations', [orderBy('name')])
-  const { data: allCoaches } = useCollection<User>('users', [orderBy('firstName')])
+  const { data: allCoaches } = useCollection<User>('users', [where('roles', 'array-contains', 'coach'), orderBy('firstName')])
 
   const services = useMemo(() => allServices.filter(s => {
     if (s.active === false) return false
