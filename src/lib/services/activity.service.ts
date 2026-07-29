@@ -16,6 +16,9 @@ export type ActivityAction =
   | 'client_signup'
   | 'client_signup_ambiguous_match'
   | 'group_session_cancelled_after_payment'
+  | 'group_session_classpass_import'
+  | 'group_session_classpass_unmatched'
+  | 'group_session_classpass_error'
 
 export async function logActivity(params: {
   userId: string

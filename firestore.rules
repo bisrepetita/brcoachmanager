@@ -257,6 +257,12 @@ service cloud.firestore {
       allow create: if isCoach();
     }
 
+    // Écrit uniquement par le webhook /api/classpass-webhook (Admin SDK, contourne ces règles) —
+    // aucune écriture cliente n'est légitime ici.
+    match /classPassImports/{importId} {
+      allow read: if isAdmin();
+    }
+
     // ─── notifications ────────────────────────────────────────────────────────
 
     match /notifications/{notifId} {

@@ -39,6 +39,9 @@ const ACTION_LABELS: Record<ActivityAction, string> = {
   client_signup: 'Compte client créé',
   client_signup_ambiguous_match: 'Compte client lié (correspondance ambiguë)',
   group_session_cancelled_after_payment: 'Inscription annulée après paiement',
+  group_session_classpass_import: 'Inscription ClassPass importée',
+  group_session_classpass_unmatched: 'Mail ClassPass — aucune séance correspondante',
+  group_session_classpass_error: 'Mail ClassPass — erreur d\'import',
 }
 
 const ACTION_COLORS: Record<ActivityAction, string> = {
@@ -56,6 +59,9 @@ const ACTION_COLORS: Record<ActivityAction, string> = {
   client_signup: '#0EA5E9',
   client_signup_ambiguous_match: '#F59E0B',
   group_session_cancelled_after_payment: '#C0392B',
+  group_session_classpass_import: '#10B981',
+  group_session_classpass_unmatched: '#F59E0B',
+  group_session_classpass_error: '#C0392B',
 }
 
 const PAGE_SIZE = 30
