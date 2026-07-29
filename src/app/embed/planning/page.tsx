@@ -55,6 +55,25 @@ export default function EmbedPlanningPage() {
       .finally(() => setLoading(false))
   }, [])
 
+  // Informe la page parente de la hauteur réelle du contenu, pour qu'elle
+  // puisse dimensionner l'iframe sans scrollbar interne ni contenu coupé.
+  useEffect(() => {
+    const sendHeight = () => {
+      window.parent.postMessage(
+        { type: 'br-embed-resize', height: document.documentElement.scrollHeight },
+        '*'
+      )
+    }
+    sendHeight()
+    const resizeObserver = new ResizeObserver(sendHeight)
+    resizeObserver.observe(document.body)
+    window.addEventListener('resize', sendHeight)
+    return () => {
+      resizeObserver.disconnect()
+      window.removeEventListener('resize', sendHeight)
+    }
+  }, [])
+
   const filterableServices = useMemo(() => {
     const seen = new Map<string, string>()
     items.forEach(it => { if (it.serviceId && it.serviceName && !seen.has(it.serviceId)) seen.set(it.serviceId, it.serviceName) })
