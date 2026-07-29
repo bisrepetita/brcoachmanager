@@ -246,6 +246,7 @@ export default function GroupSessionDetailPage() {
                     <span style={{ fontSize: 14, color: '#1A1A18', display: 'flex', alignItems: 'center', gap: 6 }}>
                       {displayName}
                       {!e.clientId && <Badge variant="muted">Invité</Badge>}
+                      {e.classPassBookingId && <Badge variant="muted">ClassPass</Badge>}
                     </span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <Badge variant={ENROLLMENT_BADGE_VARIANT[e.status]}>{ENROLLMENT_LABEL[e.status]}</Badge>

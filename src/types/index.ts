@@ -232,6 +232,9 @@ export interface GroupSessionEnrollment {
   originalAmountDue?: number
   offeredReason?: string
   subscriptionId?: string
+  // Renseigné si cette inscription vient de l'import automatique des mails de réservation
+  // ClassPass (voir src/lib/server/classpass-import.ts) — sert à afficher le badge "ClassPass".
+  classPassBookingId?: string
 }
 
 export interface GroupSession {
@@ -260,6 +263,25 @@ export interface GroupSession {
   createdAt: Timestamp
   updatedAt: Timestamp
   cancelledAt?: Timestamp
+}
+
+export type ClassPassImportStatus = 'matched' | 'unmatched' | 'error'
+
+// Trace de chaque mail de réservation ClassPass traité par le webhook — sert d'abord à la
+// déduplication (classPassBookingId, un mail peut être renvoyé par Mailgun), et garde un
+// historique consultable même quand aucune séance correspondante n'est trouvée.
+export interface ClassPassImport {
+  id: string
+  classPassBookingId: string
+  memberName: string
+  memberEmail: string
+  serviceTitle: string
+  parsedStartAt?: Timestamp
+  status: ClassPassImportStatus
+  groupSessionId?: string
+  clientId?: string
+  errorMessage?: string
+  createdAt: Timestamp
 }
 
 export interface GroupSessionRecurrence {
