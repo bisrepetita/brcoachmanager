@@ -12,12 +12,15 @@ interface AuthGuardProps {
 }
 
 export function AuthGuard({ children, requireAdmin = false, requireClient = false }: AuthGuardProps) {
-  const { firebaseUser, isAdmin, isClient, loading } = useAuth()
+  const { firebaseUser, isAdmin, isCoach, isClient, loading } = useAuth()
   const router = useRouter()
 
-  // Espace client : réservé aux comptes n'ayant que le rôle 'client'.
-  // Espace coach/admin (par défaut) : réservé aux comptes non-'client' (coach ou admin).
-  const denied = requireClient ? !isClient : isClient && !requireAdmin
+  // Espace client : réservé aux comptes ayant le rôle 'client'.
+  // Espace coach/admin (par défaut) : réservé aux comptes ayant explicitement le rôle 'coach' ou
+  // 'admin' — PAS juste "pas client". Juste après une inscription, `roles` peut être transitoirement
+  // vide (doc `users/{uid}` pas encore chargé) : avec un test "pas client", ce compte tout neuf
+  // passerait à tort pour un coach et verrait brièvement l'espace coach.
+  const denied = requireClient ? !isClient : !isCoach && !isAdmin
   const deniedAdmin = requireAdmin && !isAdmin
   // La cible de redirection dépend du rôle réel de l'utilisateur refusé, pas du guard qui a
   // déclenché le refus — sinon un coach non-admin refusé sur une page admin atterrissait sur
