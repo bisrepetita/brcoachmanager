@@ -63,6 +63,18 @@ export async function extendInfiniteRecurrences(): Promise<void> {
     // Récupérer le modèle de la dernière séance pour reproduire les données
     const templateData = lastSession.data() as Session
 
+    // Si la séance vient d'un groupe de clients nommé, on relit sa composition ACTUELLE plutôt
+    // que de copier templateData.clientIds : sinon un membre ajouté au groupe après la première
+    // génération n'apparaît jamais dans les occurrences futures, et une occurrence corrompue
+    // (clientIds vide, ex: suite à une annulation) se perpétue indéfiniment d'extension en extension.
+    let liveClientIds = templateData.clientIds
+    if (templateData.clientGroupId) {
+      const groupSnap = await getDoc(doc(db, 'clientGroups', templateData.clientGroupId))
+      if (groupSnap.exists()) {
+        liveClientIds = (groupSnap.data() as { clientIds: string[] }).clientIds ?? []
+      }
+    }
+
     // Générer les nouvelles occurrences (3 mois depuis la dernière séance)
     const newDates = generateFrom(lastDate, rec.rule.frequency, rec.rule.duration, 3)
     if (newDates.length === 0) continue
@@ -73,17 +85,17 @@ export async function extendInfiniteRecurrences(): Promise<void> {
 
       const pricePerClient = templateData.priceSnapshot.pricingMode === 'per_person'
         ? templateData.priceSnapshot.basePrice
-        : templateData.clientIds.length > 0
-          ? Math.round((templateData.priceSnapshot.basePrice / templateData.clientIds.length) * 100) / 100
+        : liveClientIds.length > 0
+          ? Math.round((templateData.priceSnapshot.basePrice / liveClientIds.length) * 100) / 100
           : 0
 
-      const paymentDistribution: ClientPayment[] = templateData.clientIds.map(cId => ({
+      const paymentDistribution: ClientPayment[] = liveClientIds.map(cId => ({
         clientId: cId, amountDue: pricePerClient, amountPaid: 0, paymentStatus: 'payment_to_request',
       }))
 
       batch.set(sessRef, {
         coachIds: templateData.coachIds,
-        clientIds: templateData.clientIds,
+        clientIds: liveClientIds,
         ...(templateData.clientGroupId ? { clientGroupId: templateData.clientGroupId } : {}),
         locationId: templateData.locationId,
         serviceId: templateData.serviceId,
