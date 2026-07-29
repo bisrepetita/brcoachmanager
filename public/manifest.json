@@ -1,6 +1,6 @@
 {
-  "name": "BRCoachManager",
-  "short_name": "BRCoach",
+  "name": "Bis Repetita",
+  "short_name": "Bis Repetita",
   "description": "Agenda interne Bis Repetita — gestion coachs, séances, paiements",
   "start_url": "/calendar",
   "display": "standalone",

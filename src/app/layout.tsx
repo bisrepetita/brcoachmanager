@@ -11,13 +11,13 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: 'BRCoachManager',
+  title: 'Bis Repetita',
   description: 'Agenda interne Bis Repetita — gestion coachs, séances, paiements',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'BRCoachManager',
+    title: 'Bis Repetita',
   },
   icons: {
     icon: '/icons/icon-192.png',
