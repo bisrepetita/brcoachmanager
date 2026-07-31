@@ -44,6 +44,14 @@ export function adminAddGuestToGroupSession(
   return callApi('/api/group-sessions/admin-add-guest', { groupSessionId, ...opts })
 }
 
+/** Ajoute un client existant à une séance collective — réservé coach/admin. Le client reçoit le
+ * même mail de confirmation qu'une réservation en self-service. */
+export function adminAddClientToGroupSession(
+  groupSessionId: string, opts: { clientId: string; paymentStatus: PaymentStatus; amountPaid?: number }
+): Promise<{ enrollment: GroupSessionEnrollment; isNewToBooking: boolean }> {
+  return callApi('/api/group-sessions/admin-add-client', { groupSessionId, ...opts })
+}
+
 export function requestGroupSessionPaymentLink(groupSessionId: string): Promise<{ checkoutUrl: string }> {
   return callApi('/api/group-sessions/request-payment-link', { groupSessionId })
 }

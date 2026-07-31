@@ -1,18 +1,19 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { doc, onSnapshot, updateDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore'
+import { doc, onSnapshot, updateDoc, serverTimestamp, collection, query, where, getDocs, orderBy } from 'firebase/firestore'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { ChevronLeft, X, Pencil, UserPlus } from 'lucide-react'
+import { ChevronLeft, X, Pencil, UserPlus, Search } from 'lucide-react'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { FormField } from '@/components/ui/form-field'
 import { db } from '@/lib/firebase/firestore'
-import { adminCancelGroupSessionEnrollment, adminAddGuestToGroupSession } from '@/lib/services/group-session.service'
+import { useCollection } from '@/lib/hooks/useCollection'
+import { adminCancelGroupSessionEnrollment, adminAddGuestToGroupSession, adminAddClientToGroupSession } from '@/lib/services/group-session.service'
 import { GROUP_SESSION_LEVEL_LABELS, type GroupSession, type Client, type GroupSessionEnrollmentStatus } from '@/types'
 
 const ENROLLMENT_BADGE_VARIANT: Record<GroupSessionEnrollmentStatus, 'payment_to_request' | 'paid' | 'cancelled'> = {
@@ -44,12 +45,26 @@ export default function GroupSessionDetailPage() {
   const [saving, setSaving] = useState(false)
   const [cancellingId, setCancellingId] = useState<string | null>(null)
 
+  const { data: allClients } = useCollection<Client>('clients', [orderBy('lastName')])
+
   const [showAddGuest, setShowAddGuest] = useState(false)
+  const [addMode, setAddMode] = useState<'client' | 'guest'>('client')
+  const [clientSearch, setClientSearch] = useState('')
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(null)
   const [guestName, setGuestName] = useState('')
   const [guestPaymentStatus, setGuestPaymentStatus] = useState<GuestPaymentStatus>('paid')
   const [guestAmount, setGuestAmount] = useState('')
   const [addingGuest, setAddingGuest] = useState(false)
   const [guestError, setGuestError] = useState<string | null>(null)
+
+  const pickableClients = useMemo(() => {
+    const enrolledIds = new Set((groupSession?.enrollments ?? []).filter(e => e.status !== 'cancelled').map(e => e.clientId).filter(Boolean))
+    const q = clientSearch.trim().toLowerCase()
+    return allClients
+      .filter(c => !enrolledIds.has(c.id))
+      .filter(c => !q || `${c.firstName} ${c.lastName}`.toLowerCase().includes(q))
+      .slice(0, 30)
+  }, [allClients, groupSession, clientSearch])
 
   useEffect(() => {
     return onSnapshot(doc(db, 'groupSessions', params.id), snap => {
@@ -102,6 +117,8 @@ export default function GroupSessionDetailPage() {
   }
 
   function openAddGuest() {
+    setAddMode('client')
+    setClientSearch(''); setSelectedClientId(null)
     setGuestName(''); setGuestPaymentStatus('paid')
     setGuestAmount(groupSession ? String(groupSession.price) : '')
     setGuestError(null)
@@ -114,6 +131,23 @@ export default function GroupSessionDetailPage() {
     try {
       await adminAddGuestToGroupSession(params.id, {
         guestName: guestName.trim(),
+        paymentStatus: guestPaymentStatus,
+        ...(guestPaymentStatus === 'paid' ? { amountPaid: parseFloat(guestAmount) || 0 } : {}),
+      })
+      setShowAddGuest(false)
+    } catch (err) {
+      setGuestError((err as Error).message)
+    } finally {
+      setAddingGuest(false)
+    }
+  }
+
+  async function handleAddClient() {
+    if (!selectedClientId) { setGuestError('Choisis un client.'); return }
+    setAddingGuest(true); setGuestError(null)
+    try {
+      await adminAddClientToGroupSession(params.id, {
+        clientId: selectedClientId,
         paymentStatus: guestPaymentStatus,
         ...(guestPaymentStatus === 'paid' ? { amountPaid: parseFloat(guestAmount) || 0 } : {}),
       })
@@ -220,7 +254,7 @@ export default function GroupSessionDetailPage() {
               <button
                 onClick={openAddGuest}
                 disabled={isFull}
-                title={isFull ? 'Séance complète' : 'Ajouter un invité'}
+                title={isFull ? 'Séance complète' : 'Ajouter un participant'}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none',
                   cursor: isFull ? 'not-allowed' : 'pointer', color: isFull ? '#C8C4BC' : '#1A1A18',
@@ -303,17 +337,64 @@ export default function GroupSessionDetailPage() {
           <div className="absolute inset-0 bg-black/40" onClick={() => setShowAddGuest(false)} />
           <div className="relative bg-[var(--color-surface)] rounded-t-[20px] p-6 space-y-4 max-h-[90dvh] overflow-y-auto" style={{ boxShadow: 'var(--shadow-sheet)' }}>
             <div className="flex items-center justify-between mb-2">
-              <h2 className="text-[17px] font-semibold">Ajouter un invité</h2>
+              <h2 className="text-[17px] font-semibold">Ajouter un participant</h2>
               <button onClick={() => setShowAddGuest(false)} className="text-[13px] text-[var(--color-text-tertiary)]">Annuler</button>
             </div>
 
-            <p className="text-[12px] text-[var(--color-text-tertiary)] -mt-2">
-              Pour une personne de passage — aucune fiche client n&apos;est créée.
-            </p>
+            <div className="flex gap-2">
+              {([['client', 'Client existant'], ['guest', 'Invité']] as [typeof addMode, string][]).map(([v, label]) => (
+                <button key={v} type="button" onClick={() => { setAddMode(v); setGuestError(null) }}
+                  className="flex-1 py-2 rounded-[var(--radius-md)] border text-[13px] font-medium"
+                  style={{ background: addMode === v ? '#1A1A18' : 'var(--color-surface)', color: addMode === v ? '#fff' : 'var(--color-text-primary)', borderColor: addMode === v ? '#1A1A18' : 'var(--color-border)' }}>
+                  {label}
+                </button>
+              ))}
+            </div>
 
-            <FormField label="Nom" required>
-              <Input value={guestName} onChange={(e) => setGuestName(e.target.value)} placeholder="Prénom Nom" autoFocus />
-            </FormField>
+            {addMode === 'client' ? (
+              <>
+                <p className="text-[12px] text-[var(--color-text-tertiary)] -mt-2">
+                  Le client reçoit le mail de confirmation habituel, comme s&apos;il avait réservé lui-même.
+                </p>
+                <FormField label="Client" required>
+                  <div className="relative">
+                    <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-tertiary)]" />
+                    <Input
+                      value={clientSearch}
+                      onChange={(e) => { setClientSearch(e.target.value); setSelectedClientId(null) }}
+                      placeholder="Rechercher un client…"
+                      className="pl-9"
+                      autoFocus
+                    />
+                  </div>
+                </FormField>
+                {!selectedClientId && clientSearch.trim() && (
+                  <div className="max-h-[180px] overflow-y-auto rounded-[var(--radius-md)] border border-[var(--color-border)] divide-y divide-[var(--color-border)]">
+                    {pickableClients.length === 0 ? (
+                      <p className="text-[13px] text-[var(--color-text-tertiary)] p-3">Aucun client trouvé.</p>
+                    ) : pickableClients.map(c => (
+                      <button key={c.id} type="button"
+                        onClick={() => { setSelectedClientId(c.id); setClientSearch(`${c.firstName} ${c.lastName}`) }}
+                        className="w-full text-left px-3 py-2 text-[14px] hover:bg-[var(--color-surface-alt)]">
+                        {c.firstName} {c.lastName}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {selectedClientId && (
+                  <p className="text-[12px] -mt-2" style={{ color: '#2D7A4F' }}>✓ Client sélectionné</p>
+                )}
+              </>
+            ) : (
+              <>
+                <p className="text-[12px] text-[var(--color-text-tertiary)] -mt-2">
+                  Pour une personne de passage — aucune fiche client n&apos;est créée.
+                </p>
+                <FormField label="Nom" required>
+                  <Input value={guestName} onChange={(e) => setGuestName(e.target.value)} placeholder="Prénom Nom" autoFocus />
+                </FormField>
+              </>
+            )}
 
             <div>
               <p className="text-[11px] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wide mb-2">Paiement</p>
@@ -335,7 +416,7 @@ export default function GroupSessionDetailPage() {
             )}
 
             {guestError && <p className="text-[13px] text-[var(--color-danger)]">{guestError}</p>}
-            <Button size="lg" className="w-full" onClick={handleAddGuest} loading={addingGuest}>
+            <Button size="lg" className="w-full" onClick={addMode === 'client' ? handleAddClient : handleAddGuest} loading={addingGuest}>
               Ajouter à la séance
             </Button>
           </div>
