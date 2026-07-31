@@ -25,7 +25,7 @@ export default function ClientsPage() {
   const router = useRouter()
   const { isAdmin, user } = useAuth()
   const { data: clients, loading } = useCollection<Client>('clients', [orderBy('lastName')])
-  const { data: coaches } = useCollection<UserType>('users', [orderBy('firstName')])
+  const { data: coaches } = useCollection<UserType>('users', [where('roles', 'array-contains', 'coach'), orderBy('firstName')])
   const [search, setSearch] = useState('')
   const [sheet, setSheet] = useState<'create' | 'edit' | null>(null)
   const [editing, setEditing] = useState<Client | null>(null)

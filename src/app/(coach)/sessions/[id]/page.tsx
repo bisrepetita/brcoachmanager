@@ -57,7 +57,7 @@ export default function SessionDetailPage() {
   const [revertConfirm, setRevertConfirm] = useState(false)
   const [reverting, setReverting] = useState(false)
 
-  const { data: coaches } = useCollection<UserType>('users', [orderBy('firstName')])
+  const { data: coaches } = useCollection<UserType>('users', [where('roles', 'array-contains', 'coach'), orderBy('firstName')])
   const { data: services } = useCollection<Service>('services', [orderBy('name')])
   const { data: locations } = useCollection<Location>('locations', [orderBy('name')])
   const { data: clients } = useCollection<Client>('clients', [orderBy('firstName')])
