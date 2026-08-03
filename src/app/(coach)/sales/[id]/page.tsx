@@ -9,6 +9,7 @@ import { ChevronLeft, Send, Trash2 } from 'lucide-react'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { Badge } from '@/components/ui/badge'
 import { useCollection } from '@/lib/hooks/useCollection'
+import { useVisibleClients } from '@/lib/hooks/useVisibleClients'
 import { useAuth } from '@/lib/hooks/useAuth'
 import { requestSalePaymentLink } from '@/lib/services/payment.service'
 import { db } from '@/lib/firebase/firestore'
@@ -37,7 +38,7 @@ export default function SaleDetailPage() {
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
-  const { data: clients } = useCollection<Client>('clients', [orderBy('firstName')])
+  const { data: clients } = useVisibleClients('firstName')
   const { data: services } = useCollection<Service>('services', [orderBy('name')])
   const { data: groups } = useCollection<ClientGroup>('clientGroups', [orderBy('name')])
 

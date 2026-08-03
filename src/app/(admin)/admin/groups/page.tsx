@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react'
 import { orderBy } from 'firebase/firestore'
 import { useCollection } from '@/lib/hooks/useCollection'
+import { useVisibleClients } from '@/lib/hooks/useVisibleClients'
 import { createDoc, updateDocById, deleteDocById } from '@/lib/services/crud.service'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/button'
@@ -18,7 +19,7 @@ import type { ClientGroup, Client } from '@/types'
 export default function GroupsPage() {
   const router = useRouter()
   const { data: groups, loading } = useCollection<ClientGroup>('clientGroups', [orderBy('name')])
-  const { data: clients } = useCollection<Client>('clients', [orderBy('firstName')])
+  const { data: clients } = useVisibleClients('firstName')
 
   const [sheet, setSheet] = useState<'create' | 'edit' | null>(null)
   const [editing, setEditing] = useState<ClientGroup | null>(null)
