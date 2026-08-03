@@ -50,6 +50,9 @@ export async function POST(req: NextRequest) {
     userLastName: '',
     action: 'group_session_classpass_error',
     description: 'Mail ClassPass reçu mais non parsable (format inconnu — ni nouvelle réservation, ni annulation)',
+    // Aperçu du texte brut reçu, pour diagnostiquer sans dépendre du stockage Mailgun (désactivé
+    // par défaut, "Message retrieval disabled for domain").
+    rawTextPreview: rawText.slice(0, 1500),
     createdAt: FieldValue.serverTimestamp(),
   })
   return NextResponse.json({ ok: false, reason: 'parse_failed' })
