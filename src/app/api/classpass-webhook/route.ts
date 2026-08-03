@@ -27,7 +27,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Signature invalide' }, { status: 401 })
   }
 
-  const rawText = (formData.get('stripped-text') as string | null) || (formData.get('body-plain') as string | null) || ''
+  // `body-plain` (corps brut complet) plutôt que `stripped-text` : le filtrage "anti-signature"
+  // de Mailgun peut tronquer à tort le contenu utile (ex: une ligne "Prénom Nom" isolée juste
+  // avant l'email du membre ressemble à une signature) — vu en test, ça coupait juste avant les
+  // infos du membre. Notre parseur cible des labels précis, le contenu superflu (liens, mentions
+  // légales) en fin de mail n'interfère pas, donc autant garder tout le corps.
+  const rawText = (formData.get('body-plain') as string | null) || (formData.get('stripped-text') as string | null) || ''
   const adminDb = getAdminDb()
 
   const newBooking = parseClassPassEmail(rawText)
