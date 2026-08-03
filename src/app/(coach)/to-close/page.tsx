@@ -9,6 +9,7 @@ import { CheckCircle, Clock, ChevronDown } from 'lucide-react'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { useAuth } from '@/lib/hooks/useAuth'
 import { useCollection } from '@/lib/hooks/useCollection'
+import { useVisibleClients } from '@/lib/hooks/useVisibleClients'
 import { db } from '@/lib/firebase/firestore'
 import type { Session, User, Service, Client, ClientGroup } from '@/types'
 
@@ -21,7 +22,7 @@ export default function ToClosePage() {
 
   const { data: coaches } = useCollection<User>('users', [where('roles', 'array-contains', 'coach'), orderBy('firstName')])
   const { data: services } = useCollection<Service>('services', [orderBy('name')])
-  const { data: clients } = useCollection<Client>('clients', [orderBy('firstName')])
+  const { data: clients } = useVisibleClients('firstName')
   const { data: groups } = useCollection<ClientGroup>('clientGroups', [orderBy('name')])
 
   // IDs des clients visibles par ce coach

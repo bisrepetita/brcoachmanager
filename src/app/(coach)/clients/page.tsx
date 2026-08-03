@@ -6,6 +6,7 @@ import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { db } from '@/lib/firebase/firestore'
 import { useCollection } from '@/lib/hooks/useCollection'
+import { useVisibleClients } from '@/lib/hooks/useVisibleClients'
 import { createDoc, updateDocById } from '@/lib/services/crud.service'
 import { logActivity } from '@/lib/services/activity.service'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
@@ -24,7 +25,7 @@ import type { Client, CreditTransaction, User as UserType } from '@/types'
 export default function ClientsPage() {
   const router = useRouter()
   const { isAdmin, user } = useAuth()
-  const { data: clients, loading } = useCollection<Client>('clients', [orderBy('lastName')])
+  const { data: clients, loading } = useVisibleClients('lastName')
   const { data: coaches } = useCollection<UserType>('users', [where('roles', 'array-contains', 'coach'), orderBy('firstName')])
   const [search, setSearch] = useState('')
   const [sheet, setSheet] = useState<'create' | 'edit' | null>(null)

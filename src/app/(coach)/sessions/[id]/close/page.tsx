@@ -8,6 +8,7 @@ import { doc, getDoc, serverTimestamp, orderBy, writeBatch, collection, incremen
 import { ChevronLeft, Gift, CreditCard } from 'lucide-react'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { useCollection } from '@/lib/hooks/useCollection'
+import { useVisibleClients } from '@/lib/hooks/useVisibleClients'
 import { useAuth } from '@/lib/hooks/useAuth'
 import { logActivity } from '@/lib/services/activity.service'
 import { db } from '@/lib/firebase/firestore'
@@ -44,7 +45,7 @@ export default function CloseSessionPage() {
   const [saving, setSaving] = useState(false)
   const initialized = useRef(false)
 
-  const { data: clients } = useCollection<Client>('clients', [orderBy('firstName')])
+  const { data: clients } = useVisibleClients('firstName')
 
   useEffect(() => {
     if (!sessionId) return

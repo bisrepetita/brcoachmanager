@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { orderBy } from 'firebase/firestore'
 import { Plus, ArrowLeft, Percent, Pencil, Trash2, Search } from 'lucide-react'
 import { useCollection } from '@/lib/hooks/useCollection'
+import { useVisibleClients } from '@/lib/hooks/useVisibleClients'
 import { createDoc, updateDocById, deleteDocById } from '@/lib/services/crud.service'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/button'
@@ -74,7 +75,7 @@ export default function DiscountsPage() {
   const router = useRouter()
   const { data: discounts, loading } = useCollection<Discount>('discounts', [])
   const { data: services } = useCollection<Service>('services', [orderBy('name')])
-  const { data: clients } = useCollection<Client>('clients', [orderBy('firstName')])
+  const { data: clients } = useVisibleClients('firstName')
 
   const ordered = useMemo(() =>
     [...discounts].sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0)),

@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input'
 import { FormField } from '@/components/ui/form-field'
 import { db } from '@/lib/firebase/firestore'
 import { useCollection } from '@/lib/hooks/useCollection'
+import { useVisibleClients } from '@/lib/hooks/useVisibleClients'
 import { adminCancelGroupSessionEnrollment, adminAddGuestToGroupSession, adminAddClientToGroupSession } from '@/lib/services/group-session.service'
 import { GROUP_SESSION_LEVEL_LABELS, type GroupSession, type Client, type GroupSessionEnrollmentStatus } from '@/types'
 
@@ -45,7 +46,7 @@ export default function GroupSessionDetailPage() {
   const [saving, setSaving] = useState(false)
   const [cancellingId, setCancellingId] = useState<string | null>(null)
 
-  const { data: allClients } = useCollection<Client>('clients', [orderBy('lastName')])
+  const { data: allClients } = useVisibleClients('lastName')
 
   const [showAddGuest, setShowAddGuest] = useState(false)
   const [addMode, setAddMode] = useState<'client' | 'guest'>('client')

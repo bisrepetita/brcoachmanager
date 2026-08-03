@@ -7,6 +7,7 @@ import { orderBy, Timestamp, doc, getDoc, updateDoc, getDocs, query, collection,
 import { Check, Search } from 'lucide-react'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { useCollection } from '@/lib/hooks/useCollection'
+import { useVisibleClients } from '@/lib/hooks/useVisibleClients'
 import { useAuth } from '@/lib/hooks/useAuth'
 import { db } from '@/lib/firebase/firestore'
 import { logActivity } from '@/lib/services/activity.service'
@@ -84,7 +85,7 @@ export default function EditSessionPage() {
   const { data: allServices } = useCollection<Service>('services', [orderBy('name')])
   const { data: allLocations } = useCollection<Location>('locations', [orderBy('name')])
   const { data: allCoaches } = useCollection<User>('users', [where('roles', 'array-contains', 'coach'), orderBy('firstName')])
-  const { data: clients } = useCollection<Client>('clients', [orderBy('firstName')])
+  const { data: clients } = useVisibleClients('firstName')
   const { data: groups } = useCollection<ClientGroup>('clientGroups', [orderBy('name')])
 
   const services = useMemo(() => allServices.filter(s => {

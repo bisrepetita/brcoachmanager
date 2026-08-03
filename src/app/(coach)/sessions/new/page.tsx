@@ -8,6 +8,7 @@ import { db } from '@/lib/firebase/firestore'
 import { X, Check, Search, RefreshCw, UserPlus, Dumbbell, Users2 } from 'lucide-react'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { useCollection } from '@/lib/hooks/useCollection'
+import { useVisibleClients } from '@/lib/hooks/useVisibleClients'
 import { useAuth } from '@/lib/hooks/useAuth'
 import { createDoc, updateDocById } from '@/lib/services/crud.service'
 import { sendNotification } from '@/lib/services/notification.service'
@@ -190,7 +191,7 @@ function NewSessionForm() {
   const { data: allServices } = useCollection<Service>('services', [orderBy('name')])
   const { data: allLocations } = useCollection<Location>('locations', [orderBy('name')])
   const { data: allCoaches } = useCollection<User>('users', [where('roles', 'array-contains', 'coach'), orderBy('firstName')])
-  const { data: clients } = useCollection<Client>('clients', [orderBy('firstName')])
+  const { data: clients } = useVisibleClients('firstName')
   const { data: groups } = useCollection<ClientGroup>('clientGroups', [orderBy('name')])
 
   const services = useMemo(() => allServices

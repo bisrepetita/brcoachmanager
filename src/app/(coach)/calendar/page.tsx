@@ -21,6 +21,7 @@ import { MonthView } from '@/components/calendar/MonthView'
 import { useSessions } from '@/lib/hooks/useSessions'
 import { useGroupSessions } from '@/lib/hooks/useGroupSessions'
 import { useCollection } from '@/lib/hooks/useCollection'
+import { useVisibleClients } from '@/lib/hooks/useVisibleClients'
 import type { User, Service, Session, Client, ClientGroup } from '@/types'
 
 type CalView = 'day' | 'week' | 'month'
@@ -93,7 +94,7 @@ export default function CalendarPage() {
   const { groupSessions } = useGroupSessions(range.start, range.end)
   const { data: coaches } = useCollection<User>('users', [where('roles', 'array-contains', 'coach'), orderBy('firstName')])
   const { data: services } = useCollection<Service>('services', [orderBy('name')])
-  const { data: clients } = useCollection<Client>('clients', [orderBy('firstName')])
+  const { data: clients } = useVisibleClients('firstName')
   const { data: groups } = useCollection<ClientGroup>('clientGroups', [orderBy('name')])
 
   const coachMap = useMemo(() => new Map(coaches.map((c) => [c.id, c])), [coaches])

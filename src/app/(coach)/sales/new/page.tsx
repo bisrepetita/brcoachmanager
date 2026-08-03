@@ -6,6 +6,7 @@ import { orderBy, serverTimestamp, addDoc, collection } from 'firebase/firestore
 import { ChevronLeft, Search, Users, User, Check, Plus } from 'lucide-react'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { useCollection } from '@/lib/hooks/useCollection'
+import { useVisibleClients } from '@/lib/hooks/useVisibleClients'
 import { useAuth } from '@/lib/hooks/useAuth'
 import { db } from '@/lib/firebase/firestore'
 import { updateDocById } from '@/lib/services/crud.service'
@@ -37,7 +38,7 @@ export default function NewSalePage() {
   const services = useMemo(() =>
     [...rawServices].sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity) || a.name.localeCompare(b.name)),
   [rawServices])
-  const { data: clients } = useCollection<Client>('clients', [orderBy('firstName')])
+  const { data: clients } = useVisibleClients('firstName')
   const { data: groups } = useCollection<ClientGroup>('clientGroups', [orderBy('name')])
 
   const [serviceId, setServiceId] = useState('')

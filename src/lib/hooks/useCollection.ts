@@ -14,18 +14,27 @@ import { db } from '@/lib/firebase/firestore'
 
 export function useCollection<T extends { id: string }>(
   collectionName: string,
-  constraints: QueryConstraint[] = []
+  constraints: QueryConstraint[] = [],
+  options?: { enabled?: boolean }
 ) {
+  const enabled = options?.enabled ?? true
   const [data, setData] = useState<T[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(enabled)
   const [error, setError] = useState<Error | null>(null)
 
   useEffect(() => {
+    if (!enabled) {
+      setData([])
+      setLoading(false)
+      return
+    }
+
     const ref = collection(db, collectionName)
     const q: Query<DocumentData> = constraints.length
       ? query(ref, ...constraints)
       : query(ref, orderBy('createdAt', 'desc'))
 
+    setLoading(true)
     const unsub = onSnapshot(
       q,
       (snap) => {
@@ -39,7 +48,7 @@ export function useCollection<T extends { id: string }>(
     )
 
     return unsub
-  }, [collectionName]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [collectionName, enabled]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return { data, loading, error }
 }

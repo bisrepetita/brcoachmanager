@@ -9,6 +9,7 @@ import { ChevronLeft, MapPin, User, Users, Dumbbell, Clock, AlertTriangle, Send,
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { Badge } from '@/components/ui/badge'
 import { useCollection } from '@/lib/hooks/useCollection'
+import { useVisibleClients } from '@/lib/hooks/useVisibleClients'
 import { useAuth } from '@/lib/hooks/useAuth'
 import { requestPaymentLink } from '@/lib/services/payment.service'
 import { sendNotification } from '@/lib/services/notification.service'
@@ -60,7 +61,7 @@ export default function SessionDetailPage() {
   const { data: coaches } = useCollection<UserType>('users', [where('roles', 'array-contains', 'coach'), orderBy('firstName')])
   const { data: services } = useCollection<Service>('services', [orderBy('name')])
   const { data: locations } = useCollection<Location>('locations', [orderBy('name')])
-  const { data: clients } = useCollection<Client>('clients', [orderBy('firstName')])
+  const { data: clients } = useVisibleClients('firstName')
   const { data: groups } = useCollection<ClientGroup>('clientGroups', [orderBy('name')])
 
   useEffect(() => {

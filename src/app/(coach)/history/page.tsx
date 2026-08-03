@@ -10,6 +10,7 @@ import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { db } from '@/lib/firebase/firestore'
 import { useAuth } from '@/lib/hooks/useAuth'
 import { useCollection } from '@/lib/hooks/useCollection'
+import { useVisibleClients } from '@/lib/hooks/useVisibleClients'
 import type { Session, User, Service, Client } from '@/types'
 
 const PAYMENT_STATUS_LABELS: Record<string, string> = {
@@ -49,7 +50,7 @@ export default function HistoryPage() {
   const { user, isAdmin } = useAuth()
   const { data: coaches } = useCollection<User>('users', [where('roles', 'array-contains', 'coach'), orderBy('firstName')])
   const { data: services } = useCollection<Service>('services', [orderBy('name')])
-  const { data: clients } = useCollection<Client>('clients', [orderBy('firstName')])
+  const { data: clients } = useVisibleClients('firstName')
 
   const [sessions, setSessions] = useState<Session[]>([])
   const [loading, setLoading] = useState(true)
