@@ -8,18 +8,17 @@ export interface ParsedClassPassBooking {
   memberEmail: string
 }
 
-const EMAIL_RE = /^[\w.+-]+@[\w-]+\.[\w.-]+$/
-const MEMBER_BLOCK_STOP = ['Détails du planning', 'Réservations ClassPass']
-
-function valueAfterLabel(lines: string[], label: string): string | undefined {
-  const idx = lines.findIndex((l) => l.trim() === label)
-  if (idx === -1) return undefined
-  for (let i = idx + 1; i < lines.length; i++) {
-    const v = lines[i]!.trim()
-    if (v) return v
-  }
-  return undefined
+// Mailgun (body-plain, converti depuis le HTML d'origine) retourne les mails ClassPass avec des
+// retours à la ligne très étroits, y compris AU MILIEU des libellés eux-mêmes (ex: "Code de\n
+// réservation:" sur deux lignes) — observé sur un vrai mail. Un parsing ligne-par-ligne exact est
+// donc trop fragile. On aplatit tout le texte en une seule ligne (espaces normalisés) et on
+// extrait par regex, insensible à l'endroit exact où l'email a coupé les lignes.
+function flatten(rawText: string): string {
+  return rawText.replace(/\r?\n/g, ' ').replace(/[ \t]+/g, ' ').trim()
 }
+
+const EMAIL_RE = /[\w.+-]+@[\w-]+\.[\w.-]+/
+const MEMBER_BLOCK_STOP = /\s+(Détails du planning|Réservations ClassPass)\b/
 
 const MONTHS: Record<string, number> = {
   jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
@@ -54,42 +53,58 @@ function parseClassPassDateTime(str: string): Date | null {
   return zonedTimeToUtc(Number(yearStr), month, Number(dayStr), hour, Number(minuteStr), 'Europe/Zurich')
 }
 
+// À partir du bloc "Informations du membre <G> Prénom Nom email@x.com Nouveau(elle) client(e)"
+// (aplati), isole le nom (en écartant l'initiale d'avatar rendue en texte seul et les mentions
+// "Nouveau(elle)/Client(e) existant(e)") et l'email.
+function extractMember(block: string): { name: string; email: string } | null {
+  const emailMatch = block.match(EMAIL_RE)
+  if (!emailMatch) return null
+  const email = emailMatch[0]
+  const nameTokens = block
+    .slice(0, emailMatch.index)
+    .replace(/Nouveau\(elle\) client\(e\)/gi, '')
+    .replace(/Client\(e\) existant\(e\)/gi, '')
+    .trim()
+    .split(/\s+/)
+    .filter((t) => t.length > 1) // écarte une initiale seule (ex: "G")
+  if (nameTokens.length === 0) return null
+  return { name: nameTokens.join(' '), email }
+}
+
 // Parse le texte brut du mail "Nouvelle réservation" ClassPass. Retourne null si un champ
 // essentiel manque (mail dans un format différent — annulation, rappel, etc.) plutôt que de
 // deviner des valeurs partielles.
 export function parseClassPassEmail(rawText: string): ParsedClassPassBooking | null {
-  const lines = rawText.split(/\r?\n/)
+  const flat = flatten(rawText)
 
   // Une annulation, un rappel ou une demande d'avis peut réutiliser exactement la même mise en
   // page "Détails de la réservation" (cours/date/ID/membre) — sans ce marqueur d'en-tête, on
   // refuse de parser plutôt que de risquer de traiter une annulation comme une nouvelle inscription.
-  if (!lines.some((l) => l.trim() === 'Nouvelle réservation')) return null
+  if (!flat.includes('Nouvelle réservation')) return null
 
-  const serviceTitle = valueAfterLabel(lines, 'Réservation')
-  const dateTimeStr = valueAfterLabel(lines, 'Date et heure')
-  const bookingIdRaw = valueAfterLabel(lines, 'ID de réservation')
+  // "Réservation" en tant que libellé autonome (capitale), pas la sous-chaîne dans "Détails de la
+  // réservation" (minuscule) ni "Réservations ClassPass" (pluriel, section statistiques plus loin).
+  const titleMatch = flat.match(/(?<!la )\bRéservation\b\s+(.+?)\s+Date et heure\b/)
+  const dateMatch = flat.match(/Date et heure\s+([A-Za-z]{3,9}\s+\d{1,2},\s*\d{4}\s*@\s*\d{1,2}:\d{2}\s*[AP]M)/i)
+  const bookingIdMatch = flat.match(/ID de réservation\s+([a-f0-9]{16,40})/i)
 
-  const memberIdx = lines.findIndex((l) => l.trim() === 'Informations du membre')
-  let memberName: string | undefined
-  let memberEmail: string | undefined
+  const memberIdx = flat.indexOf('Informations du membre')
+  let member: { name: string; email: string } | null = null
   if (memberIdx !== -1) {
-    for (let i = memberIdx + 1; i < lines.length; i++) {
-      const v = lines[i]!.trim()
-      if (!v) continue
-      if (MEMBER_BLOCK_STOP.includes(v)) break
-      if (EMAIL_RE.test(v)) { memberEmail = v; continue }
-      if (v === 'Nouveau(elle) client(e)' || v === 'Client(e) existant(e)') continue
-      if (v.length <= 2) continue // initiale de l'avatar rendue en texte seul (ex: "G")
-      if (!memberName) memberName = v
-    }
+    const stopMatch = flat.slice(memberIdx).match(MEMBER_BLOCK_STOP)
+    const blockEnd = stopMatch?.index !== undefined ? memberIdx + stopMatch.index : flat.length
+    const block = flat.slice(memberIdx + 'Informations du membre'.length, blockEnd)
+    member = extractMember(block)
   }
 
-  if (!serviceTitle || !dateTimeStr || !bookingIdRaw || !memberName || !memberEmail) return null
+  const serviceTitle = titleMatch?.[1]?.trim()
+  const bookingIdRaw = bookingIdMatch?.[1]
+  if (!serviceTitle || !dateMatch || !bookingIdRaw || !member) return null
 
-  const sessionDateTime = parseClassPassDateTime(dateTimeStr)
+  const sessionDateTime = parseClassPassDateTime(dateMatch[1]!)
   if (!sessionDateTime) return null
 
-  const nameParts = memberName.split(/\s+/)
+  const nameParts = member.name.split(/\s+/)
   const memberFirstName = nameParts[0]!
   const memberLastName = nameParts.slice(1).join(' ')
 
@@ -97,10 +112,10 @@ export function parseClassPassEmail(rawText: string): ParsedClassPassBooking | n
     bookingId: bookingIdRaw.trim(),
     serviceTitle,
     sessionDateTime,
-    memberName,
+    memberName: member.name,
     memberFirstName,
     memberLastName,
-    memberEmail,
+    memberEmail: member.email,
   }
 }
 
@@ -111,41 +126,27 @@ export interface ParsedClassPassCancellation {
   memberEmail?: string
 }
 
-function valueAfterColon(line: string): string | undefined {
-  const idx = line.indexOf(':')
-  if (idx === -1) return undefined
-  const v = line.slice(idx + 1).trim()
-  return v || undefined
-}
-
 const CANCELLATION_HEADER = "La réservation ClassPass suivante a été annulée par l'utilisateur"
 
 // Format ClassPass observé pour une annulation — mise en page différente du mail de nouvelle
-// réservation (labels "Champ: valeur" en ligne, pas "Champ" puis valeur sur la ligne suivante).
+// réservation ("Champ: valeur", pas "Champ" puis valeur en dessous).
 export function parseClassPassCancellation(rawText: string): ParsedClassPassCancellation | null {
-  const lines = rawText.split(/\r?\n/)
-  if (!lines.some((l) => l.trim() === CANCELLATION_HEADER)) return null
+  const flat = flatten(rawText)
+  if (!flat.includes(CANCELLATION_HEADER)) return null
 
-  const bookingIdLine = lines.find((l) => l.trim().startsWith('Code de réservation:'))
-  const bookingId = bookingIdLine ? valueAfterColon(bookingIdLine.trim()) : undefined
-  if (!bookingId) return null
+  const bookingIdMatch = flat.match(/Code de réservation:\s*([a-f0-9]{16,40})/i)
+  if (!bookingIdMatch) return null
 
-  let serviceTitle: string | undefined
-  const planningIdx = lines.findIndex((l) => l.trim() === 'Planning détaillé:')
-  if (planningIdx !== -1) {
-    for (let i = planningIdx + 1; i < lines.length; i++) {
-      const v = lines[i]!.trim()
-      if (v) { serviceTitle = v; break }
-    }
-  }
-
-  const nomLine = lines.find((l) => l.trim().startsWith('Nom:'))
-  const emailLine = lines.find((l) => l.trim().startsWith('E-mail:'))
+  // S'arrête avant la parenthèse ouvrante du lien de tracking ClassPass qui suit toujours le nom
+  // du cours dans ce gabarit ("Round by Round ( https://... )").
+  const serviceMatch = flat.match(/Planning détaillé:\s*(.+?)\s*\(/)
+  const nameMatch = flat.match(/\bNom:\s*(.+?)\s*E-mail:/i)
+  const emailMatch = flat.match(/E-mail:\s*(\S+@\S+?)(?:\s|$)/i)
 
   return {
-    bookingId,
-    serviceTitle,
-    memberName: nomLine ? valueAfterColon(nomLine.trim()) : undefined,
-    memberEmail: emailLine ? valueAfterColon(emailLine.trim()) : undefined,
+    bookingId: bookingIdMatch[1]!.trim(),
+    serviceTitle: serviceMatch?.[1]?.trim(),
+    memberName: nameMatch?.[1]?.trim(),
+    memberEmail: emailMatch?.[1]?.trim(),
   }
 }
