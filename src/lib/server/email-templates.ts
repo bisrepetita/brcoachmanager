@@ -75,16 +75,18 @@ export function coachNewEnrollmentEmail(opts: {
   sessionTitle: string
   dateStr: string
   paymentLabel: string
+  groupSessionUrl?: string
 }): { subject: string; html: string } {
   const body = `
     <p style="font-size:16px;font-weight:700;color:#1A1A18;margin:0 0 4px;">Nouvelle inscription</p>
     <p style="font-size:14px;color:#7A7570;margin:0 0 20px;">Salut ${escapeHtml(opts.coachFirstName)},</p>
-    <table style="width:100%;border-collapse:collapse;">
+    <table style="width:100%;border-collapse:collapse;margin-bottom:${opts.groupSessionUrl ? '20px' : '0'};">
       ${infoRow('Client', opts.clientName)}
       ${infoRow('Séance', opts.sessionTitle)}
       ${infoRow('Date', opts.dateStr)}
       ${infoRow('Statut', opts.paymentLabel)}
     </table>
+    ${opts.groupSessionUrl ? `<a href="${opts.groupSessionUrl}" style="display:inline-block;font-size:13px;font-weight:600;color:#1A1A18;text-decoration:underline;">Voir les participants →</a>` : ''}
   `
   return { subject: `Nouvelle inscription — ${opts.sessionTitle}`, html: layout(body) }
 }
