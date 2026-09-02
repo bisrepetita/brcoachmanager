@@ -55,7 +55,9 @@ function parseClassPassDateTime(str: string): Date | null {
 
 // À partir du bloc "Informations du membre <G> Prénom Nom email@x.com Nouveau(elle) client(e)"
 // (aplati), isole le nom (en écartant l'initiale d'avatar rendue en texte seul et les mentions
-// "Nouveau(elle)/Client(e) existant(e)") et l'email.
+// "Nouveau(elle)/Client(e) existant(e)") et l'email. L'initiale de l'avatar est parfois séparée du
+// prénom par un espace (ex: "G Giovanni"), parfois collée sans aucun séparateur (ex: "GGiovanni",
+// observé en production) — les deux cas sont gérés.
 function extractMember(block: string): { name: string; email: string } | null {
   const emailMatch = block.match(EMAIL_RE)
   if (!emailMatch) return null
@@ -66,9 +68,11 @@ function extractMember(block: string): { name: string; email: string } | null {
     .replace(/Client\(e\) existant\(e\)/gi, '')
     .trim()
     .split(/\s+/)
-    .filter((t) => t.length > 1) // écarte une initiale seule (ex: "G")
+    .filter((t) => t.length > 1) // écarte une initiale isolée par un espace (ex: "G")
   if (nameTokens.length === 0) return null
-  return { name: nameTokens.join(' '), email }
+  // Initiale collée directement au prénom, sans espace (ex: "GGiovanni" → "Giovanni").
+  const name = nameTokens.join(' ').replace(/^([A-Z])\1(?=[a-zà-öø-ÿ])/, '$1')
+  return { name, email }
 }
 
 // Parse le texte brut du mail "Nouvelle réservation" ClassPass. Retourne null si un champ
