@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { doc, onSnapshot, updateDoc, serverTimestamp, collection, query, where, getDocs, orderBy } from 'firebase/firestore'
+import { doc, onSnapshot, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { ChevronLeft, X, Pencil, UserPlus, Search } from 'lucide-react'
@@ -14,7 +14,7 @@ import { FormField } from '@/components/ui/form-field'
 import { db } from '@/lib/firebase/firestore'
 import { useCollection } from '@/lib/hooks/useCollection'
 import { useVisibleClients } from '@/lib/hooks/useVisibleClients'
-import { adminCancelGroupSessionEnrollment, adminAddGuestToGroupSession, adminAddClientToGroupSession } from '@/lib/services/group-session.service'
+import { adminCancelGroupSessionEnrollment, adminAddGuestToGroupSession, adminAddClientToGroupSession, resolveGroupSessionParticipants } from '@/lib/services/group-session.service'
 import { GROUP_SESSION_LEVEL_LABELS, type GroupSession, type Client, type GroupSessionEnrollmentStatus } from '@/types'
 
 const ENROLLMENT_BADGE_VARIANT: Record<GroupSessionEnrollmentStatus, 'payment_to_request' | 'paid' | 'cancelled'> = {
@@ -41,12 +41,25 @@ export default function GroupSessionDetailPage() {
   const params = useParams<{ id: string }>()
   const router = useRouter()
   const [groupSession, setGroupSession] = useState<GroupSession | null>(null)
-  const [clients, setClients] = useState<Record<string, Client>>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [cancellingId, setCancellingId] = useState<string | null>(null)
 
   const { data: allClients } = useVisibleClients('lastName')
+  const clientMap = useMemo(() => new Map(allClients.map(c => [c.id, c])), [allClients])
+
+  // Noms des inscrits, résolus côté serveur (Admin SDK) pour le coach assigné à CETTE séance —
+  // `where('__name__', 'in', clientIds)` était refusé en bloc par Firestore pour un coach
+  // non-admin (même cause que useVisibleClients), et clientMap seul ne suffit pas : un inscrit
+  // peut être scopé (visibleToCoachIds) à un autre coach que celui qui donne cette séance, ce qui
+  // ne doit pas empêcher ce dernier de voir qui est inscrit chez lui.
+  const [participantNames, setParticipantNames] = useState<Record<string, { firstName: string; lastName: string }>>({})
+  useEffect(() => {
+    if (!groupSession || groupSession.enrollments.every(e => !e.clientId)) return
+    resolveGroupSessionParticipants(groupSession.id)
+      .then(({ clients }) => setParticipantNames(clients))
+      .catch(() => {})
+  }, [groupSession])
 
   const [showAddGuest, setShowAddGuest] = useState(false)
   const [addMode, setAddMode] = useState<'client' | 'guest'>('client')
@@ -73,19 +86,6 @@ export default function GroupSessionDetailPage() {
       setLoading(false)
     }, () => setLoading(false))
   }, [params.id])
-
-  useEffect(() => {
-    if (!groupSession || groupSession.enrollments.length === 0) return
-    const clientIds = groupSession.enrollments.map(e => e.clientId).filter((id): id is string => !!id)
-    if (clientIds.length === 0) return
-    getDocs(query(collection(db, 'clients'), where('__name__', 'in', clientIds.slice(0, 10))))
-      .then(snap => {
-        const map: Record<string, Client> = {}
-        snap.docs.forEach(d => { map[d.id] = { id: d.id, ...d.data() } as Client })
-        setClients(map)
-      })
-      .catch(() => {})
-  }, [groupSession])
 
   async function togglePublic() {
     if (!groupSession || saving) return
@@ -271,8 +271,8 @@ export default function GroupSessionDetailPage() {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {groupSession.enrollments.map(e => {
-                const client = e.clientId ? clients[e.clientId] : undefined
-                const displayName = client ? `${client.firstName} ${client.lastName}` : e.guestName ?? e.clientId ?? '—'
+                const resolvedName = e.clientId ? (participantNames[e.clientId] ?? clientMap.get(e.clientId)) : undefined
+                const displayName = resolvedName ? `${resolvedName.firstName} ${resolvedName.lastName}` : e.guestName ?? e.clientId ?? '—'
                 const key = e.id ?? e.clientId ?? displayName
                 const cancelTarget = e.clientId ? { clientId: e.clientId } : { enrollmentId: e.id }
                 const isCancelling = cancellingId === (e.clientId ?? e.id)
