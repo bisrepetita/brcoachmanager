@@ -62,6 +62,7 @@ export async function notifyGroupSessionBooking(adminDb: Firestore, opts: {
         const { subject, html } = coachNewEnrollmentEmail({
           coachFirstName: (snap.data()?.['firstName'] as string) ?? '',
           clientName, sessionTitle, dateStr, paymentLabel: opts.paymentLabel,
+          groupSessionUrl: `${opts.baseUrl}/manage-group-sessions/${opts.groupSessionId}`,
         })
         await sendEmail({ to: coachEmail, subject, html })
       }))
