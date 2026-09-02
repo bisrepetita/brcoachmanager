@@ -59,3 +59,11 @@ export function requestGroupSessionPaymentLink(groupSessionId: string): Promise<
 export function checkGroupSessionOverlap(groupSessionId: string): Promise<{ hasOverlap: boolean }> {
   return callApi('/api/group-sessions/check-overlap', { groupSessionId })
 }
+
+/** Prénom/nom des inscrits d'une séance collective, pour son coach assigné (ou un admin) —
+ * contourne volontairement visibleToCoachIds, cf. commentaire de la route. */
+export function resolveGroupSessionParticipants(
+  groupSessionId: string
+): Promise<{ clients: Record<string, { firstName: string; lastName: string }> }> {
+  return callApi('/api/group-sessions/resolve-participants', { groupSessionId })
+}
