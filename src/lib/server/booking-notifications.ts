@@ -4,8 +4,8 @@ import { groupSessionConfirmationEmail, coachNewEnrollmentEmail, subscriptionCon
 import { resolveAccessInstructions } from './building-admin'
 
 function formatDateTime(d: Date): string {
-  const date = d.toLocaleDateString('fr-CH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
-  const time = d.toLocaleTimeString('fr-CH', { hour: '2-digit', minute: '2-digit' })
+  const date = d.toLocaleDateString('fr-CH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Zurich' })
+  const time = d.toLocaleTimeString('fr-CH', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Zurich' })
   return `${date} à ${time}`
 }
 
