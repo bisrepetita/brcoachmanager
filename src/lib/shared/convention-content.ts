@@ -19,7 +19,6 @@ export interface ConventionClause {
 }
 
 export const STUDIO_NAME = 'Bis Repetita Sàrl'
-export const STUDIO_ADDRESS = 'La Voie-Creuse 16, 1202 Genève'
 
 function roundTo5Cents(value: number): number {
   return Math.round(value * 20) / 20
@@ -57,7 +56,7 @@ export function buildConventionClauses(p: ConventionContentParams): ConventionCl
       n: 1,
       title: 'Parties',
       paragraphs: [
-        `La présente convention est conclue entre ${STUDIO_NAME}, ${STUDIO_ADDRESS} (ci-après « le studio »), et le participant qui l'accepte (ci-après « le participant »).`,
+        `La présente convention est conclue entre ${STUDIO_NAME} (ci-après « le studio »), et le participant qui l'accepte (ci-après « le participant »).`,
       ],
     },
     {

@@ -174,7 +174,7 @@ export default function ConventionSignaturePage() {
           </aside>
         </div>
 
-        <footer>Bis Repetita Sàrl · La Voie-Creuse 16 · 1202 Genève</footer>
+        <footer>Bis Repetita Sàrl</footer>
       </div>
       <ConventionStyles />
     </div>
