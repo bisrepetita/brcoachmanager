@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useParams } from 'next/navigation'
 import { buildConventionClauses, buildConventionSummary } from '@/lib/shared/convention-content'
 
@@ -31,6 +31,8 @@ export default function ConventionSignaturePage() {
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState(false)
   const [status, setStatus] = useState<{ msg: string; kind: 'ok' | 'err' | '' }>({ msg: '', kind: '' })
+  const [formInView, setFormInView] = useState(false)
+  const formRef = useRef<HTMLFormElement>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -40,6 +42,23 @@ export default function ConventionSignaturePage() {
       .catch(() => { if (!cancelled) setLoadState('error') })
     return () => { cancelled = true }
   }, [params.id])
+
+  // Le formulaire est en bas de page sur mobile — une bannière fixe en bas de l'écran l'annonce
+  // tant qu'il n'est pas encore visible, pour les gens qui ne lisent pas jusqu'au bout.
+  useEffect(() => {
+    if (loadState !== 'ready' || !formRef.current) return
+    const el = formRef.current
+    const observer = new IntersectionObserver(
+      ([entry]) => setFormInView(!!entry?.isIntersecting),
+      { rootMargin: '0px 0px -60% 0px' }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [loadState])
+
+  function scrollToForm() {
+    formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -135,7 +154,7 @@ export default function ConventionSignaturePage() {
           </main>
 
           <aside>
-            <form onSubmit={handleSubmit} noValidate>
+            <form ref={formRef} onSubmit={handleSubmit} noValidate>
               <h2>Accepter la convention</h2>
               <div className="field">
                 <label htmlFor="firstname">Prénom</label>
@@ -176,6 +195,15 @@ export default function ConventionSignaturePage() {
 
         <footer>Bis Repetita Sàrl</footer>
       </div>
+
+      {!formInView && !done && (
+        <div className="mobile-cta">
+          <button type="button" onClick={scrollToForm}>
+            Remplir et accepter ↓
+          </button>
+        </div>
+      )}
+
       <ConventionStyles />
     </div>
   )
@@ -261,12 +289,27 @@ function ConventionStyles() {
       .convention-doc .status.ok { color: var(--olive); font-weight: 500; }
       .convention-doc .status.err { color: var(--alert); font-weight: 500; }
       .convention-doc footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--rule); font-size: .875rem; color: var(--ink-soft); }
+      .convention-doc .mobile-cta { display: none; }
+      @media (max-width: 899px) {
+        .convention-doc .mobile-cta {
+          display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+          padding: .75rem 1rem calc(.75rem + env(safe-area-inset-bottom, 0px));
+          background: var(--paper); border-top: 1px solid var(--rule);
+          box-shadow: 0 -6px 20px rgba(0,0,0,.08);
+        }
+        .convention-doc .mobile-cta button {
+          font: inherit; font-weight: 600; width: 100%; background: var(--ink); color: var(--stone);
+          border: 0; border-radius: var(--rsm); padding: .85rem 1rem; cursor: pointer;
+        }
+        .convention-doc .wrap { padding-bottom: 6.5rem; }
+      }
       @media print {
         .convention-doc { background: #fff; color: #000; font-size: 11pt; }
         .convention-doc aside, .convention-doc .no-print { display: none !important; }
         .convention-doc .layout { display: block; }
         .convention-doc .summary { background: none; border: 1px solid #999; }
         .convention-doc .wrap { padding: 0; }
+        .convention-doc .mobile-cta { display: none !important; }
       }
     `}</style>
   )
