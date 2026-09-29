@@ -20,6 +20,7 @@ export type ActivityAction =
   | 'group_session_classpass_unmatched'
   | 'group_session_classpass_error'
   | 'group_session_client_added_by_coach'
+  | 'convention_accepted'
 
 export async function logActivity(params: {
   userId: string

@@ -487,6 +487,45 @@ export interface CreditTransaction {
   createdAt: Timestamp
 }
 
+// ─── Conventions de groupe ─────────────────────────────────────────────────────
+// Modèle de convention (conditions génériques + créneau/tarif variables) qu'un admin crée puis
+// partage via un lien public /convention/{id}. La personne qui remplit le formulaire accepte les
+// conditions, devient (ou est retrouvée comme) client, et reçoit une copie PDF par e-mail.
+
+export type ConventionStatus = 'active' | 'archived'
+
+export interface Convention {
+  id: string
+  title: string           // ex. "Coaching de groupe — Mardi 17h30"
+  activityLabel: string   // ex. "coaching de boxe en groupe"
+  dayTimeLabel: string    // ex. "tous les mardis à 17h30"
+  pricePerSession: number // CHF, prix total du groupe par séance
+  groupSize: number       // nombre nominal de participants (utilisé dans l'exemple de calcul)
+  maxParticipants: number
+  status: ConventionStatus
+  version: string         // '1.0', incrémentée automatiquement si le tarif/créneau change après signatures
+  versionDate: string     // 'YYYY-MM-DD', date de la version affichée sur la page et dans le PDF
+  acceptanceCount: number // dénormalisé, incrémenté à chaque acceptation
+  createdAt: Timestamp
+  updatedAt: Timestamp
+}
+
+export interface ConventionAcceptance {
+  id: string
+  conventionId: string
+  firstName: string
+  lastName: string
+  email: string
+  phone: string
+  version: string
+  versionDate: string
+  clientId: string
+  acceptedAt: Timestamp
+  ip?: string
+  userAgent?: string
+  emailSent: boolean
+}
+
 // ─── Paramètres app ───────────────────────────────────────────────────────────
 
 export interface AppSettings {

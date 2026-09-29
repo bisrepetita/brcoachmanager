@@ -13,15 +13,23 @@ const FROM = process.env.RESEND_FROM_EMAIL || 'Bis Repetita <reservations@bisrep
 // Best-effort, ne lève jamais — un email raté ne doit jamais faire échouer une réservation/un
 // paiement. Si RESEND_API_KEY n'est pas configuré (ex: environnement de dev sans clé), l'envoi
 // est simplement ignoré (log console) plutôt que de bloquer.
-export async function sendEmail(opts: { to: string; subject: string; html: string }): Promise<void> {
+export async function sendEmail(opts: {
+  to: string; subject: string; html: string
+  attachments?: Array<{ filename: string; content: Buffer }>
+}): Promise<boolean> {
   const resend = getClient()
   if (!resend) {
     console.warn('[email] RESEND_API_KEY manquant — email non envoyé:', opts.subject, '→', opts.to)
-    return
+    return false
   }
   try {
-    await resend.emails.send({ from: FROM, to: opts.to, subject: opts.subject, html: opts.html })
+    await resend.emails.send({
+      from: FROM, to: opts.to, subject: opts.subject, html: opts.html,
+      attachments: opts.attachments,
+    })
+    return true
   } catch (err) {
     console.error('[email] échec envoi:', opts.subject, '→', opts.to, err)
+    return false
   }
 }
