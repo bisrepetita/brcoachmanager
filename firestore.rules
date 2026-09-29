@@ -250,6 +250,19 @@ service cloud.firestore {
       allow delete: if isAdmin() || (isCoach() && request.auth.uid in resource.data.coachIds);
     }
 
+    // ─── conventions (modèles de convention de groupe, lien public de signature) ───
+
+    match /conventions/{conventionId} {
+      allow read: if isCoach();
+      allow create, update, delete: if isAdmin();
+
+      // Écrites uniquement par /api/conventions/[id]/accept (Admin SDK, contourne ces règles) —
+      // le formulaire public n'a pas de session Firestore authentifiée.
+      match /acceptances/{acceptanceId} {
+        allow read: if isCoach();
+      }
+    }
+
     // ─── activityLogs ─────────────────────────────────────────────────────────
 
     match /activityLogs/{logId} {

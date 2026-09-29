@@ -43,6 +43,7 @@ const ACTION_LABELS: Record<ActivityAction, string> = {
   group_session_classpass_unmatched: 'Mail ClassPass — aucune séance correspondante',
   group_session_classpass_error: 'Mail ClassPass — erreur d\'import',
   group_session_client_added_by_coach: 'Client ajouté à une séance par le coach',
+  convention_accepted: 'Convention acceptée',
 }
 
 const ACTION_COLORS: Record<ActivityAction, string> = {
@@ -64,6 +65,7 @@ const ACTION_COLORS: Record<ActivityAction, string> = {
   group_session_classpass_unmatched: '#F59E0B',
   group_session_classpass_error: '#C0392B',
   group_session_client_added_by_coach: '#10B981',
+  convention_accepted: '#2D7A4F',
 }
 
 const PAGE_SIZE = 30

@@ -69,6 +69,40 @@ export function subscriptionConfirmationEmail(opts: {
   return { subject: `Abonnement activé — ${opts.planName}`, html: layout(body) }
 }
 
+export function conventionAcceptedParticipantEmail(opts: {
+  firstName: string
+  conventionTitle: string
+}): { subject: string; html: string } {
+  const body = `
+    <p style="font-size:16px;font-weight:700;color:#1A1A18;margin:0 0 4px;">Convention acceptée ✓</p>
+    <p style="font-size:14px;color:#7A7570;margin:0 0 20px;">Salut ${escapeHtml(opts.firstName)}, merci d'avoir rempli la convention.</p>
+    <p style="font-size:13px;color:#1A1A18;margin:0;">Tu trouveras en pièce jointe une copie PDF de la convention « ${escapeHtml(opts.conventionTitle)} » que tu viens d'accepter, avec le détail de ton acceptation.</p>
+  `
+  return { subject: `Convention acceptée — ${opts.conventionTitle}`, html: layout(body) }
+}
+
+export function conventionAcceptedAdminEmail(opts: {
+  adminFirstName: string
+  conventionTitle: string
+  participantName: string
+  participantEmail: string
+  participantPhone: string
+  conventionUrl?: string
+}): { subject: string; html: string } {
+  const body = `
+    <p style="font-size:16px;font-weight:700;color:#1A1A18;margin:0 0 4px;">Nouvelle acceptation de convention</p>
+    <p style="font-size:14px;color:#7A7570;margin:0 0 20px;">Salut ${escapeHtml(opts.adminFirstName)},</p>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:${opts.conventionUrl ? '20px' : '0'};">
+      ${infoRow('Convention', opts.conventionTitle)}
+      ${infoRow('Participant', opts.participantName)}
+      ${infoRow('E-mail', opts.participantEmail)}
+      ${infoRow('Téléphone', opts.participantPhone)}
+    </table>
+    ${opts.conventionUrl ? `<a href="${opts.conventionUrl}" style="display:inline-block;font-size:13px;font-weight:600;color:#1A1A18;text-decoration:underline;">Voir les acceptations →</a>` : ''}
+  `
+  return { subject: `Convention acceptée — ${opts.participantName}`, html: layout(body) }
+}
+
 export function coachNewEnrollmentEmail(opts: {
   coachFirstName: string
   clientName: string
