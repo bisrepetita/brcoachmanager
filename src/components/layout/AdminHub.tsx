@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Users, MapPin, Briefcase, UsersRound, BarChart2, Settings, ChevronRight, ScrollText, FileSignature } from 'lucide-react'
+import { Users, MapPin, Briefcase, UsersRound, BarChart2, Settings, ChevronRight, ScrollText, FileSignature, Building } from 'lucide-react'
 
 const ADMIN_LINKS = [
   { href: '/admin/coaches', label: 'Coachs', description: 'Gérer les coachs', icon: Users },
@@ -7,6 +7,7 @@ const ADMIN_LINKS = [
   { href: '/admin/services', label: 'Services', description: 'Types de séances et tarifs', icon: Briefcase },
   { href: '/admin/groups', label: 'Groupes clients', description: 'Groupes pour les séances', icon: UsersRound },
   { href: '/admin/conventions', label: 'Conventions', description: 'Convention de groupe à faire signer', icon: FileSignature },
+  { href: '/admin/private-groups', label: 'Groupes privés', description: 'Séances réservées à une société', icon: Building },
   { href: '/admin/stats', label: 'Statistiques', description: 'CA, séances par service et coach', icon: BarChart2 },
   { href: '/admin/independent-tracking', label: 'Suivi indépendants', description: 'Location de salle', icon: BarChart2 },
   { href: '/admin/activity', label: 'Journal d\'activité', description: 'Historique des modifications', icon: ScrollText },

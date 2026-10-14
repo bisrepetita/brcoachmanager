@@ -259,6 +259,13 @@ export interface GroupSession {
   isPublic: boolean
   enrollments: GroupSessionEnrollment[]
   recurrenceId?: string
+  // Séance privée d'un groupe (ex. une société qui paie pour ses employés) : isPublic reste false,
+  // la séance n'est visible et réservable que par les membres du groupe (voir PrivateGroup). `price`
+  // est alors la participation payée par chaque participant (0 = entièrement pris en charge).
+  privateGroupId?: string
+  privateGroupName?: string
+  sponsorAmount?: number
+  sponsorPaymentStatus?: SponsorPaymentStatus
   createdBy: string
   createdAt: Timestamp
   updatedAt: Timestamp
@@ -296,6 +303,9 @@ export interface GroupSessionRecurrence {
   price: number
   level?: GroupSessionLevel
   isPublic: boolean
+  privateGroupId?: string
+  privateGroupName?: string
+  sponsorAmount?: number
   createdBy: string
   rule: RecurrenceRule
   createdAt: Timestamp
@@ -485,6 +495,37 @@ export interface CreditTransaction {
   note?: string
   createdBy: string
   createdAt: Timestamp
+}
+
+// ─── Groupes privés ────────────────────────────────────────────────────────────
+// Groupe (typiquement une société) dont les séances collectives ne sont visibles et réservables
+// que par ses membres. On devient membre en ouvrant le lien /groupe/{token} une fois connecté
+// (sous-collection privateGroups/{id}/members/{uid}, écrite uniquement côté serveur). La société
+// paie `sponsorAmountPerSession` par séance, chaque participant paie `participantPrice`.
+
+export type SponsorPaymentStatus = 'to_invoice' | 'invoiced' | 'paid'
+
+export interface PrivateGroup {
+  id: string
+  name: string
+  token: string
+  sponsorAmountPerSession: number
+  participantPrice: number
+  contactName?: string
+  contactEmail?: string
+  notes?: string
+  active: boolean
+  createdAt: Timestamp
+  updatedAt: Timestamp
+}
+
+export interface PrivateGroupMember {
+  id: string // = uid du compte client
+  clientId: string
+  firstName?: string
+  lastName?: string
+  email?: string
+  joinedAt: Timestamp
 }
 
 // ─── Conventions de groupe ─────────────────────────────────────────────────────

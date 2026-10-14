@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation'
 import { useAuth } from '@/lib/hooks/useAuth'
 import {
   Users, MapPin, Briefcase, UsersRound, BarChart2,
-  Settings, ScrollText, LogOut, User, X, ChevronRight, Users2, Percent, Repeat, Building2, FileSignature,
+  Settings, ScrollText, LogOut, User, X, ChevronRight, Users2, Percent, Repeat, Building2, FileSignature, Building,
 } from 'lucide-react'
 
 interface BurgerMenuCtx {
@@ -30,6 +30,7 @@ const ADMIN_LINKS = [
   { href: '/admin/subscriptions',        label: 'Abonnements',          description: 'Plans et attribution aux clients', icon: Repeat },
   { href: '/admin/groups',               label: 'Groupes clients',      description: 'Groupes pour les séances',    icon: UsersRound },
   { href: '/admin/conventions',          label: 'Conventions',          description: 'Convention de groupe à faire signer', icon: FileSignature },
+  { href: '/admin/private-groups',       label: 'Groupes privés',       description: 'Séances réservées à une société', icon: Building },
   { href: '/manage-group-sessions',       label: 'Séances collectives',  description: 'Cours avec inscription client', icon: Users2 },
   { href: '/admin/stats',                label: 'Statistiques',         description: 'CA, séances, coachs',         icon: BarChart2 },
   { href: '/admin/independent-tracking', label: 'Suivi indépendants',   description: 'Location de salle',           icon: BarChart2 },
