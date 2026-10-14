@@ -12,6 +12,7 @@ import {
 } from '@/lib/server/subscription-admin'
 import { notifyGroupSessionBooking } from '@/lib/server/booking-notifications'
 import { isPrivateGroupMemberInTransaction } from '@/lib/server/private-group-admin'
+import { findUsablePackInTransaction, consumePackCreditInTransaction } from '@/lib/server/pack-admin'
 import { enrollmentsUpdate } from '@/lib/server/group-session-enrollments'
 
 // Type "loose" côté serveur : le type partagé GroupSessionEnrollment (src/types) pointe sur le
@@ -139,11 +140,18 @@ export async function POST(req: NextRequest) {
         }
       }
 
+      // Pack de séances : à défaut d'abonnement qui couvre la séance, 1 crédit du pack couvrant ce
+      // service qui expire le plus tôt — prioritaire sur la gratuité "1ère réservation" et les
+      // remises (pas de cumul).
+      const pack = !subscriptionRef && serviceId
+        ? await findUsablePackInTransaction(tx, adminDb, clientId, serviceId)
+        : null
+
       // Remise : rabais client auto-détecté, ou code promo fourni (pas de cumul des deux, ni avec
-      // un abonnement qui couvre déjà la séance).
+      // un abonnement ou un pack qui couvre déjà la séance).
       let service: { id: string; isPublic?: boolean } | null = null
       let serviceFirstBookingFree = false
-      if (!subscriptionRef && serviceId) {
+      if (!subscriptionRef && !pack && serviceId) {
         const serviceSnap = await tx.get(adminDb.collection('services').doc(serviceId))
         if (serviceSnap.exists) {
           service = { id: serviceSnap.id, isPublic: serviceSnap.data()!['isPublic'] as boolean | undefined }
@@ -152,9 +160,9 @@ export async function POST(req: NextRequest) {
       }
 
       const basePrice = data['price'] as number
-      const firstBookingFree = !subscriptionRef && serviceFirstBookingFree && !hasEverBooked
+      const firstBookingFree = !subscriptionRef && !pack && serviceFirstBookingFree && !hasEverBooked
 
-      const discountResult = (subscriptionRef || firstBookingFree)
+      const discountResult = (subscriptionRef || pack || firstBookingFree)
         ? null
         : await resolveDiscountInTransaction(tx, adminDb, { clientId, promoCode, service })
       if (discountResult && 'error' in discountResult) {
@@ -171,6 +179,17 @@ export async function POST(req: NextRequest) {
             enrolledAt: Timestamp.now(),
             subscriptionId: subscriptionRef.id,
           }
+        : pack
+          ? {
+              clientId,
+              status: 'confirmed',
+              amountDue: 0,
+              amountPaid: 0,
+              paymentStatus: 'credits',
+              enrolledAt: Timestamp.now(),
+              clientPackId: pack.ref.id,
+              packCreditValue: pack.creditValue,
+            }
         : firstBookingFree
           ? {
               clientId,
@@ -212,6 +231,8 @@ export async function POST(req: NextRequest) {
         tx.update(clientDocRef, { hasEverBooked: true, updatedAt: FieldValue.serverTimestamp() })
       }
 
+      if (pack) consumePackCreditInTransaction(tx, pack.ref)
+
       if (subscriptionRef) {
         recordConsumptionInTransaction(tx, subscriptionRef, { clientId, uid, groupSessionId, sessionStartAt: startAt })
       }
@@ -239,7 +260,7 @@ export async function POST(req: NextRequest) {
       amountPaid: (enrollment.amountPaid as number) ?? 0,
       paymentLabel: privateGroupName && enrollment.paymentStatus === 'offered'
         ? 'Gratuit'
-        : paymentLabelFor(enrollment.paymentStatus as string),
+        : enrollment.clientPackId ? 'Pack' : paymentLabelFor(enrollment.paymentStatus as string),
       baseUrl: req.nextUrl.origin,
     })
 

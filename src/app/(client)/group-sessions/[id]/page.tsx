@@ -15,7 +15,8 @@ import { findActiveClientDiscount, computeDiscountedAmount, discountLabel } from
 import {
   findActiveSubscriptionForClient, matchesSubscriptionCoverage, countWeeklySubscriptionConsumptions,
 } from '@/lib/services/subscription.service'
-import { GROUP_SESSION_LEVEL_LABELS, type GroupSession, type Discount, type ClientSubscription, type Building } from '@/types'
+import { findClientPacks, isPackUsable } from '@/lib/services/pack.service'
+import { GROUP_SESSION_LEVEL_LABELS, type GroupSession, type Discount, type ClientSubscription, type Building, type ClientPack } from '@/types'
 
 interface PublicGroupSessionView {
   id: string
@@ -51,6 +52,9 @@ export default function ClientGroupSessionDetailPage() {
   const [activeSubscription, setActiveSubscription] = useState<ClientSubscription | null>(null)
   const [subscriptionCovers, setSubscriptionCovers] = useState(false)
   const [subscriptionQuotaOk, setSubscriptionQuotaOk] = useState(false)
+  // Pack qui serait utilisé à l'inscription (même règle que le serveur : couvre le service, le plus
+  // proche de l'expiration) — seulement si aucun abonnement ne couvre déjà la séance.
+  const [coveringPack, setCoveringPack] = useState<ClientPack | null>(null)
   const [accessBuilding, setAccessBuilding] = useState<Building | null>(null)
   const [showAccessInfo, setShowAccessInfo] = useState(false)
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
@@ -130,11 +134,25 @@ export default function ClientGroupSessionDetailPage() {
     return () => { cancelled = true }
   }, [profile, groupSession, firebaseUser?.uid])
 
+  useEffect(() => {
+    const serviceId = groupSession?.serviceId
+    if (!profile || !firebaseUser?.uid || !serviceId || groupSession?.privateGroupId || (subscriptionCovers && subscriptionQuotaOk)) {
+      setCoveringPack(null); return
+    }
+    let cancelled = false
+    findClientPacks(profile.clientId, firebaseUser.uid)
+      .then(list => {
+        if (!cancelled) setCoveringPack(list.find(p => isPackUsable(p) && p.packSnapshot.serviceIds.includes(serviceId)) ?? null)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [profile, firebaseUser?.uid, groupSession?.serviceId, groupSession?.privateGroupId, subscriptionCovers, subscriptionQuotaOk])
+
   // Gratuité "1ère réservation" (à défaut d'un abonnement qui couvre déjà la séance) puis, à
   // défaut, rabais client auto-attribué — un code promo ne sera proposé que si rien d'autre ne
   // s'applique déjà (pas de cumul).
   useEffect(() => {
-    if (!profile || !groupSession?.serviceId || groupSession.privateGroupId || (subscriptionCovers && subscriptionQuotaOk)) {
+    if (!profile || !groupSession?.serviceId || groupSession.privateGroupId || coveringPack || (subscriptionCovers && subscriptionQuotaOk)) {
       setClientDiscount(null); setFirstBookingFree(false); return
     }
     let cancelled = false
@@ -151,7 +169,7 @@ export default function ClientGroupSessionDetailPage() {
       if (!cancelled) setClientDiscount(d ?? null)
     })
     return () => { cancelled = true }
-  }, [profile, groupSession?.serviceId, groupSession?.privateGroupId, subscriptionCovers, subscriptionQuotaOk])
+  }, [profile, groupSession?.serviceId, groupSession?.privateGroupId, coveringPack, subscriptionCovers, subscriptionQuotaOk])
 
   async function handleEnroll() {
     setBusy(true)
@@ -401,15 +419,16 @@ export default function ClientGroupSessionDetailPage() {
                 </>
               ) : (() => {
                 const subscriptionCoveredNow = subscriptionCovers && subscriptionQuotaOk
+                const packNow = !subscriptionCoveredNow && !!coveringPack
                 const originalPrice = myEnrollment
-                  ? myEnrollment.originalAmountDue
-                  : (subscriptionCoveredNow || firstBookingFree || clientDiscount) ? groupSession.price : undefined
+                  ? (myEnrollment.clientPackId ? groupSession.price : myEnrollment.originalAmountDue)
+                  : (subscriptionCoveredNow || packNow || firstBookingFree || clientDiscount) ? groupSession.price : undefined
                 const finalPrice = myEnrollment
                   ? myEnrollment.amountDue
-                  : subscriptionCoveredNow ? 0 : firstBookingFree ? 0 : clientDiscount ? computeDiscountedAmount(groupSession.price, clientDiscount) : groupSession.price
+                  : subscriptionCoveredNow || packNow ? 0 : firstBookingFree ? 0 : clientDiscount ? computeDiscountedAmount(groupSession.price, clientDiscount) : groupSession.price
                 const label = myEnrollment
-                  ? myEnrollment.discountLabel
-                  : subscriptionCoveredNow ? 'Abonnement' : firstBookingFree ? 'Première réservation offerte' : clientDiscount ? discountLabel(clientDiscount) : undefined
+                  ? (myEnrollment.clientPackId ? 'Pack' : myEnrollment.discountLabel)
+                  : subscriptionCoveredNow ? 'Abonnement' : packNow ? 'Pack' : firstBookingFree ? 'Première réservation offerte' : clientDiscount ? discountLabel(clientDiscount) : undefined
                 return (
                   <>
                     <p style={{ fontSize: 16, fontWeight: 600, margin: '2px 0 0', fontFamily: 'monospace' }}>
@@ -420,7 +439,7 @@ export default function ClientGroupSessionDetailPage() {
                       )}
                       <span style={{ color: originalPrice !== undefined ? '#2D7A4F' : '#1A1A18' }}>{finalPrice.toFixed(2)} CHF</span>
                     </p>
-                    {label && <p style={{ fontSize: 11, color: '#2D7A4F', margin: '2px 0 0' }}>Remise {label}</p>}
+                    {label && <p style={{ fontSize: 11, color: '#2D7A4F', margin: '2px 0 0' }}>{label === 'Pack' || label === 'Abonnement' ? label : `Remise ${label}`}</p>}
                   </>
                 )
               })()}
@@ -517,7 +536,7 @@ export default function ClientGroupSessionDetailPage() {
           )
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {activeSubscription && !(subscriptionCovers && subscriptionQuotaOk) && (
+            {activeSubscription && !(subscriptionCovers && subscriptionQuotaOk) && !coveringPack && (
               <div style={{ display: 'flex', gap: 8, padding: '10px 12px', borderRadius: 8, background: '#F0EDE8', color: '#1A1A18', fontSize: 13 }}>
                 <Repeat size={14} style={{ flexShrink: 0, marginTop: 2, color: '#7A7570' }} />
                 <p style={{ margin: 0 }}>
@@ -531,7 +550,7 @@ export default function ClientGroupSessionDetailPage() {
                 </p>
               </div>
             )}
-            {!isPrivate && !(subscriptionCovers && subscriptionQuotaOk) && !clientDiscount && !firstBookingFree && !isFull && (
+            {!isPrivate && !(subscriptionCovers && subscriptionQuotaOk) && !coveringPack && !clientDiscount && !firstBookingFree && !isFull && (
               showPromoInput ? (
                 <input
                   autoFocus
@@ -562,7 +581,7 @@ export default function ClientGroupSessionDetailPage() {
                 background: isFull ? '#D5D1C9' : '#1A1A18', color: '#fff', fontSize: 14, fontWeight: 600,
               }}
             >
-              {isFull ? 'Complet' : busy ? 'Inscription...' : isPrivate ? (groupSession.price === 0 ? 'S\'inscrire gratuitement' : 'S\'inscrire') : (subscriptionCovers && subscriptionQuotaOk) ? 'Réserver avec mon abonnement' : firstBookingFree ? 'S\'inscrire gratuitement' : 'S\'inscrire'}
+              {isFull ? 'Complet' : busy ? 'Inscription...' : isPrivate ? (groupSession.price === 0 ? 'S\'inscrire gratuitement' : 'S\'inscrire') : (subscriptionCovers && subscriptionQuotaOk) ? 'Réserver avec mon abonnement' : coveringPack ? `Réserver avec mon pack (${coveringPack.creditsRemaining} séance${coveringPack.creditsRemaining > 1 ? 's' : ''} restante${coveringPack.creditsRemaining > 1 ? 's' : ''})` : firstBookingFree ? 'S\'inscrire gratuitement' : 'S\'inscrire'}
             </button>
           </div>
         )}

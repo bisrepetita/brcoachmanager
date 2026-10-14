@@ -16,7 +16,7 @@ import { useCollection } from '@/lib/hooks/useCollection'
 import { useVisibleClients } from '@/lib/hooks/useVisibleClients'
 import { useAuth } from '@/lib/hooks/useAuth'
 import { logActivity } from '@/lib/services/activity.service'
-import { adminCancelGroupSessionEnrollment, adminAddGuestToGroupSession, adminAddClientToGroupSession, resolveGroupSessionParticipants } from '@/lib/services/group-session.service'
+import { adminCancelGroupSessionEnrollment, cancelGroupSession, adminAddGuestToGroupSession, adminAddClientToGroupSession, resolveGroupSessionParticipants } from '@/lib/services/group-session.service'
 import { GROUP_SESSION_LEVEL_LABELS, type GroupSession, type Client, type GroupSessionEnrollmentStatus } from '@/types'
 
 const ENROLLMENT_BADGE_VARIANT: Record<GroupSessionEnrollmentStatus, 'payment_to_request' | 'paid' | 'cancelled'> = {
@@ -188,14 +188,12 @@ export default function GroupSessionDetailPage() {
 
   async function cancelSession() {
     if (!groupSession || saving) return
-    if (!confirm('Annuler cette séance collective ? Les clients inscrits ne pourront plus la voir.')) return
+    if (!confirm("Annuler cette séance collective ? Les clients inscrits ne pourront plus la voir. Les crédits de pack et quotas d'abonnement utilisés leur sont rendus ; les paiements sont à rembourser à la main.")) return
     setSaving(true)
     try {
-      await updateDoc(doc(db, 'groupSessions', groupSession.id), {
-        status: 'cancelled',
-        cancelledAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      })
+      await cancelGroupSession(groupSession.id)
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Erreur lors de l'annulation.")
     } finally {
       setSaving(false)
     }

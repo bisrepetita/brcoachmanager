@@ -1,5 +1,5 @@
 import Stripe from 'stripe'
-import { FieldValue, type Firestore, type Transaction } from 'firebase-admin/firestore'
+import { FieldValue, type DocumentReference, type Firestore, type Timestamp, type Transaction } from 'firebase-admin/firestore'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const apiVersion = '2026-05-27.dahlia' as any
@@ -75,4 +75,54 @@ export async function activatePackFromWebhookInTransaction(
     updatedAt: FieldValue.serverTimestamp(),
   })
   return 'activated'
+}
+
+/**
+ * Pack à utiliser pour une inscription au Planning : actif, non expiré, avec au moins un crédit,
+ * couvrant le service de la séance — celui qui expire le plus tôt en premier. Lu DANS la
+ * transaction : le solde est revalidé au moment du décompte (pas de solde négatif même avec deux
+ * inscriptions simultanées).
+ */
+export async function findUsablePackInTransaction(
+  tx: Transaction, adminDb: Firestore, clientId: string, serviceId: string
+): Promise<{ ref: DocumentReference; creditValue: number } | null> {
+  const snap = await tx.get(adminDb.collection('clientPacks')
+    .where('clientId', '==', clientId)
+    .where('status', '==', 'active'))
+  const now = Date.now()
+  const usable = snap.docs
+    .filter((d) => {
+      const data = d.data()
+      const serviceIds = (data['packSnapshot'] as { serviceIds?: string[] } | undefined)?.serviceIds ?? []
+      return (data['creditsRemaining'] as number) > 0
+        && (data['expiresAt'] as Timestamp).toMillis() > now
+        && serviceIds.includes(serviceId)
+    })
+    .sort((a, b) => (a.data()['expiresAt'] as Timestamp).toMillis() - (b.data()['expiresAt'] as Timestamp).toMillis())
+  const first = usable[0]
+  if (!first) return null
+  const snapshot = first.data()['packSnapshot'] as { price: number; sessionCount: number }
+  return { ref: first.ref, creditValue: Math.round((snapshot.price / snapshot.sessionCount) * 100) / 100 }
+}
+
+export function consumePackCreditInTransaction(tx: Transaction, packRef: DocumentReference): void {
+  tx.update(packRef, { creditsRemaining: FieldValue.increment(-1), updatedAt: FieldValue.serverTimestamp() })
+}
+
+/**
+ * Restitution du crédit d'une inscription annulée. En deux temps à cause de la contrainte des
+ * transactions Firestore (toutes les lectures avant toute écriture) : `prepare…` lit le pack
+ * (phase lecture), puis la fonction renvoyée écrit la restitution (phase écriture). Sans effet si
+ * l'inscription n'a pas été payée par un pack, si son crédit a déjà été rendu ou si le pack a été
+ * supprimé entre-temps.
+ */
+export async function preparePackCreditRefundInTransaction(
+  tx: Transaction, adminDb: Firestore, entry: Record<string, unknown>
+): Promise<(() => void) | null> {
+  const clientPackId = entry['clientPackId'] as string | undefined
+  if (!clientPackId || entry['packCreditRefunded'] === true) return null
+  const packRef = adminDb.collection('clientPacks').doc(clientPackId)
+  const packSnap = await tx.get(packRef)
+  if (!packSnap.exists) return null
+  return () => tx.update(packRef, { creditsRemaining: FieldValue.increment(1), updatedAt: FieldValue.serverTimestamp() })
 }

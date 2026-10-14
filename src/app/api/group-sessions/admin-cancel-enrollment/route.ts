@@ -3,6 +3,7 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { getAdminDb, getAdminAuth } from '@/lib/firebase/admin'
 import { findConsumptionRefsInTransaction, removeConsumptionsInTransaction } from '@/lib/server/subscription-admin'
 import { enrollmentsUpdate } from '@/lib/server/group-session-enrollments'
+import { preparePackCreditRefundInTransaction } from '@/lib/server/pack-admin'
 
 type ServerEnrollment = Record<string, unknown> & { id?: string; clientId?: string; status: string; paymentStatus: string; amountPaid: number; subscriptionId?: string }
 
@@ -52,12 +53,17 @@ export async function POST(req: NextRequest) {
             tx, adminDb.collection('clientSubscriptions').doc(entry.subscriptionId), groupSessionId
           )
         : []
+      const refundPackCredit = await preparePackCreditRefundInTransaction(tx, adminDb, entry)
 
       const updated = [...enrollments]
-      updated[idx] = { ...entry, status: 'cancelled', cancelledAt: Timestamp.now() }
+      updated[idx] = {
+        ...entry, status: 'cancelled', cancelledAt: Timestamp.now(),
+        ...(refundPackCredit ? { packCreditRefunded: true } : {}),
+      }
 
       tx.update(groupSessionRef, { ...enrollmentsUpdate(updated), updatedAt: FieldValue.serverTimestamp() })
       removeConsumptionsInTransaction(tx, consumptionRefs)
+      refundPackCredit?.()
 
       return entry
     })
