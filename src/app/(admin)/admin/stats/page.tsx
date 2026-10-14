@@ -117,8 +117,10 @@ export default function StatsPage() {
       .filter(gs => gs.status !== 'cancelled')
       .map(gs => ({
         date: gs.startAt?.toDate?.() ?? new Date(0),
-        revenue: paymentsRevenue((gs.enrollments ?? []).filter(e => e.status !== 'cancelled')),
-        paid: paymentsPaid((gs.enrollments ?? []).filter(e => e.status !== 'cancelled')),
+        // Séance de groupe privé : + montant pris en charge par la société (encaissé une fois marqué payé)
+        revenue: paymentsRevenue((gs.enrollments ?? []).filter(e => e.status !== 'cancelled')) + (gs.sponsorAmount ?? 0),
+        paid: paymentsPaid((gs.enrollments ?? []).filter(e => e.status !== 'cancelled'))
+          + (gs.sponsorPaymentStatus === 'paid' ? (gs.sponsorAmount ?? 0) : 0),
         serviceId: gs.serviceId,
         serviceName: (gs.serviceId && services.find(sv => sv.id === gs.serviceId)?.name) ?? gs.title,
         coachIds: gs.coachIds,

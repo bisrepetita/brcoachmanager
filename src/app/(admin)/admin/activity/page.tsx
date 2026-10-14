@@ -45,6 +45,7 @@ const ACTION_LABELS: Record<ActivityAction, string> = {
   group_session_client_added_by_coach: 'Client ajouté à une séance par le coach',
   convention_accepted: 'Convention acceptée',
   private_group_joined: 'Groupe privé rejoint',
+  group_session_sponsor_payment: 'Paiement société (séance privée)',
 }
 
 const ACTION_COLORS: Record<ActivityAction, string> = {
@@ -68,6 +69,7 @@ const ACTION_COLORS: Record<ActivityAction, string> = {
   group_session_client_added_by_coach: '#10B981',
   convention_accepted: '#2D7A4F',
   private_group_joined: '#0EA5E9',
+  group_session_sponsor_payment: '#2D7A4F',
 }
 
 const PAGE_SIZE = 30

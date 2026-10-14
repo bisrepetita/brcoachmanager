@@ -14,6 +14,8 @@ import { FormField } from '@/components/ui/form-field'
 import { db } from '@/lib/firebase/firestore'
 import { useCollection } from '@/lib/hooks/useCollection'
 import { useVisibleClients } from '@/lib/hooks/useVisibleClients'
+import { useAuth } from '@/lib/hooks/useAuth'
+import { logActivity } from '@/lib/services/activity.service'
 import { adminCancelGroupSessionEnrollment, adminAddGuestToGroupSession, adminAddClientToGroupSession, resolveGroupSessionParticipants } from '@/lib/services/group-session.service'
 import { GROUP_SESSION_LEVEL_LABELS, type GroupSession, type Client, type GroupSessionEnrollmentStatus } from '@/types'
 
@@ -44,6 +46,7 @@ export default function GroupSessionDetailPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [cancellingId, setCancellingId] = useState<string | null>(null)
+  const { user } = useAuth()
 
   const { data: allClients } = useVisibleClients('lastName')
   const clientMap = useMemo(() => new Map(allClients.map(c => [c.id, c])), [allClients])
@@ -86,6 +89,29 @@ export default function GroupSessionDetailPage() {
       setLoading(false)
     }, () => setLoading(false))
   }, [params.id])
+
+  // Montant pris en charge par la société d'une séance de groupe privé : marqué payé à la main (la
+  // société paie hors app, ex. d'avance sur facture) — compte alors comme encaissé dans les stats.
+  async function setSponsorPaid(paid: boolean) {
+    if (!groupSession || saving) return
+    setSaving(true)
+    try {
+      await updateDoc(doc(db, 'groupSessions', groupSession.id), {
+        sponsorPaymentStatus: paid ? 'paid' : 'to_invoice',
+        updatedAt: serverTimestamp(),
+      })
+      if (user) {
+        logActivity({
+          userId: user.id, userFirstName: user.firstName, userLastName: user.lastName,
+          action: 'group_session_sponsor_payment',
+          description: `${groupSession.privateGroupName ?? 'Société'} · "${groupSession.title}" : ${(groupSession.sponsorAmount ?? 0).toFixed(2)} CHF ${paid ? 'marqué payé' : 'remis à payer'}`,
+          sessionId: groupSession.id,
+        })
+      }
+    } finally {
+      setSaving(false)
+    }
+  }
 
   async function togglePublic() {
     if (!groupSession || saving) return
@@ -215,10 +241,42 @@ export default function GroupSessionDetailPage() {
             {groupSession.level && <Badge variant="muted">{GROUP_SESSION_LEVEL_LABELS[groupSession.level]}</Badge>}
           </div>
           {groupSession.privateGroupId && (
-            <p style={{ fontSize: 13, color: '#7A7570', margin: '6px 0 0' }}>
-              Groupe privé <span style={{ fontWeight: 600, color: '#1A1A18' }}>{groupSession.privateGroupName}</span>
-              {' · '}facturé {(groupSession.sponsorAmount ?? 0).toFixed(2)} CHF à la société
-            </p>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 8, padding: '8px 10px', borderRadius: 8, background: '#F9F8F6' }}>
+              <div style={{ minWidth: 0 }}>
+                <p style={{ fontSize: 13, fontWeight: 600, color: '#1A1A18', margin: 0 }}>Groupe privé · {groupSession.privateGroupName}</p>
+                <p style={{ fontSize: 12, color: '#7A7570', margin: '2px 0 0', fontFamily: 'monospace' }}>
+                  {(groupSession.sponsorAmount ?? 0).toFixed(2)} CHF pris en charge par la société
+                </p>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                {groupSession.sponsorPaymentStatus === 'paid' ? (
+                  <>
+                    <Badge variant="paid">Payé</Badge>
+                    {groupSession.status !== 'cancelled' && (
+                      <button
+                        onClick={() => setSponsorPaid(false)}
+                        disabled={saving}
+                        title="Remettre à payer"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, display: 'flex' }}
+                      >
+                        <X size={14} color="#A09890" />
+                      </button>
+                    )}
+                  </>
+                ) : groupSession.status !== 'cancelled' && (groupSession.sponsorAmount ?? 0) > 0 ? (
+                  <button
+                    onClick={() => setSponsorPaid(true)}
+                    disabled={saving}
+                    style={{
+                      padding: '5px 10px', borderRadius: 6, border: 'none', cursor: saving ? 'default' : 'pointer',
+                      fontSize: 12, fontWeight: 600, backgroundColor: '#E8F3EE', color: '#2D7A4F', opacity: saving ? 0.6 : 1,
+                    }}
+                  >
+                    ✓ Payé
+                  </button>
+                ) : null}
+              </div>
+            </div>
           )}
           {groupSession.description && (
             <p style={{ fontSize: 14, color: '#1A1A18', margin: '8px 0 0' }}>{groupSession.description}</p>
