@@ -24,7 +24,7 @@ interface GroupPageData {
 export default function PrivateGroupLinkPage() {
   const params = useParams<{ token: string }>()
   const router = useRouter()
-  const { firebaseUser, loading: authLoading } = useAuth()
+  const { firebaseUser, user, loading: authLoading } = useAuth()
   const [data, setData] = useState<GroupPageData | null>(null)
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
@@ -73,6 +73,7 @@ export default function PrivateGroupLinkPage() {
   }
 
   const canBook = !!firebaseUser && data.isMember
+  const isStaff = !!user?.roles?.some(r => r === 'coach' || r === 'admin')
 
   return (
     <>
@@ -87,7 +88,7 @@ export default function PrivateGroupLinkPage() {
             <p style={{ fontSize: 13, color: '#7A7570', margin: '4px 0 0' }}>
               {canBook
                 ? 'Tu fais partie du groupe : ses séances apparaissent aussi dans ton planning. Choisis une séance pour t\'inscrire.'
-                : 'Séances réservées aux membres du groupe, prises en charge par la société.'}
+                : 'Séances réservées aux membres du groupe.'}
             </p>
           </div>
         </div>
@@ -110,11 +111,20 @@ export default function PrivateGroupLinkPage() {
           </div>
         )}
 
-        {firebaseUser && !data.hasClientProfile && (
-          <div style={{ padding: '10px 12px', borderRadius: 8, background: '#FFF4E5', color: '#B26A00', fontSize: 13 }}>
-            Ton compte n&apos;est pas encore lié à une fiche client, tu ne peux pas encore rejoindre le groupe. Contacte ton coach.
+        {/* Compte connecté sans fiche client : soit un coach/admin qui consulte le lien (cas typique
+            en interne), soit un compte client dont le profil n'a pas été finalisé. */}
+        {firebaseUser && !data.hasClientProfile && (isStaff ? (
+          <div style={{ padding: '10px 12px', borderRadius: 8, background: '#F0EDE8', color: '#7A7570', fontSize: 13 }}>
+            Tu es connecté avec un compte coach : voici ce que voit un participant. Pour tester l&apos;inscription, ouvre le lien en navigation privée.
           </div>
-        )}
+        ) : (
+          <button
+            onClick={() => router.push(`/complete-profile?redirect=${redirect}` as never)}
+            style={{ height: 44, borderRadius: 10, border: 'none', cursor: 'pointer', background: '#1A1A18', color: '#fff', fontSize: 14, fontWeight: 600 }}
+          >
+            Finaliser mon profil pour m&apos;inscrire
+          </button>
+        ))}
 
         <p style={{ fontSize: 11, fontWeight: 600, color: '#A09890', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '6px 0 0' }}>
           Prochaines séances

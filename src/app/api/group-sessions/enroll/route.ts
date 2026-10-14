@@ -103,7 +103,7 @@ export async function POST(req: NextRequest) {
               amountPaid: 0,
               paymentStatus: 'offered',
               enrolledAt: Timestamp.now(),
-              offeredReason: `Pris en charge par ${privateGroupName ?? 'la société'}`,
+              offeredReason: `Groupe privé ${privateGroupName ?? ''}`.trim(),
             }
           : {
               clientId,
@@ -237,7 +237,7 @@ export async function POST(req: NextRequest) {
       notifyClient: isImmediatelyConfirmed,
       amountPaid: (enrollment.amountPaid as number) ?? 0,
       paymentLabel: privateGroupName && enrollment.paymentStatus === 'offered'
-        ? `Pris en charge par ${privateGroupName}`
+        ? 'Gratuit'
         : paymentLabelFor(enrollment.paymentStatus as string),
       baseUrl: req.nextUrl.origin,
     })

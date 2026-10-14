@@ -395,11 +395,9 @@ export default function ClientGroupSessionDetailPage() {
               {isPrivate ? (
                 <>
                   <p style={{ fontSize: 16, fontWeight: 600, margin: '2px 0 0', fontFamily: 'monospace', color: groupSession.price === 0 ? '#2D7A4F' : '#1A1A18' }}>
-                    {groupSession.price.toFixed(2)} CHF
+                    {groupSession.price === 0 ? 'Gratuit' : `${groupSession.price.toFixed(2)} CHF`}
                   </p>
-                  <p style={{ fontSize: 11, color: '#2D7A4F', margin: '2px 0 0' }}>
-                    {groupSession.price === 0 ? 'Pris en charge par' : 'Le reste est pris en charge par'} {groupSession.privateGroupName}
-                  </p>
+                  <p style={{ fontSize: 11, color: '#7A7570', margin: '2px 0 0' }}>{groupSession.privateGroupName}</p>
                 </>
               ) : (() => {
                 const subscriptionCoveredNow = subscriptionCovers && subscriptionQuotaOk
