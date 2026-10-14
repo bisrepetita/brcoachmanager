@@ -95,7 +95,10 @@ function MyEnrollmentsContent() {
   const myEnrollments = useMemo((): MyEnrollmentItem[] => {
     if (!profile) return []
     const fromPublic = items.flatMap(gs => {
-      const enrollment = gs.enrollments.find(e => e.clientId === profile.clientId)
+      // Après une désinscription puis réinscription, la séance contient plusieurs inscriptions du
+      // client : on affiche l'active, à défaut la plus récente (annulée).
+      const mine = gs.enrollments.filter(e => e.clientId === profile.clientId)
+      const enrollment = mine.find(e => e.status !== 'cancelled') ?? mine[mine.length - 1]
       if (!enrollment || !gs.startAt?.toDate) return []
       return [{
         id: gs.id, title: gs.title, startAt: gs.startAt.toDate(), status: enrollment.status,

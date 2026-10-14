@@ -134,6 +134,13 @@ export default function ClientGroupSessionDetailPage() {
     return () => { cancelled = true }
   }, [profile, groupSession, firebaseUser?.uid])
 
+  // Change à chaque inscription/désinscription du client sur cette séance : force la relecture du
+  // solde du pack (sinon le bouton garde l'ancien nombre de séances restantes).
+  const myEnrollmentKey = (groupSession?.enrollments ?? [])
+    .filter(e => profile && e.clientId === profile.clientId)
+    .map(e => e.status)
+    .join(',')
+
   useEffect(() => {
     const serviceId = groupSession?.serviceId
     if (!profile || !firebaseUser?.uid || !serviceId || groupSession?.privateGroupId || (subscriptionCovers && subscriptionQuotaOk)) {
@@ -146,7 +153,7 @@ export default function ClientGroupSessionDetailPage() {
       })
       .catch(() => {})
     return () => { cancelled = true }
-  }, [profile, firebaseUser?.uid, groupSession?.serviceId, groupSession?.privateGroupId, subscriptionCovers, subscriptionQuotaOk])
+  }, [profile, firebaseUser?.uid, groupSession?.serviceId, groupSession?.privateGroupId, subscriptionCovers, subscriptionQuotaOk, myEnrollmentKey])
 
   // Gratuité "1ère réservation" (à défaut d'un abonnement qui couvre déjà la séance) puis, à
   // défaut, rabais client auto-attribué — un code promo ne sera proposé que si rien d'autre ne
