@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { collection, query, where, onSnapshot } from 'firebase/firestore'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { Ticket, Repeat, ChevronRight } from 'lucide-react'
+import { Ticket, Repeat, ChevronRight, Layers } from 'lucide-react'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { Badge } from '@/components/ui/badge'
 import { db } from '@/lib/firebase/firestore'
@@ -139,6 +139,17 @@ function MyEnrollmentsContent() {
               <ChevronRight size={16} color="#A09890" style={{ flexShrink: 0 }} />
             </button>
           )}
+          <button
+            onClick={() => router.push('/packs' as never)}
+            style={{
+              width: '100%', textAlign: 'left', background: '#fff', borderRadius: 12, padding: 14, marginTop: 8,
+              border: '1px dashed #C8C4BC', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10,
+            }}
+          >
+            <Layers size={16} color="#7A7570" style={{ flexShrink: 0 }} />
+            <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: '#1A1A18' }}>Packs de séances</span>
+            <ChevronRight size={16} color="#A09890" style={{ flexShrink: 0 }} />
+          </button>
         </div>
       )}
 

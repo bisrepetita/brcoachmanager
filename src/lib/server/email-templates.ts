@@ -76,6 +76,28 @@ export function classPassAccessInfoEmail(opts: {
   return { subject: `Comment nous trouver — ${opts.sessionTitle}`, html: layout(body) }
 }
 
+export function packConfirmationEmail(opts: {
+  clientFirstName: string
+  packName: string
+  sessionCount: number
+  price: number
+  expiresDateStr: string
+  planningUrl: string
+}): { subject: string; html: string } {
+  const body = `
+    <p style="font-size:16px;font-weight:700;color:#1A1A18;margin:0 0 4px;">Pack activé ✓</p>
+    <p style="font-size:14px;color:#7A7570;margin:0 0 20px;">Salut ${escapeHtml(opts.clientFirstName)}, ton pack est prêt à être utilisé !</p>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
+      ${infoRow('Pack', opts.packName)}
+      ${infoRow('Séances', String(opts.sessionCount))}
+      ${infoRow('Payé', `${opts.price.toFixed(2)} CHF`, '#2D7A4F')}
+      ${infoRow('Valable jusqu\'au', opts.expiresDateStr)}
+    </table>
+    <a href="${opts.planningUrl}" style="display:inline-block;font-size:13px;font-weight:600;color:#1A1A18;text-decoration:underline;">Réserver une séance →</a>
+  `
+  return { subject: `Pack activé — ${opts.packName}`, html: layout(body) }
+}
+
 export function subscriptionConfirmationEmail(opts: {
   clientFirstName: string
   planName: string
