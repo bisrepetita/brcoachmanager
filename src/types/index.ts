@@ -232,6 +232,11 @@ export interface GroupSessionEnrollment {
   originalAmountDue?: number
   offeredReason?: string
   subscriptionId?: string
+  // Inscription réglée avec 1 crédit d'un pack (paymentStatus 'credits', amountDue 0) :
+  // `packCreditValue` = prix du pack / nombre de séances, figé au décompte — c'est ce montant que
+  // les statistiques comptent dans le CA (reconnaissance du revenu à l'usage).
+  clientPackId?: string
+  packCreditValue?: number
   // Renseigné si cette inscription vient de l'import automatique des mails de réservation
   // ClassPass (voir src/lib/server/classpass-import.ts) — sert à afficher le badge "ClassPass".
   classPassBookingId?: string
@@ -382,6 +387,61 @@ export interface SubscriptionConsumption {
   groupSessionId: string
   sessionStartAt: Timestamp
   consumedAt: Timestamp
+}
+
+// ─── Packs de séances ─────────────────────────────────────────────────────────
+// Carnet de N séances à utiliser librement sur les séances collectives du Planning (services
+// couverts), valable un temps limité. Acheté en ligne (Stripe) ou attribué à la main par l'admin.
+// CA reconnu à l'usage (packCreditValue par séance) puis, à l'expiration, les crédits restants.
+
+export interface PackPlan {
+  id: string
+  name: string
+  description?: string
+  sessionCount: number
+  price: number
+  validityValue: number
+  validityUnit: SubscriptionDurationUnit
+  serviceIds: string[]
+  isPublic: boolean
+  active: boolean
+  createdAt: Timestamp
+  updatedAt: Timestamp
+}
+
+export interface ClientPackSnapshot {
+  name: string
+  sessionCount: number
+  price: number
+  validityValue: number
+  validityUnit: SubscriptionDurationUnit
+  serviceIds: string[]
+}
+
+// 'pending_payment' : achat en ligne en attente du webhook Stripe. 'exhausted' / 'expired' ne sont
+// pas forcément écrits : un pack actif est "utilisable" si creditsRemaining > 0 et expiresAt > now.
+export type ClientPackStatus = 'pending_payment' | 'active' | 'cancelled'
+
+export interface ClientPack {
+  id: string
+  clientId: string
+  uid?: string
+  packPlanId: string
+  packSnapshot: ClientPackSnapshot
+  creditsTotal: number
+  creditsRemaining: number
+  purchasedAt: Timestamp
+  expiresAt: Timestamp
+  status: ClientPackStatus
+  paymentStatus: PaymentStatus
+  amountDue: number
+  amountPaid: number
+  source: 'manual' | 'self_purchase'
+  stripeCheckoutUrl?: string
+  stripeSessionId?: string
+  createdBy: string
+  createdAt: Timestamp
+  updatedAt: Timestamp
 }
 
 // ─── Vente hors séance ────────────────────────────────────────────────────────

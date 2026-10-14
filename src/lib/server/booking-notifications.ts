@@ -1,6 +1,6 @@
 import type { Firestore, Timestamp } from 'firebase-admin/firestore'
 import { sendEmail } from './email'
-import { groupSessionConfirmationEmail, coachNewEnrollmentEmail, subscriptionConfirmationEmail, classPassAccessInfoEmail } from './email-templates'
+import { groupSessionConfirmationEmail, coachNewEnrollmentEmail, subscriptionConfirmationEmail, classPassAccessInfoEmail, packConfirmationEmail } from './email-templates'
 import { resolveAccessInstructions } from './building-admin'
 
 function formatDateTime(d: Date): string {
@@ -105,6 +105,29 @@ export async function notifyClassPassAccessInfo(adminDb: Firestore, opts: {
     await sendEmail({ to: clientEmail, subject, html })
   } catch (err) {
     console.error('[booking-notifications] notifyClassPassAccessInfo erreur non bloquante:', err)
+  }
+}
+
+export async function notifyPackPurchase(adminDb: Firestore, opts: { clientPackId: string; baseUrl: string }): Promise<void> {
+  try {
+    const packSnap = await adminDb.collection('clientPacks').doc(opts.clientPackId).get()
+    if (!packSnap.exists) return
+    const pack = packSnap.data()!
+    const clientSnap = await adminDb.collection('clients').doc(pack['clientId'] as string).get()
+    const clientEmail = clientSnap.data()?.['email'] as string | undefined
+    if (!clientEmail) return
+    const snapshot = pack['packSnapshot'] as { name: string; sessionCount: number }
+    const expiresDateStr = (pack['expiresAt'] as Timestamp).toDate()
+      .toLocaleDateString('fr-CH', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Zurich' })
+    const { subject, html } = packConfirmationEmail({
+      clientFirstName: (clientSnap.data()?.['firstName'] as string) ?? '',
+      packName: snapshot.name, sessionCount: snapshot.sessionCount,
+      price: (pack['amountPaid'] as number) ?? 0, expiresDateStr,
+      planningUrl: `${opts.baseUrl}/group-sessions`,
+    })
+    await sendEmail({ to: clientEmail, subject, html })
+  } catch (err) {
+    console.error('[booking-notifications] notifyPackPurchase erreur non bloquante:', err)
   }
 }
 

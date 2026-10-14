@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation'
 import { useAuth } from '@/lib/hooks/useAuth'
 import {
   Users, MapPin, Briefcase, UsersRound, BarChart2,
-  Settings, ScrollText, LogOut, User, X, ChevronRight, Users2, Percent, Repeat, Building2, FileSignature, Building,
+  Settings, ScrollText, LogOut, User, X, ChevronRight, Users2, Percent, Repeat, Building2, FileSignature, Building, Ticket,
 } from 'lucide-react'
 
 interface BurgerMenuCtx {
@@ -28,6 +28,7 @@ const ADMIN_LINKS = [
   { href: '/admin/services',             label: 'Services',             description: 'Types de séances et tarifs',  icon: Briefcase },
   { href: '/admin/discounts',            label: 'Remises',              description: 'Codes promo et rabais clients', icon: Percent },
   { href: '/admin/subscriptions',        label: 'Abonnements',          description: 'Plans et attribution aux clients', icon: Repeat },
+  { href: '/admin/packs',                label: 'Packs de séances',     description: 'Carnets de séances à vendre',  icon: Ticket },
   { href: '/admin/groups',               label: 'Groupes clients',      description: 'Groupes pour les séances',    icon: UsersRound },
   { href: '/admin/conventions',          label: 'Conventions',          description: 'Convention de groupe à faire signer', icon: FileSignature },
   { href: '/admin/private-groups',       label: 'Groupes privés',       description: 'Séances réservées à une société', icon: Building },

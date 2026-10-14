@@ -5,7 +5,7 @@ import { useRouter, useParams } from 'next/navigation'
 import { doc, getDoc, collection, query, where, getDocs, orderBy } from 'firebase/firestore'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { ChevronLeft, ChevronRight, Phone, Mail, MapPin, CreditCard, Repeat, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Phone, Mail, MapPin, CreditCard, Repeat, X, Layers } from 'lucide-react'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { db } from '@/lib/firebase/firestore'
 import { useCollection } from '@/lib/hooks/useCollection'
@@ -14,7 +14,8 @@ import {
   findActiveSubscriptionForClient, activateClientSubscriptionManually, cancelClientSubscription,
 } from '@/lib/services/subscription.service'
 import { SUBSCRIPTION_DURATION_UNIT_LABELS, DAY_OF_WEEK_LABELS } from '@/types'
-import type { Client, Session, GroupSession, Service, SubscriptionPlan, ClientSubscription, PaymentStatus } from '@/types'
+import type { Client, Session, GroupSession, Service, SubscriptionPlan, ClientSubscription, PaymentStatus, PackPlan, ClientPack } from '@/types'
+import { findClientPacks, assignPackManually, markPackPaid, cancelClientPack, packStateLabel } from '@/lib/services/pack.service'
 
 const PAYMENT_STATUS_LABELS: Record<string, string> = {
   payment_to_request: 'À demander',
@@ -65,6 +66,37 @@ export default function ClientDetailPage() {
   const assignablePlans = useMemo(() => plans.filter(p => p.active), [plans])
 
   const { user } = useAuth()
+  const isAdmin = user?.roles?.includes('admin') ?? false
+
+  // Packs de séances du client (hors achats en ligne non payés)
+  const { data: packPlans } = useCollection<PackPlan>('packPlans', [])
+  const assignablePackPlans = useMemo(() => packPlans.filter(p => p.active), [packPlans])
+  const [packs, setPacks] = useState<ClientPack[]>([])
+  const [showPackSheet, setShowPackSheet] = useState(false)
+  const [packPlanId, setPackPlanId] = useState('')
+  const [packPaymentStatus, setPackPaymentStatus] = useState<PaymentStatus>('paid')
+  const [packSaving, setPackSaving] = useState(false)
+  const [packError, setPackError] = useState('')
+  const reloadPacks = useCallback(() => {
+    if (!clientId) return
+    findClientPacks(clientId).then(list => setPacks([...list].reverse())).catch(() => {})
+  }, [clientId])
+  useEffect(() => { reloadPacks() }, [reloadPacks])
+
+  async function handleAssignPack() {
+    const plan = assignablePackPlans.find(p => p.id === packPlanId)
+    if (!plan || !user) { setPackError('Choisis un pack.'); return }
+    setPackSaving(true); setPackError('')
+    try {
+      await assignPackManually({ clientId, plan, paymentStatus: packPaymentStatus, createdBy: user.id })
+      setShowPackSheet(false)
+      reloadPacks()
+    } catch (err) {
+      setPackError(err instanceof Error ? err.message : "Erreur lors de l'attribution.")
+    } finally {
+      setPackSaving(false)
+    }
+  }
   const [activeSubscription, setActiveSubscription] = useState<ClientSubscription | null>(null)
   const [subLoading, setSubLoading] = useState(true)
   const [showAssignSheet, setShowAssignSheet] = useState(false)
@@ -248,6 +280,62 @@ export default function ClientDetailPage() {
           )}
         </div>
 
+        {/* Packs de séances */}
+        <div style={{ background: '#fff', borderRadius: 12, padding: '12px 14px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <Layers size={14} color="#A09890" />
+            <p style={{ flex: 1, margin: 0, fontSize: 11, fontWeight: 600, color: '#A09890', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Packs de séances</p>
+            {isAdmin && (
+              <button
+                onClick={() => { setPackPlanId(assignablePackPlans[0]?.id ?? ''); setPackPaymentStatus('paid'); setPackError(''); setShowPackSheet(true) }}
+                disabled={assignablePackPlans.length === 0}
+                style={{ padding: '4px 10px', borderRadius: 8, border: 'none', cursor: assignablePackPlans.length === 0 ? 'default' : 'pointer', fontSize: 12, fontWeight: 500, background: '#1A1A18', color: '#fff', opacity: assignablePackPlans.length === 0 ? 0.4 : 1 }}>
+                Attribuer
+              </button>
+            )}
+          </div>
+          {packs.length === 0 ? (
+            <p style={{ margin: 0, fontSize: 13, color: '#A09890' }}>Aucun pack.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {packs.map(pack => {
+                const state = packStateLabel(pack)
+                const toCollect = pack.paymentStatus !== 'paid' && pack.paymentStatus !== 'offered'
+                return (
+                  <div key={pack.id} style={{ borderTop: '1px solid #F5F3F0', paddingTop: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#1A1A18' }}>{pack.packSnapshot.name}</p>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: state.color, background: `${state.color}18`, padding: '2px 6px', borderRadius: 5, flexShrink: 0 }}>{state.label}</span>
+                    </div>
+                    <p style={{ margin: '2px 0 0', fontSize: 12, color: '#7A7570' }}>
+                      {pack.creditsRemaining}/{pack.creditsTotal} séances restantes · expire le {format(pack.expiresAt.toDate(), 'd MMM yyyy', { locale: fr })}
+                    </p>
+                    <p style={{ margin: '2px 0 0', fontSize: 12, color: toCollect ? '#F59E0B' : '#A09890' }}>
+                      CHF {pack.amountDue.toFixed(2)} · {PAYMENT_STATUS_LABELS[pack.paymentStatus] ?? pack.paymentStatus}
+                      {' · '}{pack.source === 'self_purchase' ? 'acheté en ligne' : 'attribué'} le {format(pack.purchasedAt.toDate(), 'd MMM yyyy', { locale: fr })}
+                    </p>
+                    {isAdmin && pack.status === 'active' && (
+                      <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                        {toCollect && (
+                          <button onClick={() => markPackPaid(pack).then(reloadPacks)}
+                            style={{ padding: '4px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, background: '#E8F3EE', color: '#2D7A4F' }}>
+                            ✓ Payé
+                          </button>
+                        )}
+                        <button
+                          onClick={() => { if (confirm('Annuler ce pack ? Ses séances restantes ne seront plus utilisables.')) cancelClientPack(pack.id).then(reloadPacks) }}
+                          style={{ padding: '4px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 500, background: '#FDECEA', color: '#C0392B' }}>
+                          Annuler le pack
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
         {/* KPIs paiement */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
           {[
@@ -311,6 +399,47 @@ export default function ClientDetailPage() {
           })}
         </div>
       </div>
+
+      {showPackSheet && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+          <div onClick={() => setShowPackSheet(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }} />
+          <div style={{ position: 'relative', background: '#fff', borderRadius: '16px 16px 0 0', padding: '20px 16px 32px', maxHeight: '85dvh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <p style={{ fontSize: 16, fontWeight: 700, color: '#1A1A18', margin: 0 }}>Attribuer un pack</p>
+              <button onClick={() => setShowPackSheet(false)} style={{ padding: 4, background: 'none', border: 'none', cursor: 'pointer', color: '#7A7570' }}><X size={20} /></button>
+            </div>
+
+            <p style={{ fontSize: 12, fontWeight: 600, color: '#A09890', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 8px' }}>Pack</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
+              {assignablePackPlans.map(plan => (
+                <button key={plan.id} onClick={() => setPackPlanId(plan.id)}
+                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2, padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${packPlanId === plan.id ? '#1A1A18' : '#E5E1DA'}`, background: packPlanId === plan.id ? '#F5F3F0' : '#fff', cursor: 'pointer', textAlign: 'left' }}>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: '#1A1A18' }}>{plan.name}</span>
+                  <span style={{ fontSize: 12, color: '#7A7570' }}>
+                    CHF {plan.price.toFixed(2)} · {plan.sessionCount} séances · valable {plan.validityValue} {SUBSCRIPTION_DURATION_UNIT_LABELS[plan.validityUnit]}{plan.isPublic ? '' : ' · caché'}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            <p style={{ fontSize: 12, fontWeight: 600, color: '#A09890', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 8px' }}>Statut du paiement</p>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
+              {(['paid', 'payment_to_request', 'offered'] as PaymentStatus[]).map(status => (
+                <button key={status} onClick={() => setPackPaymentStatus(status)}
+                  style={{ padding: '6px 12px', borderRadius: 20, border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 600, background: packPaymentStatus === status ? '#1A1A18' : '#F0EDE8', color: packPaymentStatus === status ? '#fff' : '#1A1A18' }}>
+                  {PAYMENT_STATUS_LABELS[status]}
+                </button>
+              ))}
+            </div>
+
+            {packError && <p style={{ fontSize: 13, color: '#C0392B', margin: '0 0 12px' }}>{packError}</p>}
+            <button onClick={handleAssignPack} disabled={packSaving}
+              style={{ width: '100%', height: 44, borderRadius: 10, border: 'none', cursor: 'pointer', background: '#1A1A18', color: '#fff', fontSize: 14, fontWeight: 600, opacity: packSaving ? 0.6 : 1 }}>
+              {packSaving ? 'Attribution…' : 'Attribuer le pack'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {showAssignSheet && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>

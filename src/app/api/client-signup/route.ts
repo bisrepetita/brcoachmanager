@@ -86,6 +86,21 @@ export async function POST(req: NextRequest) {
       })
     }
 
+    // Fiche existante liée à un nouveau compte : les packs/abonnements attribués à la main avant la
+    // création du compte n'ont pas d'uid — sans lui, les règles Firestore empêchent le client de
+    // les voir (lecture filtrée sur uid). On le renseigne maintenant.
+    if (linked) {
+      const [packsSnap, subsSnap] = await Promise.all([
+        adminDb.collection('clientPacks').where('clientId', '==', clientId).get(),
+        adminDb.collection('clientSubscriptions').where('clientId', '==', clientId).get(),
+      ])
+      const batch = adminDb.batch()
+      for (const d of [...packsSnap.docs, ...subsSnap.docs]) {
+        if (!d.data()['uid']) batch.update(d.ref, { uid })
+      }
+      await batch.commit()
+    }
+
     await adminDb.collection('users').doc(uid).set({
       firstName,
       lastName,

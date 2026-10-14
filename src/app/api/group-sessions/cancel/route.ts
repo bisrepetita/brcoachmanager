@@ -3,6 +3,7 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { getAdminDb, getAdminAuth } from '@/lib/firebase/admin'
 import { findConsumptionRefsInTransaction, removeConsumptionsInTransaction } from '@/lib/server/subscription-admin'
 import { enrollmentsUpdate } from '@/lib/server/group-session-enrollments'
+import { preparePackCreditRefundInTransaction } from '@/lib/server/pack-admin'
 
 // Type "loose" côté serveur : le type partagé GroupSessionEnrollment (src/types) pointe sur le
 // Timestamp du SDK client, incompatible avec firebase-admin/firestore côté API route.
@@ -63,15 +64,21 @@ export async function POST(req: NextRequest) {
             tx, adminDb.collection('clientSubscriptions').doc(entry.subscriptionId), groupSessionId
           )
         : []
+      // Pack : le crédit est rendu (annulation dans les délais, comme le quota d'abonnement).
+      const refundPackCredit = await preparePackCreditRefundInTransaction(tx, adminDb, entry)
 
       const updated = [...enrollments]
-      updated[idx] = { ...entry, status: 'cancelled', cancelledAt: Timestamp.now() }
+      updated[idx] = {
+        ...entry, status: 'cancelled', cancelledAt: Timestamp.now(),
+        ...(refundPackCredit ? { packCreditRefunded: true } : {}),
+      }
 
       tx.update(groupSessionRef, {
         ...enrollmentsUpdate(updated),
         updatedAt: FieldValue.serverTimestamp(),
       })
       removeConsumptionsInTransaction(tx, consumptionRefs)
+      refundPackCredit?.()
 
       return entry
     })

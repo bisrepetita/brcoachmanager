@@ -9,13 +9,20 @@ const REDIRECT_DELAY_MS = 2500
 function destinationFor(type: string | null, id: string | null): string | null {
   if (type === 'groupSession' && id) return `/group-sessions/${id}`
   if (type === 'subscription') return '/subscriptions'
+  if (type === 'pack') return '/packs'
   return null
 }
 
 function PaiementConfirmeContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const destination = destinationFor(searchParams.get('type'), searchParams.get('id'))
+  const type = searchParams.get('type')
+  const destination = destinationFor(type, searchParams.get('id'))
+  const message = type === 'pack'
+    ? 'Ton pack a bien été payé : tes séances seront disponibles dans quelques instants.'
+    : type === 'subscription'
+      ? 'Ton abonnement a bien été payé. À très vite chez Bis Repetita !'
+      : 'Ta séance a bien été payée. À très vite chez Bis Repetita !'
 
   useEffect(() => {
     if (!destination) return
@@ -35,7 +42,7 @@ function PaiementConfirmeContent() {
       <div>
         <p style={{ fontSize: 18, fontWeight: 700, color: '#1A1A18', margin: '0 0 6px' }}>Paiement confirmé</p>
         <p style={{ fontSize: 14, color: '#7A7570', margin: 0, maxWidth: 280 }}>
-          Ta séance a bien été payée. À très vite chez Bis Repetita !
+          {message}
         </p>
       </div>
     </div>

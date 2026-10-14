@@ -52,6 +52,12 @@ export function adminAddClientToGroupSession(
   return callApi('/api/group-sessions/admin-add-client', { groupSessionId, ...opts })
 }
 
+/** Annule une séance collective entière (coach assigné ou admin) — rend aux inscrits leurs crédits
+ * de pack et quotas d'abonnement. */
+export function cancelGroupSession(groupSessionId: string): Promise<{ ok: true; packCreditsRefunded: number }> {
+  return callApi('/api/group-sessions/cancel-session', { groupSessionId })
+}
+
 export function requestGroupSessionPaymentLink(groupSessionId: string): Promise<{ checkoutUrl: string }> {
   return callApi('/api/group-sessions/request-payment-link', { groupSessionId })
 }
