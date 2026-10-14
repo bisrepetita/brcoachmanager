@@ -118,6 +118,25 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
+    // ─── packPlans (catalogue des packs de séances) ─────────────────────────
+    // Même logique que subscriptionPlans : consultable sans connexion pour les packs publics et
+    // actifs (page /packs), la requête côté client filtrant explicitement sur ces deux champs.
+
+    match /packPlans/{planId} {
+      allow read: if isAuth() || (resource.data.isPublic == true && resource.data.active == true);
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ─── clientPacks (packs achetés/attribués à un client) ──────────────────
+    // Lecture client par comparaison directe sur resource.data.uid (requête filtrée where uid ==),
+    // cf. clientSubscriptions. Achat et décompte des crédits côté serveur (Admin SDK) uniquement ;
+    // l'attribution manuelle et les corrections sont réservées à l'admin.
+
+    match /clientPacks/{packId} {
+      allow read: if isCoach() || (isClient() && resource.data.uid == request.auth.uid);
+      allow create, update, delete: if isAdmin();
+    }
+
     // ─── discounts (codes promo & rabais clients) ───────────────────────────
 
     match /discounts/{discountId} {
