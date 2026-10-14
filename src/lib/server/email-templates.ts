@@ -51,6 +51,31 @@ export function groupSessionConfirmationEmail(opts: {
   return { subject: `Inscription confirmée — ${opts.sessionTitle}`, html: layout(body) }
 }
 
+// Pour les membres ClassPass : ils ont déjà leur confirmation (et le paiement) côté ClassPass, ce
+// mail ne porte que les infos pratiques d'accès au studio, que ClassPass ne connaît pas.
+export function classPassAccessInfoEmail(opts: {
+  clientFirstName: string
+  sessionTitle: string
+  dateStr: string
+  accessInstructions: string
+  groupSessionUrl: string
+}): { subject: string; html: string } {
+  const body = `
+    <p style="font-size:16px;font-weight:700;color:#1A1A18;margin:0 0 4px;">Infos pratiques pour ta séance</p>
+    <p style="font-size:14px;color:#7A7570;margin:0 0 20px;">Salut ${escapeHtml(opts.clientFirstName)}, merci pour ta réservation via ClassPass ! Voici comment nous trouver.</p>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
+      ${infoRow('Séance', opts.sessionTitle)}
+      ${infoRow('Date', opts.dateStr)}
+    </table>
+    <div style="background:#F5F3F0;border-radius:8px;padding:14px;">
+      <p style="font-size:13px;font-weight:600;color:#1A1A18;margin:0 0 6px;">Comment nous trouver</p>
+      <p style="font-size:13px;color:#1A1A18;margin:0;white-space:pre-wrap;line-height:1.5;">${escapeHtml(opts.accessInstructions)}</p>
+      <a href="${opts.groupSessionUrl}#acces" style="display:inline-block;font-size:13px;font-weight:600;color:#1A1A18;text-decoration:underline;margin-top:10px;">Voir le plan d'accès et les photos →</a>
+    </div>
+  `
+  return { subject: `Comment nous trouver — ${opts.sessionTitle}`, html: layout(body) }
+}
+
 export function subscriptionConfirmationEmail(opts: {
   clientFirstName: string
   planName: string
