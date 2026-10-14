@@ -4,6 +4,7 @@ import Stripe from 'stripe'
 import { getAdminDb } from '@/lib/firebase/admin'
 import { activateSubscriptionFromWebhookInTransaction } from '@/lib/server/subscription-admin'
 import { notifyGroupSessionBooking, notifySubscriptionPurchase } from '@/lib/server/booking-notifications'
+import { enrollmentsUpdate } from '@/lib/server/group-session-enrollments'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2026-05-27.dahlia' as any })
@@ -39,27 +40,59 @@ export async function POST(req: NextRequest) {
       const amountPaid = (checkoutSession.amount_total ?? 0) / 100
       const groupSessionRef = adminDb.collection('groupSessions').doc(groupSessionId)
 
-      await adminDb.runTransaction(async (tx) => {
+      // Une seule inscription est concernée : celle liée à CE paiement Stripe (stripeSessionId),
+      // à défaut l'inscription en attente de paiement du client. Avant, toutes les inscriptions du
+      // client sur la séance étaient confirmées — y compris une inscription annulée, qui se
+      // retrouvait réactivée (désinscription puis réinscription, ou paiement d'un ancien lien).
+      const outcome = await adminDb.runTransaction(async (tx) => {
         const snap = await tx.get(groupSessionRef)
-        if (!snap.exists) return
+        if (!snap.exists) return 'not_found' as const
         const data = snap.data()!
         const enrollments = (data['enrollments'] as Record<string, unknown>[] | undefined) ?? []
-        const updated = enrollments.map((e) =>
-          e['clientId'] === clientId
-            ? { ...e, status: 'confirmed', paymentStatus: 'paid', amountPaid, paidAt: new Date(), stripeSessionId: checkoutSession.id }
-            : e
-        )
-        tx.update(groupSessionRef, { enrollments: updated, updatedAt: FieldValue.serverTimestamp() })
+        const mine = (e: Record<string, unknown>) => e['clientId'] === clientId
+        let idx = enrollments.findIndex((e) => e['stripeSessionId'] === checkoutSession.id)
+        if (idx === -1) idx = enrollments.findIndex((e) => mine(e) && e['status'] === 'pending_payment')
+        if (idx === -1) idx = enrollments.findIndex((e) => mine(e) && e['status'] !== 'cancelled')
+        if (idx === -1) idx = enrollments.findLastIndex((e) => mine(e))
+        if (idx === -1) return 'not_found' as const
+
+        const entry = enrollments[idx]!
+        // Événement Stripe rejoué (webhook renvoyé) : déjà traité, rien à refaire ni à renvoyer.
+        if (entry['paymentStatus'] === 'paid' && entry['stripeSessionId'] === checkoutSession.id) return 'already_paid' as const
+
+        const isCancelled = entry['status'] === 'cancelled'
+        const updated = [...enrollments]
+        updated[idx] = {
+          ...entry,
+          // Inscription annulée entre-temps : on enregistre le paiement reçu sans la réactiver
+          // (la place a pu être reprise) — à rembourser ou réinscrire à la main.
+          status: isCancelled ? 'cancelled' : 'confirmed',
+          paymentStatus: 'paid', amountPaid, paidAt: new Date(), stripeSessionId: checkoutSession.id,
+        }
+        tx.update(groupSessionRef, { ...enrollmentsUpdate(updated), updatedAt: FieldValue.serverTimestamp() })
+        return isCancelled ? 'paid_after_cancel' as const : 'confirmed' as const
       })
+
+      if (outcome === 'paid_after_cancel') {
+        await adminDb.collection('activityLogs').add({
+          userId: 'stripe-webhook', userFirstName: 'Stripe', userLastName: '',
+          action: 'group_session_cancelled_after_payment',
+          description: `Paiement Stripe de ${amountPaid.toFixed(2)} CHF reçu pour une inscription déjà annulée — à rembourser ou réinscrire manuellement`,
+          sessionId: groupSessionId, clientId,
+          createdAt: FieldValue.serverTimestamp(),
+        })
+      }
 
       // Confirmation client best-effort (le coach a déjà été notifié à l'inscription) — le
       // paiement vient d'arriver, la réservation n'était encore que 'pending_payment'.
-      await notifyGroupSessionBooking(adminDb, {
-        groupSessionId, clientId,
-        notifyCoaches: false, notifyClient: true,
-        amountPaid, paymentLabel: 'Payé',
-        baseUrl: req.nextUrl.origin,
-      })
+      if (outcome === 'confirmed') {
+        await notifyGroupSessionBooking(adminDb, {
+          groupSessionId, clientId,
+          notifyCoaches: false, notifyClient: true,
+          amountPaid, paymentLabel: 'Payé',
+          baseUrl: req.nextUrl.origin,
+        })
+      }
 
       return NextResponse.json({ received: true })
     }

@@ -19,7 +19,7 @@ import {
 } from '@/lib/services/discount.service'
 import { format as formatDate } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { GROUP_SESSION_LEVEL_LABELS, type Service, type Location, type User, type Client, type ClientGroup, type ClientPayment, type Discount, type GroupSessionLevel } from '@/types'
+import { GROUP_SESSION_LEVEL_LABELS, type Service, type Location, type User, type Client, type ClientGroup, type ClientPayment, type Discount, type GroupSessionLevel, type PrivateGroup } from '@/types'
 
 // ─── Styles partagés ─────────────────────────────────────────────────────────
 
@@ -159,6 +159,9 @@ function NewSessionForm() {
   const [description, setDescription] = useState('')
   const [maxParticipants, setMaxParticipants] = useState(8)
   const [price, setPrice] = useState(20)
+  // Séance collective réservée aux membres d'un groupe privé ('' = séance publique classique)
+  const [privateGroupId, setPrivateGroupId] = useState('')
+  const [sponsorAmount, setSponsorAmount] = useState(0)
   const [level, setLevel] = useState<GroupSessionLevel | ''>('')
   const [serviceId, setServiceId] = useState('')
   const [locationId, setLocationId] = useState('')
@@ -193,6 +196,9 @@ function NewSessionForm() {
   const { data: allCoaches } = useCollection<User>('users', [where('roles', 'array-contains', 'coach'), orderBy('firstName')])
   const { data: clients } = useVisibleClients('firstName')
   const { data: groups } = useCollection<ClientGroup>('clientGroups', [orderBy('name')])
+  const { data: allPrivateGroups } = useCollection<PrivateGroup>('privateGroups', [orderBy('name')])
+  const privateGroups = useMemo(() => allPrivateGroups.filter(g => g.active), [allPrivateGroups])
+  const selectedPrivateGroup = useMemo(() => privateGroups.find(g => g.id === privateGroupId), [privateGroups, privateGroupId])
 
   const services = useMemo(() => allServices
     .filter(s => {
@@ -311,14 +317,22 @@ function NewSessionForm() {
       : !!(serviceId && locationId && coachIds.length > 0 && date && startTime &&
           (clientMode === 'group' ? selectedGroupId : selectedClientIds.length > 0))
 
-  // Séance publique : titre/prix hérités du service choisi (modifiables ensuite)
+  // Séance publique : titre/prix hérités du service choisi (modifiables ensuite) — pour une séance
+  // de groupe privé, le prix est la participation du groupe, pas le tarif du service.
   useEffect(() => {
     if (!isPublic || !serviceId) return
     const svc = services.find(s => s.id === serviceId)
     if (!svc) return
     setTitle(svc.name)
-    setPrice(svc.price)
-  }, [isPublic, serviceId, services])
+    if (!selectedPrivateGroup) setPrice(svc.price)
+  }, [isPublic, serviceId, services, selectedPrivateGroup])
+
+  // Groupe privé : participation et montant société repris des valeurs par défaut du groupe
+  useEffect(() => {
+    if (!selectedPrivateGroup) return
+    setPrice(selectedPrivateGroup.participantPrice)
+    setSponsorAmount(selectedPrivateGroup.sponsorAmountPerSession)
+  }, [selectedPrivateGroup])
 
   // Aperçu du nombre de séances générées (null = sans fin)
   const occurrencePreview = useMemo(() => {
@@ -387,6 +401,9 @@ function NewSessionForm() {
 
       // ── Séance collective publique ───────────────────────────────────────────
       if (isPublic) {
+        const privateFields = selectedPrivateGroup
+          ? { privateGroupId: selectedPrivateGroup.id, privateGroupName: selectedPrivateGroup.name, sponsorAmount }
+          : {}
         const baseGroupData = {
           serviceId,
           title: title.trim(),
@@ -399,7 +416,8 @@ function NewSessionForm() {
           ...(level ? { level } : {}),
           startTime,
           status: 'planned' as const,
-          isPublic: true,
+          isPublic: !selectedPrivateGroup,
+          ...privateFields,
         }
 
         if (recurrence === 'none') {
@@ -409,13 +427,14 @@ function NewSessionForm() {
             startAt: Timestamp.fromDate(startDate),
             endAt: Timestamp.fromDate(endDate),
             enrollments: [],
+            ...(selectedPrivateGroup ? { sponsorPaymentStatus: 'to_invoice' } : {}),
             createdBy: user!.id,
           } as Record<string, unknown>)
 
           logActivity({
             userId: user!.id, userFirstName: user!.firstName, userLastName: user!.lastName,
             action: 'session_created',
-            description: `Séance collective "${title.trim()}" créée (${maxParticipants} places)`,
+            description: `Séance collective "${title.trim()}"${selectedPrivateGroup ? ` (groupe privé ${selectedPrivateGroup.name})` : ''} créée (${maxParticipants} places)`,
             sessionId: groupSessionId,
           })
 
@@ -443,7 +462,8 @@ function NewSessionForm() {
           maxParticipants,
           price,
           ...(level ? { level } : {}),
-          isPublic: true,
+          isPublic: !selectedPrivateGroup,
+          ...privateFields,
           createdBy: user!.id,
           rule: {
             frequency: recurrence,
@@ -475,6 +495,7 @@ function NewSessionForm() {
             startAt: Timestamp.fromDate(occDate),
             endAt: Timestamp.fromDate(addMinutes(occDate, duration)),
             enrollments: [],
+            ...(selectedPrivateGroup ? { sponsorPaymentStatus: 'to_invoice' } : {}),
             recurrenceId: recurrenceRef.id,
             createdBy: user!.id,
             createdAt: serverTimestamp(),
@@ -486,7 +507,7 @@ function NewSessionForm() {
         logActivity({
           userId: user!.id, userFirstName: user!.firstName, userLastName: user!.lastName,
           action: 'session_created',
-          description: `Séance collective "${title.trim()}" · récurrence (${occurrencesPublic.length} séances)`,
+          description: `Séance collective "${title.trim()}"${selectedPrivateGroup ? ` (groupe privé ${selectedPrivateGroup.name})` : ''} · récurrence (${occurrencesPublic.length} séances)`,
           sessionId: firstGroupSessionId!,
         })
         router.replace(`/manage-group-sessions/${firstGroupSessionId}` as never)
@@ -649,7 +670,7 @@ function NewSessionForm() {
       setError('Erreur lors de la création. Réessaie.')
       setSaving(false)
     }
-  }, [canSubmit, isTraining, isPublic, title, description, maxParticipants, price, selectedService, date, startTime, duration, selectedClientIds, selectedGroupId, clientMode, groups, coachIds, locationId, serviceId, isIndependent, recurrence, recurrenceEndType, recurrenceCount, router, user, finalClientIds, clientDiscounts, appliedPromoCode, clients])
+  }, [canSubmit, isTraining, isPublic, selectedPrivateGroup, sponsorAmount, title, description, maxParticipants, price, selectedService, date, startTime, duration, selectedClientIds, selectedGroupId, clientMode, groups, coachIds, locationId, serviceId, isIndependent, recurrence, recurrenceEndType, recurrenceCount, router, user, finalClientIds, clientDiscounts, appliedPromoCode, clients])
 
   const visibleCoaches = isAdmin ? coaches : coaches.filter(c => c.id === user?.id)
 
@@ -705,6 +726,27 @@ function NewSessionForm() {
             </div>
             <Toggle value={isPublic} onChange={setIsPublic} />
           </div>
+        )}
+
+        {/* Visibilité — séance collective : tout le monde, ou uniquement les membres d'un groupe privé */}
+        {!isTraining && isPublic && privateGroups.length > 0 && (
+          <Section title="Visible par">
+            <SelectItem
+              label="Tout le monde"
+              sub="Affichée dans le planning public"
+              selected={!privateGroupId}
+              onSelect={() => setPrivateGroupId('')}
+            />
+            {privateGroups.map(g => (
+              <SelectItem
+                key={g.id}
+                label={`Groupe privé · ${g.name}`}
+                sub={`Société ${g.sponsorAmountPerSession.toFixed(2)} CHF / séance · participation ${g.participantPrice.toFixed(2)} CHF`}
+                selected={privateGroupId === g.id}
+                onSelect={() => setPrivateGroupId(g.id)}
+              />
+            ))}
+          </Section>
         )}
 
         {/* Date & heure */}
@@ -816,13 +858,22 @@ function NewSessionForm() {
                 onChange={(e) => setMaxParticipants(Math.max(1, Number(e.target.value)))}
               />
             </Row>
-            <Row label="Prix par personne (CHF)">
+            <Row label={selectedPrivateGroup ? 'Participation par personne (CHF)' : 'Prix par personne (CHF)'}>
               <input
                 type="number" min={0} step={5} style={{ ...inputStyle, width: 90 }}
                 value={price}
                 onChange={(e) => setPrice(Math.max(0, Number(e.target.value)))}
               />
             </Row>
+            {selectedPrivateGroup && (
+              <Row label={`Facturé à ${selectedPrivateGroup.name} (CHF)`}>
+                <input
+                  type="number" min={0} step={5} style={{ ...inputStyle, width: 90 }}
+                  value={sponsorAmount}
+                  onChange={(e) => setSponsorAmount(Math.max(0, Number(e.target.value)))}
+                />
+              </Row>
+            )}
           </Section>
         )}
 

@@ -1,6 +1,6 @@
 import { getAuth } from 'firebase/auth'
 import { firebaseApp } from '@/lib/firebase/config'
-import type { GroupSessionEnrollment, PaymentStatus } from '@/types'
+import type { GroupSessionEnrollment, PaymentStatus, PrivateSessionView } from '@/types'
 
 async function callApi<T>(path: string, body: Record<string, unknown>): Promise<T> {
   const auth = getAuth(firebaseApp)
@@ -66,4 +66,14 @@ export function resolveGroupSessionParticipants(
   groupSessionId: string
 ): Promise<{ clients: Record<string, { firstName: string; lastName: string }> }> {
   return callApi('/api/group-sessions/resolve-participants', { groupSessionId })
+}
+
+/** Séances des groupes privés dont le client connecté est membre (planifiées et passées). Liste
+ * vide pour un visiteur anonyme ou en cas d'erreur — ne doit jamais bloquer le reste de la page. */
+export async function fetchMyPrivateGroupSessions(): Promise<PrivateSessionView[]> {
+  const token = await getAuth(firebaseApp).currentUser?.getIdToken()
+  if (!token) return []
+  const res = await fetch('/api/private-groups/my-sessions', { headers: { Authorization: `Bearer ${token}` } }).catch(() => null)
+  if (!res?.ok) return []
+  return ((await res.json()) as { items: PrivateSessionView[] }).items ?? []
 }

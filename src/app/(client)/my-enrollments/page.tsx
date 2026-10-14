@@ -12,9 +12,21 @@ import { db } from '@/lib/firebase/firestore'
 import { useAuth } from '@/lib/hooks/useAuth'
 import { useClientProfile } from '@/lib/hooks/useClientProfile'
 import { findActiveSubscriptionForClient } from '@/lib/services/subscription.service'
+import { fetchMyPrivateGroupSessions } from '@/lib/services/group-session.service'
 import { GROUP_SESSION_ENROLLMENT_STATUS_LABELS, DAY_OF_WEEK_LABELS } from '@/types'
-import type { GroupSession, GroupSessionEnrollmentStatus, ClientSubscription } from '@/types'
+import type { GroupSession, GroupSessionEnrollmentStatus, ClientSubscription, PrivateSessionView } from '@/types'
 import { AuthGuard } from '@/components/providers/AuthGuard'
+
+// Vue commune aux séances publiques (lecture Firestore) et aux séances de groupe privé (route API)
+interface MyEnrollmentItem {
+  id: string
+  title: string
+  startAt: Date
+  status: GroupSessionEnrollmentStatus
+  amountDue: number
+  originalAmountDue?: number
+  privateGroupName?: string
+}
 
 const BADGE_VARIANT: Record<GroupSessionEnrollmentStatus, 'payment_to_request' | 'paid' | 'cancelled'> = {
   pending_payment: 'payment_to_request',
@@ -35,6 +47,7 @@ function MyEnrollmentsContent() {
   const { firebaseUser } = useAuth()
   const { profile, loading: profileLoading } = useClientProfile()
   const [items, setItems] = useState<GroupSession[]>([])
+  const [privateItems, setPrivateItems] = useState<PrivateSessionView[]>([])
   const [loading, setLoading] = useState(true)
   const [activeSubscription, setActiveSubscription] = useState<ClientSubscription | null>(null)
   const [subLoading, setSubLoading] = useState(true)
@@ -60,13 +73,30 @@ function MyEnrollmentsContent() {
     }, () => setLoading(false))
   }, [])
 
-  const myEnrollments = useMemo(() => {
+  useEffect(() => {
+    if (!firebaseUser) return
+    let cancelled = false
+    fetchMyPrivateGroupSessions().then(list => { if (!cancelled) setPrivateItems(list) })
+    return () => { cancelled = true }
+  }, [firebaseUser])
+
+  const myEnrollments = useMemo((): MyEnrollmentItem[] => {
     if (!profile) return []
-    return items
-      .map(gs => ({ gs, enrollment: gs.enrollments.find(e => e.clientId === profile.clientId) }))
-      .filter((x): x is { gs: GroupSession; enrollment: NonNullable<typeof x.enrollment> } => !!x.enrollment)
-      .sort((a, b) => (b.gs.startAt?.toMillis?.() ?? 0) - (a.gs.startAt?.toMillis?.() ?? 0))
-  }, [items, profile])
+    const fromPublic = items.flatMap(gs => {
+      const enrollment = gs.enrollments.find(e => e.clientId === profile.clientId)
+      if (!enrollment || !gs.startAt?.toDate) return []
+      return [{
+        id: gs.id, title: gs.title, startAt: gs.startAt.toDate(), status: enrollment.status,
+        amountDue: enrollment.amountDue, originalAmountDue: enrollment.originalAmountDue,
+      }]
+    })
+    // Les séances privées n'exposent que l'inscription active (non annulée) du client
+    const fromPrivate = privateItems.flatMap(s => s.myEnrollment ? [{
+      id: s.id, title: s.title, startAt: new Date(s.startAt), status: s.myEnrollment.status,
+      amountDue: s.myEnrollment.amountDue, privateGroupName: s.privateGroupName,
+    }] : [])
+    return [...fromPublic, ...fromPrivate].sort((a, b) => b.startAt.getTime() - a.startAt.getTime())
+  }, [items, privateItems, profile])
 
   return (
     <>
@@ -126,12 +156,12 @@ function MyEnrollmentsContent() {
         </div>
       ) : (
         <div style={{ padding: '12px 16px 80px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {myEnrollments.map(({ gs, enrollment }) => {
-            const date = gs.startAt?.toDate ? format(gs.startAt.toDate(), 'd MMM yyyy · HH:mm', { locale: fr }) : '—'
+          {myEnrollments.map((enrollment) => {
+            const date = format(enrollment.startAt, 'd MMM yyyy · HH:mm', { locale: fr })
             return (
               <button
-                key={gs.id}
-                onClick={() => router.push(`/group-sessions/${gs.id}` as never)}
+                key={enrollment.id}
+                onClick={() => router.push(`/group-sessions/${enrollment.id}` as never)}
                 style={{
                   background: '#fff', borderRadius: 10, padding: '12px 14px',
                   border: '1px solid transparent', cursor: 'pointer', textAlign: 'left', width: '100%',
@@ -139,8 +169,10 @@ function MyEnrollmentsContent() {
               >
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontSize: 15, fontWeight: 600, color: '#1A1A18', margin: 0 }}>{gs.title}</p>
-                    <p style={{ fontSize: 12, color: '#A09890', margin: '2px 0 0' }}>{date}</p>
+                    <p style={{ fontSize: 15, fontWeight: 600, color: '#1A1A18', margin: 0 }}>{enrollment.title}</p>
+                    <p style={{ fontSize: 12, color: '#A09890', margin: '2px 0 0' }}>
+                      {date}{enrollment.privateGroupName ? ` · ${enrollment.privateGroupName}` : ''}
+                    </p>
                     <p style={{ fontSize: 12, color: '#7A7570', margin: '2px 0 0', fontFamily: 'monospace' }}>
                       {enrollment.originalAmountDue !== undefined && (
                         <span style={{ textDecoration: 'line-through', color: '#A09890', marginRight: 4 }}>

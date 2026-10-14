@@ -110,8 +110,11 @@ export default function ClientGroupSessionDetailPage() {
 
   // Couverture abonnement — vérifiée en premier (revenu déjà encaissé), avant la gratuité
   // "1ère réservation" et les remises (pas de cumul, même priorité que côté serveur).
+  // Séance de groupe privé : ni abonnement, ni remise, ni gratuité — seule la participation compte.
+  const isPrivate = !!groupSession?.privateGroupId
+
   useEffect(() => {
-    if (!profile || !groupSession || !firebaseUser?.uid) { setActiveSubscription(null); setSubscriptionCovers(false); setSubscriptionQuotaOk(false); return }
+    if (!profile || !groupSession || !firebaseUser?.uid || groupSession.privateGroupId) { setActiveSubscription(null); setSubscriptionCovers(false); setSubscriptionQuotaOk(false); return }
     const uid = firebaseUser.uid
     let cancelled = false
     findActiveSubscriptionForClient(profile.clientId, uid).then(async sub => {
@@ -131,7 +134,7 @@ export default function ClientGroupSessionDetailPage() {
   // défaut, rabais client auto-attribué — un code promo ne sera proposé que si rien d'autre ne
   // s'applique déjà (pas de cumul).
   useEffect(() => {
-    if (!profile || !groupSession?.serviceId || (subscriptionCovers && subscriptionQuotaOk)) {
+    if (!profile || !groupSession?.serviceId || groupSession.privateGroupId || (subscriptionCovers && subscriptionQuotaOk)) {
       setClientDiscount(null); setFirstBookingFree(false); return
     }
     let cancelled = false
@@ -148,7 +151,7 @@ export default function ClientGroupSessionDetailPage() {
       if (!cancelled) setClientDiscount(d ?? null)
     })
     return () => { cancelled = true }
-  }, [profile, groupSession?.serviceId, subscriptionCovers, subscriptionQuotaOk])
+  }, [profile, groupSession?.serviceId, groupSession?.privateGroupId, subscriptionCovers, subscriptionQuotaOk])
 
   async function handleEnroll() {
     setBusy(true)
@@ -388,8 +391,15 @@ export default function ClientGroupSessionDetailPage() {
               </p>
             </div>
             <div>
-              <p style={{ fontSize: 11, color: '#A09890', margin: 0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Prix</p>
-              {(() => {
+              <p style={{ fontSize: 11, color: '#A09890', margin: 0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{isPrivate ? 'Participation' : 'Prix'}</p>
+              {isPrivate ? (
+                <>
+                  <p style={{ fontSize: 16, fontWeight: 600, margin: '2px 0 0', fontFamily: 'monospace', color: groupSession.price === 0 ? '#2D7A4F' : '#1A1A18' }}>
+                    {groupSession.price === 0 ? 'Gratuit' : `${groupSession.price.toFixed(2)} CHF`}
+                  </p>
+                  <p style={{ fontSize: 11, color: '#7A7570', margin: '2px 0 0' }}>{groupSession.privateGroupName}</p>
+                </>
+              ) : (() => {
                 const subscriptionCoveredNow = subscriptionCovers && subscriptionQuotaOk
                 const originalPrice = myEnrollment
                   ? myEnrollment.originalAmountDue
@@ -521,7 +531,7 @@ export default function ClientGroupSessionDetailPage() {
                 </p>
               </div>
             )}
-            {!(subscriptionCovers && subscriptionQuotaOk) && !clientDiscount && !firstBookingFree && !isFull && (
+            {!isPrivate && !(subscriptionCovers && subscriptionQuotaOk) && !clientDiscount && !firstBookingFree && !isFull && (
               showPromoInput ? (
                 <input
                   autoFocus
@@ -552,7 +562,7 @@ export default function ClientGroupSessionDetailPage() {
                 background: isFull ? '#D5D1C9' : '#1A1A18', color: '#fff', fontSize: 14, fontWeight: 600,
               }}
             >
-              {isFull ? 'Complet' : busy ? 'Inscription...' : (subscriptionCovers && subscriptionQuotaOk) ? 'Réserver avec mon abonnement' : firstBookingFree ? 'S\'inscrire gratuitement' : 'S\'inscrire'}
+              {isFull ? 'Complet' : busy ? 'Inscription...' : isPrivate ? (groupSession.price === 0 ? 'S\'inscrire gratuitement' : 'S\'inscrire') : (subscriptionCovers && subscriptionQuotaOk) ? 'Réserver avec mon abonnement' : firstBookingFree ? 'S\'inscrire gratuitement' : 'S\'inscrire'}
             </button>
           </div>
         )}

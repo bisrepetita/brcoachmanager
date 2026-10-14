@@ -258,7 +258,16 @@ export interface GroupSession {
   status: GroupSessionStatus
   isPublic: boolean
   enrollments: GroupSessionEnrollment[]
+  // clientId des inscriptions actives, dénormalisé pour les requêtes (cf. lib/server/group-session-enrollments)
+  enrolledClientIds?: string[]
   recurrenceId?: string
+  // Séance privée d'un groupe (ex. une société qui paie pour ses employés) : isPublic reste false,
+  // la séance n'est visible et réservable que par les membres du groupe (voir PrivateGroup). `price`
+  // est alors la participation payée par chaque participant (0 = entièrement pris en charge).
+  privateGroupId?: string
+  privateGroupName?: string
+  sponsorAmount?: number
+  sponsorPaymentStatus?: SponsorPaymentStatus
   createdBy: string
   createdAt: Timestamp
   updatedAt: Timestamp
@@ -296,6 +305,9 @@ export interface GroupSessionRecurrence {
   price: number
   level?: GroupSessionLevel
   isPublic: boolean
+  privateGroupId?: string
+  privateGroupName?: string
+  sponsorAmount?: number
   createdBy: string
   rule: RecurrenceRule
   createdAt: Timestamp
@@ -485,6 +497,58 @@ export interface CreditTransaction {
   note?: string
   createdBy: string
   createdAt: Timestamp
+}
+
+// ─── Groupes privés ────────────────────────────────────────────────────────────
+// Groupe (typiquement une société) dont les séances collectives ne sont visibles et réservables
+// que par ses membres. On devient membre en ouvrant le lien /groupe/{token} une fois connecté
+// (sous-collection privateGroups/{id}/members/{uid}, écrite uniquement côté serveur). La société
+// paie `sponsorAmountPerSession` par séance, chaque participant paie `participantPrice`.
+
+export type SponsorPaymentStatus = 'to_invoice' | 'invoiced' | 'paid'
+
+export interface PrivateGroup {
+  id: string
+  name: string
+  token: string
+  sponsorAmountPerSession: number
+  participantPrice: number
+  contactName?: string
+  contactEmail?: string
+  notes?: string
+  active: boolean
+  createdAt: Timestamp
+  updatedAt: Timestamp
+}
+
+// Vue réduite d'une séance de groupe privé renvoyée par les routes /api/private-groups/* (dates
+// en ISO, pas d'enrollments).
+export interface PrivateSessionView {
+  id: string
+  title: string
+  description?: string
+  coachNames?: string[]
+  startAt: string
+  endAt: string
+  maxParticipants: number
+  price: number
+  level?: string
+  privateGroupName?: string
+  confirmedCount: number
+  serviceId?: string
+  status: GroupSessionStatus
+  // Statut de l'inscription du client courant (absent = pas inscrit / visiteur anonyme)
+  myStatus?: GroupSessionEnrollmentStatus
+  myEnrollment?: Pick<GroupSessionEnrollment, 'status' | 'amountDue' | 'paymentStatus' | 'offeredReason'>
+}
+
+export interface PrivateGroupMember {
+  id: string // = uid du compte client
+  clientId: string
+  firstName?: string
+  lastName?: string
+  email?: string
+  joinedAt: Timestamp
 }
 
 // ─── Conventions de groupe ─────────────────────────────────────────────────────

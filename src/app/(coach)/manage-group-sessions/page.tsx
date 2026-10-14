@@ -74,7 +74,9 @@ export default function GroupSessionsCoachPage() {
                     <p style={{ fontSize: 15, fontWeight: 600, color: '#1A1A18', margin: 0, fontFamily: 'monospace' }}>
                       {confirmedCount}/{gs.maxParticipants}
                     </p>
-                    {!gs.isPublic && (
+                    {gs.privateGroupId ? (
+                      <p style={{ fontSize: 11, color: '#7A7570', margin: 0 }}>Privée · {gs.privateGroupName}</p>
+                    ) : !gs.isPublic && (
                       <p style={{ fontSize: 11, color: '#A09890', margin: 0 }}>Non publié</p>
                     )}
                     {gs.status === 'cancelled' && (

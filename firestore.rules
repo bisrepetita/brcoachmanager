@@ -72,6 +72,20 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
+    // ─── privateGroups (groupes privés : séances réservées aux membres, ex. une société) ───
+    // Jamais lisible par un client : le token du lien est secret, la page /groupe/{token} passe
+    // par une route serveur. Les membres ne sont ajoutés que côté serveur (/api/private-groups/join).
+
+    match /privateGroups/{groupId} {
+      allow read: if isCoach();
+      allow create, update, delete: if isAdmin();
+
+      match /members/{memberUid} {
+        allow read: if isCoach();
+        allow delete: if isAdmin();
+      }
+    }
+
     // ─── locations ───────────────────────────────────────────────────────────
 
     match /locations/{locationId} {
@@ -170,8 +184,14 @@ service cloud.firestore {
 
     match /groupSessions/{groupSessionId} {
       // Un client ne voit que les séances publiées et non annulées ; les coachs voient tout.
+      // Séance privée : lisible aussi par les membres de son groupe privé (uid présent dans
+      // privateGroups/{id}/members) — utilisé pour la lecture d'une séance précise ; les listes
+      // passent par /api/private-groups/my-sessions.
       allow read: if isCoach() || (
         isClient() && resource.data.isPublic == true && resource.data.status != 'cancelled'
+      ) || (
+        isClient() && resource.data.get('privateGroupId', null) is string &&
+        exists(/databases/$(database)/documents/privateGroups/$(resource.data.privateGroupId)/members/$(request.auth.uid))
       );
 
       allow create: if isCoach();

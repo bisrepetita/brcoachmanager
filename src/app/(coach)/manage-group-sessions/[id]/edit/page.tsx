@@ -138,6 +138,7 @@ export default function EditGroupSessionPage() {
   const [duration, setDuration] = useState(60)
   const [maxParticipants, setMaxParticipants] = useState(8)
   const [price, setPrice] = useState(0)
+  const [sponsorAmount, setSponsorAmount] = useState(0)
   const [level, setLevel] = useState<GroupSessionLevel | ''>('')
 
   const [recurrence, setRecurrence] = useState<RecurrenceVal>('none')
@@ -179,6 +180,7 @@ export default function EditGroupSessionPage() {
       setDuration(DURATIONS.includes(mins as typeof DURATIONS[number]) ? mins : 60)
       setMaxParticipants(gs.maxParticipants)
       setPrice(gs.price)
+      setSponsorAmount(gs.sponsorAmount ?? 0)
       setLevel(gs.level ?? '')
       setLoading(false)
     })
@@ -186,6 +188,12 @@ export default function EditGroupSessionPage() {
 
   const selectedService = useMemo(() => services.find(s => s.id === serviceId), [services, serviceId])
   const alreadyRecurring = !!groupSession?.recurrenceId
+  const isPrivate = !!groupSession?.privateGroupId
+  // Champs propres à une séance de groupe privé, repris tels quels sur toutes les séances modifiées
+  // ou générées (le groupe d'une séance n'est pas modifiable ici).
+  const privateFields = useMemo(() => groupSession?.privateGroupId
+    ? { privateGroupId: groupSession.privateGroupId, privateGroupName: groupSession.privateGroupName, sponsorAmount }
+    : {}, [groupSession, sponsorAmount])
   const coachNames = useMemo(
     () => coachIds.map(cId => coaches.find(c => c.id === cId)?.firstName).filter((n): n is string => !!n),
     [coachIds, coaches]
@@ -196,7 +204,7 @@ export default function EditGroupSessionPage() {
   function handleServiceSelect(s: Service) {
     setServiceId(s.id)
     setTitle(s.name)
-    setPrice(s.price)
+    if (!isPrivate) setPrice(s.price)
   }
 
   const buildStartEnd = useCallback((): [Date, Date] => {
@@ -211,7 +219,7 @@ export default function EditGroupSessionPage() {
     const [startDate, endDate] = buildStartEnd()
     await updateDoc(doc(db, 'groupSessions', groupSessionId), {
       serviceId, title: title.trim(), description: description.trim(),
-      coachIds, coachNames, locationId, maxParticipants, price,
+      coachIds, coachNames, locationId, maxParticipants, price, ...privateFields,
       level: level || deleteField(),
       dayOfWeek: startDate.getDay(), startTime,
       startAt: Timestamp.fromDate(startDate),
@@ -222,7 +230,7 @@ export default function EditGroupSessionPage() {
       userId: user!.id, userFirstName: user!.firstName, userLastName: user!.lastName,
       action: 'session_edited', description: `Séance collective "${title.trim()}"`, sessionId: groupSessionId,
     })
-  }, [selectedService, buildStartEnd, groupSessionId, serviceId, title, description, coachIds, coachNames, locationId, maxParticipants, price, level, startTime, user])
+  }, [selectedService, buildStartEnd, groupSessionId, serviceId, title, description, coachIds, coachNames, locationId, maxParticipants, price, privateFields, level, startTime, user])
 
   const doSaveWithNewRecurrence = useCallback(async () => {
     if (!selectedService || recurrence === 'none') return
@@ -239,9 +247,9 @@ export default function EditGroupSessionPage() {
     const recurrenceRef = await addDoc(collection(db, 'groupSessionRecurrences'), {
       serviceId, title: title.trim(),
       ...(description.trim() ? { description: description.trim() } : {}),
-      coachIds, coachNames, locationId, maxParticipants, price,
+      coachIds, coachNames, locationId, maxParticipants, price, ...privateFields,
       ...(level ? { level } : {}),
-      isPublic: true,
+      isPublic: !isPrivate,
       createdBy: user!.id,
       rule: {
         frequency: recurrence, dayOfWeek: startDate.getDay(), startTime, duration,
@@ -257,7 +265,7 @@ export default function EditGroupSessionPage() {
     // Cette séance devient la première occurrence de la nouvelle série
     await updateDoc(doc(db, 'groupSessions', groupSessionId), {
       serviceId, title: title.trim(), description: description.trim(),
-      coachIds, coachNames, locationId, maxParticipants, price,
+      coachIds, coachNames, locationId, maxParticipants, price, ...privateFields,
       level: level || deleteField(),
       dayOfWeek: startDate.getDay(), startTime,
       startAt: Timestamp.fromDate(startDate),
@@ -272,10 +280,11 @@ export default function EditGroupSessionPage() {
       batch.set(gsRef, {
         serviceId, title: title.trim(),
         ...(description.trim() ? { description: description.trim() } : {}),
-        coachIds, coachNames, locationId, maxParticipants, price,
+        coachIds, coachNames, locationId, maxParticipants, price, ...privateFields,
         ...(level ? { level } : {}),
         dayOfWeek: occDate.getDay(), startTime,
-        status: 'planned', isPublic: true,
+        status: 'planned', isPublic: !isPrivate,
+        ...(isPrivate ? { sponsorPaymentStatus: 'to_invoice' } : {}),
         enrollments: [], recurrenceId: recurrenceRef.id, createdBy: user!.id,
         startAt: Timestamp.fromDate(occDate),
         endAt: Timestamp.fromDate(addMinutes(occDate, duration)),
@@ -290,7 +299,7 @@ export default function EditGroupSessionPage() {
       description: `Séance collective "${title.trim()}" · rendue récurrente (${occurrences.length} séances)`,
       sessionId: groupSessionId,
     })
-  }, [selectedService, recurrence, buildStartEnd, recurrenceEndType, recurrenceCount, serviceId, title, description, coachIds, coachNames, locationId, maxParticipants, price, level, user, startTime, duration, groupSessionId])
+  }, [selectedService, recurrence, buildStartEnd, recurrenceEndType, recurrenceCount, serviceId, title, description, coachIds, coachNames, locationId, maxParticipants, price, privateFields, isPrivate, level, user, startTime, duration, groupSessionId])
 
   const doSaveScoped = useCallback(async (scope: Scope) => {
     if (!selectedService || !groupSession) return
@@ -300,7 +309,7 @@ export default function EditGroupSessionPage() {
     if (scope === 'single') {
       await updateDoc(doc(db, 'groupSessions', groupSessionId), {
         serviceId, title: title.trim(), description: description.trim(),
-        coachIds, coachNames, locationId, maxParticipants, price,
+        coachIds, coachNames, locationId, maxParticipants, price, ...privateFields,
         level: level || deleteField(),
         dayOfWeek: startDate.getDay(), startTime,
         startAt: Timestamp.fromDate(startDate),
@@ -324,7 +333,7 @@ export default function EditGroupSessionPage() {
         const newEnd = addMinutes(newStart, duration)
         batch.update(doc(db, 'groupSessions', d.id), {
           serviceId, title: title.trim(), description: description.trim(),
-          coachIds, coachNames, locationId, maxParticipants, price,
+          coachIds, coachNames, locationId, maxParticipants, price, ...privateFields,
           level: level || deleteField(),
           dayOfWeek: newStart.getDay(), startTime,
           startAt: Timestamp.fromDate(newStart),
@@ -341,7 +350,7 @@ export default function EditGroupSessionPage() {
       userId: user!.id, userFirstName: user!.firstName, userLastName: user!.lastName,
       action: 'session_edited', description: `Séance collective "${title.trim()}" · ${scopeLabel}`, sessionId: groupSessionId,
     })
-  }, [selectedService, groupSession, buildStartEnd, startTime, groupSessionId, serviceId, title, description, coachIds, coachNames, locationId, maxParticipants, price, level, duration, user])
+  }, [selectedService, groupSession, buildStartEnd, startTime, groupSessionId, serviceId, title, description, coachIds, coachNames, locationId, maxParticipants, price, privateFields, level, duration, user])
 
   async function handleSave(scope?: Scope) {
     if (!canSubmit || saving) return
@@ -489,13 +498,22 @@ export default function EditGroupSessionPage() {
               onChange={e => setMaxParticipants(Math.max(1, Number(e.target.value)))}
             />
           </Row>
-          <Row label="Prix par personne (CHF)">
+          <Row label={isPrivate ? 'Participation par personne (CHF)' : 'Prix par personne (CHF)'}>
             <input
               type="number" min={0} step={5} style={{ ...inputStyle, width: 90 }}
               value={price}
               onChange={e => setPrice(Math.max(0, Number(e.target.value)))}
             />
           </Row>
+          {isPrivate && (
+            <Row label={`Facturé à ${groupSession?.privateGroupName ?? 'la société'} (CHF)`}>
+              <input
+                type="number" min={0} step={5} style={{ ...inputStyle, width: 90 }}
+                value={sponsorAmount}
+                onChange={e => setSponsorAmount(Math.max(0, Number(e.target.value)))}
+              />
+            </Row>
+          )}
         </Section>
         <p style={{ fontSize: 11, color: '#A09890', margin: 0 }}>
           Les inscriptions déjà payées ne sont pas recalculées — un changement de prix ne s&apos;applique qu&apos;aux nouvelles inscriptions.

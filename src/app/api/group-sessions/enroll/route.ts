@@ -11,6 +11,8 @@ import {
   countWeeklyConsumptionsInTransaction, recordConsumptionInTransaction,
 } from '@/lib/server/subscription-admin'
 import { notifyGroupSessionBooking } from '@/lib/server/booking-notifications'
+import { isPrivateGroupMemberInTransaction } from '@/lib/server/private-group-admin'
+import { enrollmentsUpdate } from '@/lib/server/group-session-enrollments'
 
 // Type "loose" côté serveur : le type partagé GroupSessionEnrollment (src/types) pointe sur le
 // Timestamp du SDK client, incompatible avec firebase-admin/firestore côté API route.
@@ -53,13 +55,23 @@ export async function POST(req: NextRequest) {
     const clientDocRef = clientSnap.docs[0]!.ref
 
     const groupSessionRef = adminDb.collection('groupSessions').doc(groupSessionId)
+    // Renseigné si la séance appartient à un groupe privé — sert au libellé de l'email.
+    let privateGroupName: string | undefined
 
     const enrollment = await adminDb.runTransaction(async (tx) => {
       const snap = await tx.get(groupSessionRef)
       if (!snap.exists) throw new HttpError(404, 'Séance introuvable')
 
       const data = snap.data()!
-      if (data['status'] !== 'planned' || data['isPublic'] !== true) {
+      const privateGroupId = data['privateGroupId'] as string | undefined
+      if (data['status'] !== 'planned') {
+        throw new HttpError(412, 'Séance non disponible')
+      }
+      if (privateGroupId) {
+        if (!(await isPrivateGroupMemberInTransaction(tx, adminDb, privateGroupId, uid))) {
+          throw new HttpError(403, 'Séance réservée aux membres du groupe')
+        }
+      } else if (data['isPublic'] !== true) {
         throw new HttpError(412, 'Séance non disponible')
       }
       const startAt = (data['startAt'] as Timestamp).toDate()
@@ -75,6 +87,38 @@ export async function POST(req: NextRequest) {
       }
       if (active.length >= (data['maxParticipants'] as number)) {
         throw new HttpError(409, 'Séance complète')
+      }
+
+      // Séance de groupe privé : la société prend en charge la séance, le participant ne paie que
+      // la participation fixée sur la séance (0 = gratuit). Ni abonnement, ni remise, ni gratuité
+      // "1ère réservation" — et hasEverBooked n'est pas marqué, pour que le client garde sa
+      // première séance perso offerte.
+      if (privateGroupId) {
+        privateGroupName = data['privateGroupName'] as string | undefined
+        const participation = (data['price'] as number) ?? 0
+        const entry: ServerEnrollment = participation === 0
+          ? {
+              clientId,
+              status: 'confirmed',
+              amountDue: 0,
+              amountPaid: 0,
+              paymentStatus: 'offered',
+              enrolledAt: Timestamp.now(),
+              offeredReason: `Groupe privé ${privateGroupName ?? ''}`.trim(),
+            }
+          : {
+              clientId,
+              status: 'pending_payment',
+              amountDue: participation,
+              amountPaid: 0,
+              paymentStatus: 'payment_to_request',
+              enrolledAt: Timestamp.now(),
+            }
+        tx.update(groupSessionRef, {
+          ...enrollmentsUpdate([...enrollments, entry]),
+          updatedAt: FieldValue.serverTimestamp(),
+        })
+        return entry
       }
 
       const clientTxSnap = await tx.get(clientDocRef)
@@ -160,7 +204,7 @@ export async function POST(req: NextRequest) {
               }
 
       tx.update(groupSessionRef, {
-        enrollments: [...enrollments, newEnrollment],
+        ...enrollmentsUpdate([...enrollments, newEnrollment]),
         updatedAt: FieldValue.serverTimestamp(),
       })
 
@@ -193,7 +237,9 @@ export async function POST(req: NextRequest) {
       notifyCoaches: true,
       notifyClient: isImmediatelyConfirmed,
       amountPaid: (enrollment.amountPaid as number) ?? 0,
-      paymentLabel: paymentLabelFor(enrollment.paymentStatus as string),
+      paymentLabel: privateGroupName && enrollment.paymentStatus === 'offered'
+        ? 'Gratuit'
+        : paymentLabelFor(enrollment.paymentStatus as string),
       baseUrl: req.nextUrl.origin,
     })
 
@@ -225,7 +271,7 @@ export async function POST(req: NextRequest) {
         ? { ...e, stripeCheckoutUrl: checkout.url, stripeSessionId: checkout.id, paymentStatus: 'link_sent' }
         : e
     )
-    await groupSessionRef.update({ enrollments: updatedEnrollments, updatedAt: FieldValue.serverTimestamp() })
+    await groupSessionRef.update({ ...enrollmentsUpdate(updatedEnrollments), updatedAt: FieldValue.serverTimestamp() })
 
     return NextResponse.json({ enrollment, checkoutUrl: checkout.url })
   } catch (err) {

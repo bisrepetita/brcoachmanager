@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { FieldValue } from 'firebase-admin/firestore'
 import { getAdminDb, getAdminAuth } from '@/lib/firebase/admin'
 import { createGroupSessionCheckout } from '@/lib/server/group-session-stripe'
+import { enrollmentsUpdate } from '@/lib/server/group-session-enrollments'
 
 export async function POST(req: NextRequest) {
   const token = req.headers.get('authorization')?.replace('Bearer ', '')
@@ -48,7 +49,7 @@ export async function POST(req: NextRequest) {
         ? { ...e, stripeCheckoutUrl: checkout.url, stripeSessionId: checkout.id, paymentStatus: 'link_sent' }
         : e
     )
-    await groupSessionRef.update({ enrollments: updated, updatedAt: FieldValue.serverTimestamp() })
+    await groupSessionRef.update({ ...enrollmentsUpdate(updated), updatedAt: FieldValue.serverTimestamp() })
 
     return NextResponse.json({ checkoutUrl: checkout.url })
   } catch (err) {
