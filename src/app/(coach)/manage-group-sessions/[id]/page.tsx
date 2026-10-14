@@ -214,6 +214,12 @@ export default function GroupSessionDetailPage() {
             {groupSession.recurrenceId && <Badge variant="muted">Récurrente</Badge>}
             {groupSession.level && <Badge variant="muted">{GROUP_SESSION_LEVEL_LABELS[groupSession.level]}</Badge>}
           </div>
+          {groupSession.privateGroupId && (
+            <p style={{ fontSize: 13, color: '#7A7570', margin: '6px 0 0' }}>
+              Groupe privé <span style={{ fontWeight: 600, color: '#1A1A18' }}>{groupSession.privateGroupName}</span>
+              {' · '}facturé {(groupSession.sponsorAmount ?? 0).toFixed(2)} CHF à la société
+            </p>
+          )}
           {groupSession.description && (
             <p style={{ fontSize: 14, color: '#1A1A18', margin: '8px 0 0' }}>{groupSession.description}</p>
           )}
@@ -225,7 +231,7 @@ export default function GroupSessionDetailPage() {
               </p>
             </div>
             <div>
-              <p style={{ fontSize: 11, color: '#A09890', margin: 0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Prix</p>
+              <p style={{ fontSize: 11, color: '#A09890', margin: 0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{groupSession.privateGroupId ? 'Participation' : 'Prix'}</p>
               <p style={{ fontSize: 16, fontWeight: 600, color: '#1A1A18', margin: '2px 0 0', fontFamily: 'monospace' }}>
                 {groupSession.price.toFixed(2)} CHF
               </p>
@@ -233,8 +239,8 @@ export default function GroupSessionDetailPage() {
             <div>
               <p style={{ fontSize: 11, color: '#A09890', margin: 0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Statut</p>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                <Badge variant={groupSession.status === 'cancelled' ? 'cancelled' : groupSession.isPublic ? 'paid' : 'muted'}>
-                  {groupSession.status === 'cancelled' ? 'Annulée' : groupSession.isPublic ? 'Publiée' : 'Non publiée'}
+                <Badge variant={groupSession.status === 'cancelled' ? 'cancelled' : groupSession.isPublic || groupSession.privateGroupId ? 'paid' : 'muted'}>
+                  {groupSession.status === 'cancelled' ? 'Annulée' : groupSession.privateGroupId ? 'Privée' : groupSession.isPublic ? 'Publiée' : 'Non publiée'}
                 </Badge>
                 {groupSession.status === 'planned' && (
                   <button onClick={() => router.push(`/manage-group-sessions/${groupSession.id}/edit` as never)} style={{ padding: 2, background: 'none', border: 'none', cursor: 'pointer', color: '#7A7570', display: 'flex' }}>
@@ -309,16 +315,19 @@ export default function GroupSessionDetailPage() {
 
         {groupSession.status !== 'cancelled' && (
           <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              onClick={togglePublic}
-              disabled={saving}
-              style={{
-                flex: 1, height: 40, borderRadius: 8, border: '1px solid #E5E1DA', cursor: 'pointer',
-                background: '#fff', color: '#1A1A18', fontSize: 13, fontWeight: 500,
-              }}
-            >
-              {groupSession.isPublic ? 'Dépublier' : 'Publier'}
-            </button>
+            {/* Une séance de groupe privé ne se publie jamais : elle reste réservée aux membres du groupe */}
+            {!groupSession.privateGroupId && (
+              <button
+                onClick={togglePublic}
+                disabled={saving}
+                style={{
+                  flex: 1, height: 40, borderRadius: 8, border: '1px solid #E5E1DA', cursor: 'pointer',
+                  background: '#fff', color: '#1A1A18', fontSize: 13, fontWeight: 500,
+                }}
+              >
+                {groupSession.isPublic ? 'Dépublier' : 'Publier'}
+              </button>
+            )}
             <button
               onClick={cancelSession}
               disabled={saving}

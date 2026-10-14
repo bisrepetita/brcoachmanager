@@ -165,6 +165,9 @@ export async function extendInfiniteGroupSessionRecurrences(): Promise<void> {
         startTime: rec.rule.startTime,
         status: 'planned',
         isPublic: rec.isPublic,
+        ...(rec.privateGroupId
+          ? { privateGroupId: rec.privateGroupId, privateGroupName: rec.privateGroupName, sponsorAmount: rec.sponsorAmount ?? 0, sponsorPaymentStatus: 'to_invoice' }
+          : {}),
         enrollments: [],
         recurrenceId: rec.id,
         createdBy: rec.createdBy,
