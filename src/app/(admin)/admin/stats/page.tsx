@@ -9,7 +9,8 @@ import { db } from '@/lib/firebase/firestore'
 import { useCollection } from '@/lib/hooks/useCollection'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react'
-import type { Session, Sale, GroupSession, User, Service, PaymentStatus, RoomRentalEntry } from '@/types'
+import type { Session, Sale, GroupSession, User, Service, PaymentStatus, RoomRentalEntry, ClientPack, ClientSubscription } from '@/types'
+import { packEnrollmentRevenue, expiredPackRevenue, subscriptionRevenue } from '@/lib/utils/revenue-recognition'
 
 // Une entrée générique de paiement (ClientPayment ou GroupSessionEnrollment partagent ces champs)
 interface PaymentLike {
@@ -48,6 +49,10 @@ export default function StatsPage() {
   const [sessions, setSessions] = useState<Session[]>([])
   const [sales, setSales] = useState<Sale[]>([])
   const [groupSessions, setGroupSessions] = useState<GroupSession[]>([])
+  // Packs et abonnements : chargés en entier (peu nombreux) — leur CA ne dépend pas de leur date de
+  // création mais de l'usage, de l'expiration ou de la durée (cf. revenue-recognition.ts).
+  const [clientPacks, setClientPacks] = useState<ClientPack[]>([])
+  const [clientSubscriptions, setClientSubscriptions] = useState<ClientSubscription[]>([])
   const [loading, setLoading] = useState(false)
   const [filterCoachId, setFilterCoachId] = useState('')
   const [filterServiceId, setFilterServiceId] = useState('')
@@ -83,6 +88,15 @@ export default function StatsPage() {
     }).finally(() => setLoading(false))
   }, [monthAnchor])
 
+  useEffect(() => {
+    Promise.all([getDocs(collection(db, 'clientPacks')), getDocs(collection(db, 'clientSubscriptions'))])
+      .then(([packsSnap, subsSnap]) => {
+        setClientPacks(packsSnap.docs.map(d => ({ id: d.id, ...d.data() }) as ClientPack))
+        setClientSubscriptions(subsSnap.docs.map(d => ({ id: d.id, ...d.data() }) as ClientSubscription))
+      })
+      .catch(() => {})
+  }, [])
+
   const filtered = useMemo(() => {
     return sessions.filter(s => {
       if (filterCoachId && !s.coachIds.includes(filterCoachId)) return false
@@ -113,21 +127,39 @@ export default function StatsPage() {
       coachIds: sale.coachIds,
     }))
 
+    const packMap = new Map(clientPacks.map(p => [p.id, p]))
     const fromGroupSessions: RevenueItem[] = groupSessions
       .filter(gs => gs.status !== 'cancelled')
-      .map(gs => ({
-        date: gs.startAt?.toDate?.() ?? new Date(0),
-        // Séance de groupe privé : + montant pris en charge par la société (encaissé une fois marqué payé)
-        revenue: paymentsRevenue((gs.enrollments ?? []).filter(e => e.status !== 'cancelled')) + (gs.sponsorAmount ?? 0),
-        paid: paymentsPaid((gs.enrollments ?? []).filter(e => e.status !== 'cancelled'))
-          + (gs.sponsorPaymentStatus === 'paid' ? (gs.sponsorAmount ?? 0) : 0),
-        serviceId: gs.serviceId,
-        serviceName: (gs.serviceId && services.find(sv => sv.id === gs.serviceId)?.name) ?? gs.title,
-        coachIds: gs.coachIds,
-      }))
+      .map(gs => {
+        const active = (gs.enrollments ?? []).filter(e => e.status !== 'cancelled')
+        // Inscriptions réglées par un crédit de pack : CA reconnu à l'usage (valeur du crédit)
+        const fromPacks = active.map(e => packEnrollmentRevenue(e, packMap))
+        return {
+          date: gs.startAt?.toDate?.() ?? new Date(0),
+          // Séance de groupe privé : + montant pris en charge par la société (encaissé une fois marqué payé)
+          revenue: paymentsRevenue(active) + (gs.sponsorAmount ?? 0) + fromPacks.reduce((a, r) => a + r.revenue, 0),
+          paid: paymentsPaid(active)
+            + (gs.sponsorPaymentStatus === 'paid' ? (gs.sponsorAmount ?? 0) : 0)
+            + fromPacks.reduce((a, r) => a + r.paid, 0),
+          serviceId: gs.serviceId,
+          serviceName: (gs.serviceId && services.find(sv => sv.id === gs.serviceId)?.name) ?? gs.title,
+          coachIds: gs.coachIds,
+        }
+      })
 
-    return [...fromSessions, ...fromSales, ...fromGroupSessions]
-  }, [sessions, sales, groupSessions, services])
+    const start = startOfMonth(monthAnchor)
+    const end = endOfMonth(monthAnchor)
+    const fromExpiredPacks: RevenueItem[] = expiredPackRevenue(clientPacks, start, end).map(it => ({
+      date: it.date, revenue: it.revenue, paid: it.paid,
+      serviceName: 'Packs — séances expirées', coachIds: [],
+    }))
+    const fromSubscriptions: RevenueItem[] = subscriptionRevenue(clientSubscriptions, start, end).map(it => ({
+      date: it.date, revenue: it.revenue, paid: it.paid,
+      serviceName: 'Abonnements', coachIds: [],
+    }))
+
+    return [...fromSessions, ...fromSales, ...fromGroupSessions, ...fromExpiredPacks, ...fromSubscriptions]
+  }, [sessions, sales, groupSessions, services, clientPacks, clientSubscriptions, monthAnchor])
 
   const filteredRevenueItems = useMemo(() => revenueItems.filter(it => {
     if (filterCoachId && !it.coachIds.includes(filterCoachId)) return false
@@ -291,7 +323,7 @@ export default function StatsPage() {
               ))}
             </div>
             <p style={{ fontSize: 11, color: '#A09890', textAlign: 'center', margin: 0 }}>
-              CA = séances privées + ventes ponctuelles + inscriptions Planning (loyers coachs indépendants inclus, hors loyers et séances offerts)
+              CA = séances privées + ventes ponctuelles + inscriptions Planning (loyers coachs indépendants inclus, hors loyers et séances offerts) + packs à l&apos;usage (valeur par séance, et séances non utilisées à l&apos;expiration) + abonnements répartis sur leur durée
             </p>
 
             {stats.cancelled > 0 && (
