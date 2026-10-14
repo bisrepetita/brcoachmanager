@@ -14,7 +14,7 @@ import {
   findActiveSubscriptionForClient, activateClientSubscriptionManually, cancelClientSubscription,
 } from '@/lib/services/subscription.service'
 import { SUBSCRIPTION_DURATION_UNIT_LABELS, DAY_OF_WEEK_LABELS } from '@/types'
-import type { Client, Session, Service, SubscriptionPlan, ClientSubscription, PaymentStatus } from '@/types'
+import type { Client, Session, GroupSession, Service, SubscriptionPlan, ClientSubscription, PaymentStatus } from '@/types'
 
 const PAYMENT_STATUS_LABELS: Record<string, string> = {
   payment_to_request: 'À demander',
@@ -34,6 +34,20 @@ const PAYMENT_STATUS_COLORS: Record<string, string> = {
   cancelled: '#A09890',
 }
 
+// Ligne commune aux séances individuelles (`sessions`) et aux séances collectives (`groupSessions`,
+// publiques ou de groupe privé) auxquelles le client est inscrit.
+interface ClientSessionRow {
+  key: string
+  href: string
+  date: Date
+  title: string
+  subtitle?: string
+  paymentStatus: string
+  amountDue?: number
+  amountPaid?: number
+  done: boolean
+}
+
 export default function ClientDetailPage() {
   const router = useRouter()
   const params = useParams()
@@ -41,6 +55,7 @@ export default function ClientDetailPage() {
 
   const [client, setClient] = useState<Client | null>(null)
   const [sessions, setSessions] = useState<Session[]>([])
+  const [groupSessions, setGroupSessions] = useState<GroupSession[]>([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'done' | 'planned'>('done')
 
@@ -80,6 +95,10 @@ export default function ClientDetailPage() {
         data.sort((a, b) => b.startAt.seconds - a.startAt.seconds)
         setSessions(data)
       }).catch(() => {})
+    // Séances collectives (publiques ou privées) où le client a une inscription active
+    getDocs(query(collection(db, 'groupSessions'), where('enrolledClientIds', 'array-contains', clientId)))
+      .then(snap => setGroupSessions(snap.docs.map(d => ({ id: d.id, ...d.data() } as GroupSession))))
+      .catch(() => {})
     reloadSubscription()
   }, [clientId, reloadSubscription])
 
@@ -118,18 +137,45 @@ export default function ClientDetailPage() {
     reloadSubscription()
   }
 
-  const doneSessions = useMemo(() => sessions.filter(s => s.status === 'done'), [sessions])
-  const plannedSessions = useMemo(() => sessions.filter(s => s.status === 'planned'), [sessions])
+  const rows = useMemo((): ClientSessionRow[] => {
+    const fromSessions = sessions
+      .filter(s => s.status === 'done' || s.status === 'planned')
+      .map(s => {
+        const dist = s.paymentDistribution?.find(p => p.clientId === clientId)
+        return {
+          key: `s-${s.id}`, href: `/sessions/${s.id}`, date: s.startAt?.toDate?.() ?? new Date(),
+          title: serviceMap.get(s.serviceId)?.name ?? s.priceSnapshot?.serviceName ?? '—',
+          paymentStatus: dist?.paymentStatus ?? s.paymentStatus,
+          amountDue: dist?.amountDue, amountPaid: dist?.amountPaid,
+          done: s.status === 'done',
+        }
+      })
+    // Une séance collective n'est jamais "clôturée" : elle compte comme effectuée une fois commencée
+    const now = Date.now()
+    const fromGroupSessions = groupSessions
+      .filter(gs => gs.status !== 'cancelled')
+      .flatMap(gs => {
+        const enrollment = gs.enrollments.find(e => e.clientId === clientId && e.status !== 'cancelled')
+        if (!enrollment) return []
+        const date = gs.startAt?.toDate?.() ?? new Date()
+        return [{
+          key: `g-${gs.id}`, href: `/manage-group-sessions/${gs.id}`, date,
+          title: gs.title,
+          subtitle: gs.privateGroupName ? `Groupe privé · ${gs.privateGroupName}` : 'Séance collective',
+          paymentStatus: enrollment.paymentStatus,
+          amountDue: enrollment.amountDue, amountPaid: enrollment.amountPaid,
+          done: date.getTime() <= now,
+        }]
+      })
+    return [...fromSessions, ...fromGroupSessions].sort((a, b) => b.date.getTime() - a.date.getTime())
+  }, [sessions, groupSessions, clientId, serviceMap])
 
-  const totalDue = useMemo(() => doneSessions.reduce((sum, s) => {
-    const dist = s.paymentDistribution?.find(p => p.clientId === clientId)
-    return sum + (dist?.amountDue ?? 0)
-  }, 0), [doneSessions, clientId])
+  const doneSessions = useMemo(() => rows.filter(r => r.done), [rows])
+  // À venir : la plus proche en premier
+  const plannedSessions = useMemo(() => rows.filter(r => !r.done).reverse(), [rows])
 
-  const totalPaid = useMemo(() => doneSessions.reduce((sum, s) => {
-    const dist = s.paymentDistribution?.find(p => p.clientId === clientId)
-    return sum + (dist?.amountPaid ?? 0)
-  }, 0), [doneSessions, clientId])
+  const totalDue = useMemo(() => doneSessions.reduce((sum, r) => sum + (r.amountDue ?? 0), 0), [doneSessions])
+  const totalPaid = useMemo(() => doneSessions.reduce((sum, r) => sum + (r.amountPaid ?? 0), 0), [doneSessions])
 
   if (loading) return <div className="flex items-center justify-center h-screen text-sm text-text-secondary">Chargement…</div>
   if (!client) return <div className="flex items-center justify-center h-screen text-sm text-text-secondary">Client introuvable</div>
@@ -231,14 +277,12 @@ export default function ClientDetailPage() {
           {displayedSessions.length === 0 && (
             <p style={{ textAlign: 'center', color: '#A09890', fontSize: 14, padding: '24px 0' }}>Aucune séance</p>
           )}
-          {displayedSessions.map((session, i) => {
-            const sessionDate = session.startAt?.toDate?.() ?? new Date()
-            const service = serviceMap.get(session.serviceId)
-            const dist = session.paymentDistribution?.find(p => p.clientId === clientId)
-            const status = dist?.paymentStatus ?? session.paymentStatus
+          {displayedSessions.map((row, i) => {
+            const sessionDate = row.date
+            const status = row.paymentStatus
 
             return (
-              <button key={session.id} onClick={() => router.push(`/sessions/${session.id}` as never)}
+              <button key={row.key} onClick={() => router.push(row.href as never)}
                 style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', width: '100%', background: 'none', border: 'none', borderTop: i > 0 ? '1px solid #F5F3F0' : 'none', cursor: 'pointer', textAlign: 'left' }}>
                 <div style={{ width: 40, flexShrink: 0, textAlign: 'center' }}>
                   <p style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1A1A18', lineHeight: 1 }}>{format(sessionDate, 'd')}</p>
@@ -247,7 +291,7 @@ export default function ClientDetailPage() {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                     <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#1A1A18', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {service?.name ?? session.priceSnapshot?.serviceName ?? '—'}
+                      {row.title}
                     </p>
                     {tab === 'done' && (
                       <span style={{ fontSize: 11, fontWeight: 600, color: PAYMENT_STATUS_COLORS[status] ?? '#A09890', background: `${PAYMENT_STATUS_COLORS[status]}18`, padding: '2px 6px', borderRadius: 5, whiteSpace: 'nowrap', flexShrink: 0 }}>
@@ -257,7 +301,8 @@ export default function ClientDetailPage() {
                   </div>
                   <p style={{ margin: '2px 0 0', fontSize: 12, color: '#7A7570' }}>
                     {format(sessionDate, 'HH:mm')}
-                    {tab === 'done' && dist && ` · CHF ${(dist.amountPaid ?? 0).toFixed(0)}/${(dist.amountDue ?? 0).toFixed(0)}`}
+                    {row.subtitle && ` · ${row.subtitle}`}
+                    {tab === 'done' && row.amountDue !== undefined && ` · CHF ${(row.amountPaid ?? 0).toFixed(0)}/${row.amountDue.toFixed(0)}`}
                   </p>
                 </div>
                 <ChevronRight size={14} color="#C8C4BC" />

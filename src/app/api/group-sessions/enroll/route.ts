@@ -12,6 +12,7 @@ import {
 } from '@/lib/server/subscription-admin'
 import { notifyGroupSessionBooking } from '@/lib/server/booking-notifications'
 import { isPrivateGroupMemberInTransaction } from '@/lib/server/private-group-admin'
+import { enrollmentsUpdate } from '@/lib/server/group-session-enrollments'
 
 // Type "loose" côté serveur : le type partagé GroupSessionEnrollment (src/types) pointe sur le
 // Timestamp du SDK client, incompatible avec firebase-admin/firestore côté API route.
@@ -114,7 +115,7 @@ export async function POST(req: NextRequest) {
               enrolledAt: Timestamp.now(),
             }
         tx.update(groupSessionRef, {
-          enrollments: [...enrollments, entry],
+          ...enrollmentsUpdate([...enrollments, entry]),
           updatedAt: FieldValue.serverTimestamp(),
         })
         return entry
@@ -203,7 +204,7 @@ export async function POST(req: NextRequest) {
               }
 
       tx.update(groupSessionRef, {
-        enrollments: [...enrollments, newEnrollment],
+        ...enrollmentsUpdate([...enrollments, newEnrollment]),
         updatedAt: FieldValue.serverTimestamp(),
       })
 
@@ -270,7 +271,7 @@ export async function POST(req: NextRequest) {
         ? { ...e, stripeCheckoutUrl: checkout.url, stripeSessionId: checkout.id, paymentStatus: 'link_sent' }
         : e
     )
-    await groupSessionRef.update({ enrollments: updatedEnrollments, updatedAt: FieldValue.serverTimestamp() })
+    await groupSessionRef.update({ ...enrollmentsUpdate(updatedEnrollments), updatedAt: FieldValue.serverTimestamp() })
 
     return NextResponse.json({ enrollment, checkoutUrl: checkout.url })
   } catch (err) {

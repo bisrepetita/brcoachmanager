@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { getAdminDb, getAdminAuth } from '@/lib/firebase/admin'
 import { findConsumptionRefsInTransaction, removeConsumptionsInTransaction } from '@/lib/server/subscription-admin'
+import { enrollmentsUpdate } from '@/lib/server/group-session-enrollments'
 
 type ServerEnrollment = Record<string, unknown> & { id?: string; clientId?: string; status: string; paymentStatus: string; amountPaid: number; subscriptionId?: string }
 
@@ -55,7 +56,7 @@ export async function POST(req: NextRequest) {
       const updated = [...enrollments]
       updated[idx] = { ...entry, status: 'cancelled', cancelledAt: Timestamp.now() }
 
-      tx.update(groupSessionRef, { enrollments: updated, updatedAt: FieldValue.serverTimestamp() })
+      tx.update(groupSessionRef, { ...enrollmentsUpdate(updated), updatedAt: FieldValue.serverTimestamp() })
       removeConsumptionsInTransaction(tx, consumptionRefs)
 
       return entry

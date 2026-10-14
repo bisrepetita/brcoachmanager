@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { getAdminDb, getAdminAuth } from '@/lib/firebase/admin'
+import { enrollmentsUpdate } from '@/lib/server/group-session-enrollments'
 
 type ServerEnrollment = Record<string, unknown> & { status: string }
 
@@ -79,7 +80,7 @@ export async function POST(req: NextRequest) {
       }
 
       tx.update(groupSessionRef, {
-        enrollments: [...enrollments, entry],
+        ...enrollmentsUpdate([...enrollments, entry]),
         updatedAt: FieldValue.serverTimestamp(),
       })
 

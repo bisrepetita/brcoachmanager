@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto'
 import { FieldValue, Timestamp, type Firestore } from 'firebase-admin/firestore'
 import type { ParsedClassPassBooking, ParsedClassPassCancellation } from './classpass-parser'
 import { notifyGroupSessionBooking, notifyClassPassAccessInfo } from './booking-notifications'
+import { enrollmentsUpdate } from '@/lib/server/group-session-enrollments'
 
 // Montant reversé par ClassPass au studio pour chaque séance réservée via leur plateforme —
 // fixe, indépendant du prix normal du service (payé par le membre à ClassPass, pas à nous).
@@ -108,7 +109,7 @@ export async function importClassPassBooking(
       enrolledAt: Timestamp.now(),
       paidAt: Timestamp.now(),
     }
-    tx.update(groupSessionRef, { enrollments: [...enrollments, entry], updatedAt: FieldValue.serverTimestamp() })
+    tx.update(groupSessionRef, { ...enrollmentsUpdate([...enrollments, entry]), updatedAt: FieldValue.serverTimestamp() })
     return { ok: true as const, entry }
   })
 
@@ -186,7 +187,7 @@ export async function cancelClassPassBooking(
 
     const updated = [...enrollments]
     updated[idx] = { ...entry, status: 'cancelled', cancelledAt: Timestamp.now() }
-    tx.update(groupSessionRef, { enrollments: updated, updatedAt: FieldValue.serverTimestamp() })
+    tx.update(groupSessionRef, { ...enrollmentsUpdate(updated), updatedAt: FieldValue.serverTimestamp() })
     return { ok: true as const, alreadyCancelled: false }
   })
 

@@ -4,6 +4,7 @@ import Stripe from 'stripe'
 import { getAdminDb } from '@/lib/firebase/admin'
 import { activateSubscriptionFromWebhookInTransaction } from '@/lib/server/subscription-admin'
 import { notifyGroupSessionBooking, notifySubscriptionPurchase } from '@/lib/server/booking-notifications'
+import { enrollmentsUpdate } from '@/lib/server/group-session-enrollments'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2026-05-27.dahlia' as any })
@@ -49,7 +50,7 @@ export async function POST(req: NextRequest) {
             ? { ...e, status: 'confirmed', paymentStatus: 'paid', amountPaid, paidAt: new Date(), stripeSessionId: checkoutSession.id }
             : e
         )
-        tx.update(groupSessionRef, { enrollments: updated, updatedAt: FieldValue.serverTimestamp() })
+        tx.update(groupSessionRef, { ...enrollmentsUpdate(updated), updatedAt: FieldValue.serverTimestamp() })
       })
 
       // Confirmation client best-effort (le coach a déjà été notifié à l'inscription) — le

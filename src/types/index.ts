@@ -258,6 +258,8 @@ export interface GroupSession {
   status: GroupSessionStatus
   isPublic: boolean
   enrollments: GroupSessionEnrollment[]
+  // clientId des inscriptions actives, dénormalisé pour les requêtes (cf. lib/server/group-session-enrollments)
+  enrolledClientIds?: string[]
   recurrenceId?: string
   // Séance privée d'un groupe (ex. une société qui paie pour ses employés) : isPublic reste false,
   // la séance n'est visible et réservable que par les membres du groupe (voir PrivateGroup). `price`
