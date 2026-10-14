@@ -13,8 +13,9 @@ import { useAuth } from '@/lib/hooks/useAuth'
 import { useClientProfile } from '@/lib/hooks/useClientProfile'
 import { findActiveSubscriptionForClient } from '@/lib/services/subscription.service'
 import { fetchMyPrivateGroupSessions } from '@/lib/services/group-session.service'
+import { findClientPacks, isPackUsable } from '@/lib/services/pack.service'
 import { GROUP_SESSION_ENROLLMENT_STATUS_LABELS, DAY_OF_WEEK_LABELS } from '@/types'
-import type { GroupSession, GroupSessionEnrollmentStatus, ClientSubscription, PrivateSessionView } from '@/types'
+import type { GroupSession, GroupSessionEnrollmentStatus, ClientSubscription, PrivateSessionView, ClientPack } from '@/types'
 import { AuthGuard } from '@/components/providers/AuthGuard'
 
 // Vue commune aux séances publiques (lecture Firestore) et aux séances de groupe privé (route API)
@@ -26,6 +27,7 @@ interface MyEnrollmentItem {
   amountDue: number
   originalAmountDue?: number
   privateGroupName?: string
+  viaPack?: boolean
 }
 
 const BADGE_VARIANT: Record<GroupSessionEnrollmentStatus, 'payment_to_request' | 'paid' | 'cancelled'> = {
@@ -48,6 +50,16 @@ function MyEnrollmentsContent() {
   const { profile, loading: profileLoading } = useClientProfile()
   const [items, setItems] = useState<GroupSession[]>([])
   const [privateItems, setPrivateItems] = useState<PrivateSessionView[]>([])
+  const [usablePacks, setUsablePacks] = useState<ClientPack[]>([])
+
+  useEffect(() => {
+    if (!profile || !firebaseUser?.uid) { setUsablePacks([]); return }
+    let cancelled = false
+    findClientPacks(profile.clientId, firebaseUser.uid)
+      .then(list => { if (!cancelled) setUsablePacks(list.filter(p => isPackUsable(p))) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [profile, firebaseUser?.uid])
   const [loading, setLoading] = useState(true)
   const [activeSubscription, setActiveSubscription] = useState<ClientSubscription | null>(null)
   const [subLoading, setSubLoading] = useState(true)
@@ -88,6 +100,7 @@ function MyEnrollmentsContent() {
       return [{
         id: gs.id, title: gs.title, startAt: gs.startAt.toDate(), status: enrollment.status,
         amountDue: enrollment.amountDue, originalAmountDue: enrollment.originalAmountDue,
+        viaPack: !!enrollment.clientPackId,
       }]
     })
     // Les séances privées n'exposent que l'inscription active (non annulée) du client
@@ -147,7 +160,18 @@ function MyEnrollmentsContent() {
             }}
           >
             <Layers size={16} color="#7A7570" style={{ flexShrink: 0 }} />
-            <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: '#1A1A18' }}>Packs de séances</span>
+            {usablePacks.length > 0 ? (
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#1A1A18' }}>
+                  {usablePacks.reduce((n, p) => n + p.creditsRemaining, 0)} séance{usablePacks.reduce((n, p) => n + p.creditsRemaining, 0) > 1 ? 's' : ''} de pack disponible{usablePacks.reduce((n, p) => n + p.creditsRemaining, 0) > 1 ? 's' : ''}
+                </span>
+                <span style={{ display: 'block', fontSize: 12, color: '#7A7570', marginTop: 2 }}>
+                  {usablePacks[0]!.packSnapshot.name} · jusqu&apos;au {format(usablePacks[0]!.expiresAt.toDate(), 'd MMMM yyyy', { locale: fr })}
+                </span>
+              </span>
+            ) : (
+              <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: '#1A1A18' }}>Packs de séances — en acheter un</span>
+            )}
             <ChevronRight size={16} color="#A09890" style={{ flexShrink: 0 }} />
           </button>
         </div>
@@ -190,7 +214,7 @@ function MyEnrollmentsContent() {
                           {enrollment.originalAmountDue.toFixed(2)} CHF
                         </span>
                       )}
-                      {enrollment.amountDue.toFixed(2)} CHF
+                      {enrollment.viaPack ? 'Pack' : `${enrollment.amountDue.toFixed(2)} CHF`}
                     </p>
                   </div>
                   <Badge variant={BADGE_VARIANT[enrollment.status]}>
