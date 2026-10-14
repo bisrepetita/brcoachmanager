@@ -519,6 +519,24 @@ export interface PrivateGroup {
   updatedAt: Timestamp
 }
 
+// Vue réduite d'une séance de groupe privé renvoyée par les routes /api/private-groups/* (dates
+// en ISO, pas d'enrollments).
+export interface PrivateSessionView {
+  id: string
+  title: string
+  description?: string
+  coachNames?: string[]
+  startAt: string
+  endAt: string
+  maxParticipants: number
+  price: number
+  level?: string
+  privateGroupName?: string
+  confirmedCount: number
+  // Statut de l'inscription du client courant (absent = pas inscrit / visiteur anonyme)
+  myStatus?: string
+}
+
 export interface PrivateGroupMember {
   id: string // = uid du compte client
   clientId: string
