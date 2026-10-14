@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto'
 import { FieldValue, Timestamp, type Firestore } from 'firebase-admin/firestore'
 import type { ParsedClassPassBooking, ParsedClassPassCancellation } from './classpass-parser'
-import { notifyGroupSessionBooking } from './booking-notifications'
+import { notifyGroupSessionBooking, notifyClassPassAccessInfo } from './booking-notifications'
 
 // Montant reversé par ClassPass au studio pour chaque séance réservée via leur plateforme —
 // fixe, indépendant du prix normal du service (payé par le membre à ClassPass, pas à nous).
@@ -123,17 +123,20 @@ export async function importClassPassBooking(
   await logActivity(adminDb, 'group_session_classpass_import',
     `${parsed.memberName} inscrit(e) via ClassPass à "${parsed.serviceTitle}" (${parsed.bookingId})`, groupSessionRef.id, clientId)
 
-  // Le membre a déjà reçu sa confirmation de ClassPass — on n'envoie pas de doublon, seulement la
-  // notification coach habituelle.
-  await notifyGroupSessionBooking(adminDb, {
-    groupSessionId: groupSessionRef.id,
-    clientId,
-    notifyCoaches: true,
-    notifyClient: false,
-    amountPaid: CLASSPASS_PAYOUT_CHF,
-    paymentLabel: 'Payé (ClassPass)',
-    baseUrl,
-  })
+  // Le membre a déjà reçu sa confirmation de ClassPass — pas de doublon de confirmation, seulement
+  // la notification coach habituelle et, côté membre, les infos d'accès que ClassPass n'a pas.
+  await Promise.all([
+    notifyGroupSessionBooking(adminDb, {
+      groupSessionId: groupSessionRef.id,
+      clientId,
+      notifyCoaches: true,
+      notifyClient: false,
+      amountPaid: CLASSPASS_PAYOUT_CHF,
+      paymentLabel: 'Payé (ClassPass)',
+      baseUrl,
+    }),
+    notifyClassPassAccessInfo(adminDb, { groupSessionId: groupSessionRef.id, clientId, baseUrl }),
+  ])
 
   return { status: 'matched', importId: importRef.id, groupSessionId: groupSessionRef.id, clientId }
 }

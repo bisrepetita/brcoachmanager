@@ -1,6 +1,6 @@
 import type { Firestore, Timestamp } from 'firebase-admin/firestore'
 import { sendEmail } from './email'
-import { groupSessionConfirmationEmail, coachNewEnrollmentEmail, subscriptionConfirmationEmail } from './email-templates'
+import { groupSessionConfirmationEmail, coachNewEnrollmentEmail, subscriptionConfirmationEmail, classPassAccessInfoEmail } from './email-templates'
 import { resolveAccessInstructions } from './building-admin'
 
 function formatDateTime(d: Date): string {
@@ -69,6 +69,42 @@ export async function notifyGroupSessionBooking(adminDb: Firestore, opts: {
     }
   } catch (err) {
     console.error('[booking-notifications] notifyGroupSessionBooking erreur non bloquante:', err)
+  }
+}
+
+/**
+ * Envoie au membre ClassPass les infos d'accès au studio (pas de confirmation/paiement, déjà fait
+ * par ClassPass) — best-effort, et rien n'est envoyé si le bâtiment n'a pas d'instructions d'accès.
+ */
+export async function notifyClassPassAccessInfo(adminDb: Firestore, opts: {
+  groupSessionId: string
+  clientId: string
+  baseUrl: string
+}): Promise<void> {
+  try {
+    const [gsSnap, clientSnap] = await Promise.all([
+      adminDb.collection('groupSessions').doc(opts.groupSessionId).get(),
+      adminDb.collection('clients').doc(opts.clientId).get(),
+    ])
+    if (!gsSnap.exists || !clientSnap.exists) return
+
+    const gs = gsSnap.data()!
+    const client = clientSnap.data()!
+    const clientEmail = client['email'] as string | undefined
+    if (!clientEmail) return
+    const accessInstructions = await resolveAccessInstructions(adminDb, gs['locationId'] as string | undefined)
+    if (!accessInstructions) return
+
+    const { subject, html } = classPassAccessInfoEmail({
+      clientFirstName: (client['firstName'] as string) ?? '',
+      sessionTitle: gs['title'] as string,
+      dateStr: formatDateTime((gs['startAt'] as Timestamp).toDate()),
+      accessInstructions,
+      groupSessionUrl: `${opts.baseUrl}/group-sessions/${opts.groupSessionId}`,
+    })
+    await sendEmail({ to: clientEmail, subject, html })
+  } catch (err) {
+    console.error('[booking-notifications] notifyClassPassAccessInfo erreur non bloquante:', err)
   }
 }
 
