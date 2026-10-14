@@ -533,8 +533,11 @@ export interface PrivateSessionView {
   level?: string
   privateGroupName?: string
   confirmedCount: number
+  serviceId?: string
+  status: GroupSessionStatus
   // Statut de l'inscription du client courant (absent = pas inscrit / visiteur anonyme)
-  myStatus?: string
+  myStatus?: GroupSessionEnrollmentStatus
+  myEnrollment?: Pick<GroupSessionEnrollment, 'status' | 'amountDue' | 'paymentStatus' | 'offeredReason'>
 }
 
 export interface PrivateGroupMember {

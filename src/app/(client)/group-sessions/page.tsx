@@ -14,6 +14,7 @@ import { db } from '@/lib/firebase/firestore'
 import { useAuth } from '@/lib/hooks/useAuth'
 import { useClientProfile } from '@/lib/hooks/useClientProfile'
 import { useCollection } from '@/lib/hooks/useCollection'
+import { fetchMyPrivateGroupSessions } from '@/lib/services/group-session.service'
 import { GROUP_SESSION_LEVEL_LABELS, type GroupSession, type GroupSessionLevel, type Service } from '@/types'
 
 type SortMode = 'date' | 'price_asc' | 'price_desc'
@@ -34,6 +35,8 @@ interface GroupSessionListItem {
   level?: GroupSessionLevel
   confirmedCount: number
   isEnrolled: boolean
+  // Séance d'un groupe privé dont le client est membre (via /api/private-groups/my-sessions)
+  privateGroupName?: string
 }
 
 function dayLabel(date: Date): string {
@@ -46,7 +49,9 @@ export default function ClientGroupSessionsPage() {
   const router = useRouter()
   const { firebaseUser, loading: authLoading } = useAuth()
   const { profile } = useClientProfile()
-  const [items, setItems] = useState<GroupSessionListItem[]>([])
+  const [publicItems, setItems] = useState<GroupSessionListItem[]>([])
+  const [privateItems, setPrivateItems] = useState<GroupSessionListItem[]>([])
+  const items = useMemo(() => [...publicItems, ...privateItems], [publicItems, privateItems])
   const [loading, setLoading] = useState(true)
   const { data: services } = useCollection<Service>('services', [])
   const serviceMap = useMemo(() => new Map(services.map(s => [s.id, s])), [services])
@@ -105,6 +110,26 @@ export default function ClientGroupSessionsPage() {
       .catch(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [firebaseUser, authLoading, profile])
+
+  // Séances des groupes privés du client (pas de lecture Firestore possible en liste, cf. règles) —
+  // chargées une fois, sans temps réel.
+  useEffect(() => {
+    if (authLoading || !firebaseUser) { setPrivateItems([]); return }
+    let cancelled = false
+    fetchMyPrivateGroupSessions().then(list => {
+      if (cancelled) return
+      const now = Date.now()
+      setPrivateItems(list
+        .filter(s => s.status === 'planned' && new Date(s.startAt).getTime() >= now)
+        .map(s => ({
+          id: s.id, title: s.title, description: s.description, coachNames: s.coachNames,
+          serviceId: s.serviceId, startAt: new Date(s.startAt), maxParticipants: s.maxParticipants,
+          price: s.price, level: s.level as GroupSessionLevel | undefined, confirmedCount: s.confirmedCount,
+          isEnrolled: !!s.myStatus, privateGroupName: s.privateGroupName,
+        })))
+    })
+    return () => { cancelled = true }
+  }, [firebaseUser, authLoading])
 
   // Services proposant au moins une séance à venir — seuls ceux-là apparaissent comme filtres
   const availableServiceIds = useMemo(() => new Set(items.map(gs => gs.serviceId).filter(Boolean)), [items])
@@ -352,6 +377,14 @@ export default function ClientGroupSessionsPage() {
                             {gs.title}
                           </p>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                            {gs.privateGroupName && (
+                              <span style={{
+                                fontSize: 10, fontWeight: 600, color: theme.secondary, background: theme.chipBg,
+                                padding: '2px 7px', borderRadius: 20, whiteSpace: 'nowrap',
+                              }}>
+                                {gs.privateGroupName}
+                              </span>
+                            )}
                             {gs.level && (
                               <span style={{
                                 fontSize: 10, fontWeight: 600, color: theme.secondary, background: theme.chipBg,
