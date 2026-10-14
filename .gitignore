@@ -48,5 +48,6 @@ ui-debug.log
 # credentials sensibles
 scripts/service-account.json
 scripts/service-account-dev.json
+scripts/*.csv
 
 .vercel
