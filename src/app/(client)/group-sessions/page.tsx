@@ -7,7 +7,7 @@ import {
   format, isToday, isSameDay, startOfWeek, endOfWeek, addWeeks, subWeeks, addDays, isWithinInterval,
 } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react'
 import { db } from '@/lib/firebase/firestore'
 import { useAuth } from '@/lib/hooks/useAuth'
 import { useClientProfile } from '@/lib/hooks/useClientProfile'
@@ -35,6 +35,8 @@ interface GroupSessionListItem {
   privateGroupName?: string
 }
 
+const SHOW_DAYS_KEY = 'br_planning_show_days'
+
 export default function ClientGroupSessionsPage() {
   const { firebaseUser, loading: authLoading } = useAuth()
   const { profile } = useClientProfile()
@@ -47,6 +49,18 @@ export default function ClientGroupSessionsPage() {
 
   const [filterServiceId, setFilterServiceId] = useState('')
   const [weekAnchor, setWeekAnchor] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }))
+  // Pastilles des jours repliables (place limitée sur téléphone) — repliées par défaut, choix
+  // mémorisé dans le navigateur.
+  const [showDays, setShowDays] = useState(false)
+  useEffect(() => {
+    try { setShowDays(localStorage.getItem(SHOW_DAYS_KEY) === '1') } catch { /* stockage indisponible */ }
+  }, [])
+  function toggleDays() {
+    setShowDays(v => {
+      try { localStorage.setItem(SHOW_DAYS_KEY, v ? '0' : '1') } catch { /* stockage indisponible */ }
+      return !v
+    })
+  }
 
   useEffect(() => {
     if (authLoading) return
@@ -160,14 +174,24 @@ export default function ClientGroupSessionsPage() {
           <button onClick={() => setWeekAnchor(w => subWeeks(w, 1))} aria-label="Semaine précédente" className="press-effect" style={roundButton}>
             <ChevronLeft size={16} />
           </button>
-          <p style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>
+          <button
+            onClick={toggleDays}
+            aria-expanded={showDays}
+            aria-label={showDays ? 'Masquer les jours' : 'Afficher les jours'}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6, height: 36, padding: '0 12px', borderRadius: 9999,
+              border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit', color: C.ink,
+              fontSize: 15, fontWeight: 600,
+            }}
+          >
             {isCurrentWeek ? 'Cette semaine' : `${format(weekStart, 'd MMM', { locale: fr })} – ${format(weekEnd, 'd MMM', { locale: fr })}`}
-          </p>
+            {showDays ? <ChevronUp size={15} color={C.muted} /> : <ChevronDown size={15} color={C.muted} />}
+          </button>
           <button onClick={() => setWeekAnchor(w => addWeeks(w, 1))} aria-label="Semaine suivante" className="press-effect" style={roundButton}>
             <ChevronRight size={16} />
           </button>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginTop: 12 }}>
+        {showDays && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginTop: 12 }}>
           {weekDays.map(day => {
             const key = format(day, 'yyyy-MM-dd')
             const hasSessions = daysWithSessions.has(key)
@@ -193,7 +217,7 @@ export default function ClientGroupSessionsPage() {
               </button>
             )
           })}
-        </div>
+        </div>}
       </div>
 
       {/* Filtre service — seulement s'il y a un vrai choix */}
