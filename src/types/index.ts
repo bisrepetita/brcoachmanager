@@ -601,7 +601,6 @@ export interface PrivateSessionView {
   title: string
   description?: string
   coachNames?: string[]
-  locationId?: string
   startAt: string
   endAt: string
   maxParticipants: number

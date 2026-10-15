@@ -13,9 +13,8 @@ import { useToast } from '@/components/ui/Toast'
 import { db } from '@/lib/firebase/firestore'
 import { useAuth } from '@/lib/hooks/useAuth'
 import { useClientProfile } from '@/lib/hooks/useClientProfile'
-import { useCollection } from '@/lib/hooks/useCollection'
 import { cancelGroupSessionEnrollment, fetchMyPrivateGroupSessions } from '@/lib/services/group-session.service'
-import type { GroupSession, GroupSessionEnrollmentStatus, Location, PrivateSessionView } from '@/types'
+import type { GroupSession, GroupSessionEnrollmentStatus, PrivateSessionView } from '@/types'
 import { BrandLogo } from '@/components/shared/BrandLogo'
 
 const DEFAULT_CANCELLATION_DEADLINE_HOURS = 24
@@ -28,7 +27,6 @@ interface HomeSession {
   startAt: Date
   endAt: Date
   coachNames: string[]
-  locationId?: string
   spotsLeft: number
   myStatus?: GroupSessionEnrollmentStatus
   viaClassPass?: boolean
@@ -50,7 +48,6 @@ export default function ClientHomePage() {
   const [privateVersion, setPrivateVersion] = useState(0)
   const [deadlineHours, setDeadlineHours] = useState(DEFAULT_CANCELLATION_DEADLINE_HOURS)
   const [whatsappPhone, setWhatsappPhone] = useState('')
-  const { data: locations } = useCollection<Location>('locations', [], { enabled: signedIn })
 
   useEffect(() => {
     if (!signedIn) { setPublicLoading(false); return }
@@ -92,7 +89,7 @@ export default function ClientHomePage() {
       const mine = profile ? active.find(e => e.clientId === profile.clientId) : undefined
       return [{
         id: gs.id, title: gs.title, startAt: gs.startAt.toDate(), endAt: gs.endAt.toDate(),
-        coachNames: gs.coachNames ?? [], locationId: gs.locationId,
+        coachNames: gs.coachNames ?? [],
         spotsLeft: gs.maxParticipants - active.length,
         myStatus: mine?.status, viaClassPass: !!mine?.classPassBookingId,
       }]
@@ -101,7 +98,7 @@ export default function ClientHomePage() {
       .filter(s => s.status === 'planned' && new Date(s.startAt).getTime() >= now)
       .map((s): HomeSession => ({
         id: s.id, title: s.title, startAt: new Date(s.startAt), endAt: new Date(s.endAt),
-        coachNames: s.coachNames ?? [], locationId: s.locationId,
+        coachNames: s.coachNames ?? [],
         spotsLeft: s.maxParticipants - s.confirmedCount,
         myStatus: s.myEnrollment?.status,
       }))
@@ -111,10 +108,6 @@ export default function ClientHomePage() {
   const myUpcoming = sessions.filter(s => s.myStatus)
   const next = myUpcoming[0]
   const openSlots = sessions.filter(s => !s.myStatus && s.spotsLeft > 0).slice(0, 3)
-  const placeOf = (s: HomeSession) => {
-    const loc = locations.find(l => l.id === s.locationId)
-    return loc?.address || loc?.name || ''
-  }
 
   const loading = authLoading || profileLoading || publicLoading
   const initial = profile?.firstName.trim().charAt(0).toUpperCase() ?? ''
@@ -155,7 +148,6 @@ export default function ClientHomePage() {
           ) : next ? (
             <NextSessionCard
               session={next}
-              place={placeOf(next)}
               deadlineHours={deadlineHours}
               otherCount={myUpcoming.length - 1}
               onCancelled={() => setPrivateVersion(v => v + 1)}
@@ -222,9 +214,8 @@ function ReferralCard() {
   )
 }
 
-function NextSessionCard({ session, place, deadlineHours, otherCount, onCancelled, onPay }: {
+function NextSessionCard({ session, deadlineHours, otherCount, onCancelled, onPay }: {
   session: HomeSession
-  place: string
   deadlineHours: number
   otherCount: number
   onCancelled: () => void
@@ -260,7 +251,6 @@ function NextSessionCard({ session, place, deadlineHours, otherCount, onCancelle
           <p style={{ margin: '3px 0 0', fontSize: 14, color: C.muted }}>
             {format(session.startAt, 'HH:mm')} – {format(session.endAt, 'HH:mm')}{coaches && ` · avec ${coaches}`}
           </p>
-          {place && <p style={{ margin: '2px 0 0', fontSize: 14, color: C.muted }}>{place}</p>}
           {pending && <p style={{ margin: '6px 0 0', fontSize: 13, fontWeight: 600, color: '#B26A00' }}>Paiement en attente</p>}
         </div>
       </Link>
