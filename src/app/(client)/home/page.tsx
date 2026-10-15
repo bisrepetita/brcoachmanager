@@ -3,9 +3,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { collection, doc, getDoc, limit, onSnapshot, orderBy, query, Timestamp, where } from 'firebase/firestore'
+import { collection, limit, onSnapshot, orderBy, query, Timestamp, where } from 'firebase/firestore'
 import { format } from 'date-fns'
-import { fr } from 'date-fns/locale'
 import { getAuth } from 'firebase/auth'
 import { ArrowRight, MessageSquare, Share } from 'lucide-react'
 import { firebaseApp } from '@/lib/firebase/config'
@@ -16,8 +15,9 @@ import { useClientProfile } from '@/lib/hooks/useClientProfile'
 import { cancelGroupSessionEnrollment, fetchMyPrivateGroupSessions } from '@/lib/services/group-session.service'
 import type { GroupSession, GroupSessionEnrollmentStatus, PrivateSessionView } from '@/types'
 import { BrandLogo } from '@/components/shared/BrandLogo'
+import { useClientSettings } from '@/lib/hooks/useClientSettings'
+import { C, card, iconCircle, arrowCircle, primaryButton, secondaryButton, hint, pageTitle, DateBox, coachFirstNames } from '@/components/client/ClientUI'
 
-const DEFAULT_CANCELLATION_DEADLINE_HOURS = 24
 const PRIVATE_SESSION_MESSAGE = 'Bonjour, j\'aimerais réserver une séance privée.'
 
 // Vue commune aux séances publiques (lecture Firestore) et aux séances de groupe privé (route API)
@@ -32,10 +32,6 @@ interface HomeSession {
   viaClassPass?: boolean
 }
 
-const C = {
-  bg: '#F1F1F0', card: '#FAFAFA', soft: '#E6E6E5', ink: '#1C1C1C', muted: '#6E6E6B', line: '#E3E3E1',
-}
-
 export default function ClientHomePage() {
   const router = useRouter()
   const { firebaseUser, loading: authLoading } = useAuth()
@@ -46,8 +42,7 @@ export default function ClientHomePage() {
   const [publicLoading, setPublicLoading] = useState(true)
   const [privateSessions, setPrivateSessions] = useState<PrivateSessionView[]>([])
   const [privateVersion, setPrivateVersion] = useState(0)
-  const [deadlineHours, setDeadlineHours] = useState(DEFAULT_CANCELLATION_DEADLINE_HOURS)
-  const [whatsappPhone, setWhatsappPhone] = useState('')
+  const { deadlineHours, whatsappPhone } = useClientSettings()
 
   useEffect(() => {
     if (!signedIn) { setPublicLoading(false); return }
@@ -71,15 +66,6 @@ export default function ClientHomePage() {
     fetchMyPrivateGroupSessions().then(list => { if (!cancelled) setPrivateSessions(list) })
     return () => { cancelled = true }
   }, [signedIn, privateVersion])
-
-  useEffect(() => {
-    if (!signedIn) return
-    getDoc(doc(db, 'settings', 'global')).then(snap => {
-      const data = snap.data()
-      setDeadlineHours((data?.['groupSessionCancellationDeadlineHours'] as number | undefined) ?? DEFAULT_CANCELLATION_DEADLINE_HOURS)
-      setWhatsappPhone((data?.['clientWhatsappPhone'] as string | undefined) ?? '')
-    }).catch(() => {})
-  }, [signedIn])
 
   const sessions = useMemo((): HomeSession[] => {
     const now = Date.now()
@@ -133,7 +119,7 @@ export default function ClientHomePage() {
         )}
       </header>
 
-      <h1 style={{ margin: '40px 0 24px', fontSize: 36, fontWeight: 400, letterSpacing: '-0.035em', lineHeight: 1.1 }}>
+      <h1 style={{ ...pageTitle, margin: '40px 0 24px' }}>
         {authLoading || profileLoading ? ' ' : profile ? `Bonjour ${profile.firstName}` : 'Bonjour'}
       </h1>
 
@@ -226,7 +212,7 @@ function NextSessionCard({ session, deadlineHours, otherCount, onCancelled, onPa
   const [error, setError] = useState('')
   const pending = session.myStatus === 'pending_payment'
   const tooLate = Date.now() > session.startAt.getTime() - deadlineHours * 3600_000
-  const coaches = session.coachNames.map(n => n.trim().split(' ')[0]).filter(Boolean).join(' & ')
+  const coaches = coachFirstNames(session.coachNames)
 
   async function cancel() {
     setBusy(true)
@@ -327,22 +313,6 @@ function OpenSlotsCard({ slots, freeSession }: { slots: HomeSession[]; freeSessi
   )
 }
 
-function DateBox({ date, dark }: { date: Date; dark?: boolean }) {
-  const size = dark ? { width: 64, height: 68, radius: 14, day: 26 } : { width: 46, height: 50, radius: 10, day: 19 }
-  return (
-    <div style={{
-      width: size.width, height: size.height, borderRadius: size.radius, flexShrink: 0,
-      background: dark ? C.ink : C.soft, color: dark ? '#fff' : C.ink,
-      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-    }}>
-      <span style={{ fontSize: dark ? 11 : 9, fontWeight: 500, textTransform: 'uppercase', opacity: dark ? 0.85 : 0.7, lineHeight: 1.2 }}>
-        {format(date, 'EEE', { locale: fr })}
-      </span>
-      <span style={{ fontSize: size.day, fontWeight: 600, lineHeight: 1.05 }}>{format(date, 'd')}</span>
-    </div>
-  )
-}
-
 /** Lien wa.me à partir d'un numéro saisi librement (« +41 79 … », « 079 … », « 0041 … »). */
 function whatsappLink(phone: string): string | null {
   let digits = phone.replace(/\D/g, '')
@@ -352,21 +322,7 @@ function whatsappLink(phone: string): string | null {
   return `https://wa.me/${digits}?text=${encodeURIComponent(PRIVATE_SESSION_MESSAGE)}`
 }
 
-const card: React.CSSProperties = { background: C.card, borderRadius: 22, padding: 18 }
 const linkCard: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 14, padding: 16, color: C.ink, textDecoration: 'none' }
-const iconCircle: React.CSSProperties = { width: 44, height: 44, borderRadius: 9999, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }
-const arrowCircle: React.CSSProperties = { width: 32, height: 32, borderRadius: 9999, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }
-const primaryButton: React.CSSProperties = {
-  height: 46, borderRadius: 9999, border: 'none', background: C.ink, color: '#fff', cursor: 'pointer',
-  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 600,
-  textDecoration: 'none', fontFamily: 'inherit',
-}
-const secondaryButton: React.CSSProperties = {
-  height: 46, borderRadius: 9999, border: '1px solid #CFCFCC', background: 'transparent', color: C.ink, cursor: 'pointer',
-  display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 20px', fontSize: 14, fontWeight: 500,
-  textDecoration: 'none', flexShrink: 0, fontFamily: 'inherit',
-}
 const footerLink: React.CSSProperties = {
   display: 'block', textAlign: 'center', padding: '12px 0 4px', marginTop: 4, fontSize: 14, color: C.ink, textDecoration: 'none',
 }
-const hint: React.CSSProperties = { margin: '8px 0 0', fontSize: 12, color: C.muted }

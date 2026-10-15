@@ -1,12 +1,12 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { doc, onSnapshot, getDoc } from 'firebase/firestore'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { ChevronLeft, Tag, Repeat, MapPin, ChevronDown, ChevronUp, X } from 'lucide-react'
-import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
+import { ChevronLeft, Tag, Repeat, MapPin, ChevronDown, ChevronUp, X, Check } from 'lucide-react'
 import { db } from '@/lib/firebase/firestore'
 import { useClientProfile } from '@/lib/hooks/useClientProfile'
 import { useAuth } from '@/lib/hooks/useAuth'
@@ -18,6 +18,10 @@ import {
 import { findClientPacks, isPackUsable } from '@/lib/services/pack.service'
 import { GROUP_SESSION_LEVEL_LABELS, type GroupSession, type Discount, type ClientSubscription, type Building, type ClientPack } from '@/types'
 import { REFERRAL_FREE_LABEL } from '@/lib/utils/referral'
+import { useClientSettings } from '@/lib/hooks/useClientSettings'
+import {
+  C, card, iconCircle, arrowCircle, primaryButton, secondaryButton, hint, pageTitle, DateBox, Pill, coachFirstNames,
+} from '@/components/client/ClientUI'
 
 interface PublicGroupSessionView {
   id: string
@@ -25,6 +29,7 @@ interface PublicGroupSessionView {
   description?: string
   coachNames?: string[]
   startAt: string
+  endAt?: string
   maxParticipants: number
   price: number
   level?: GroupSession['level']
@@ -42,7 +47,6 @@ export default function ClientGroupSessionDetailPage() {
   const [loading, setLoading] = useState(true)
   const [publicSession, setPublicSession] = useState<PublicGroupSessionView | null>(null)
   const [publicLoading, setPublicLoading] = useState(true)
-  const [publicLightboxUrl, setPublicLightboxUrl] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [hasOverlap, setHasOverlap] = useState(false)
@@ -59,6 +63,15 @@ export default function ClientGroupSessionDetailPage() {
   const [accessBuilding, setAccessBuilding] = useState<Building | null>(null)
   const [showAccessInfo, setShowAccessInfo] = useState(false)
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
+  const [confirmingCancel, setConfirmingCancel] = useState(false)
+  const { deadlineHours } = useClientSettings()
+
+  // Retour à la page précédente (accueil, planning, mes inscriptions…) ; planning à défaut
+  // d'historique (lien ouvert depuis un mail).
+  function goBack() {
+    if (window.history.length > 1) router.back()
+    else router.push('/group-sessions' as never)
+  }
 
   // Client connecté : lecture Firestore directe temps réel (comportement existant, inchangé).
   // Anonyme : les règles Firestore exigent isClient()/isCoach(), donc on ne tente même pas la
@@ -209,11 +222,11 @@ export default function ClientGroupSessionDetailPage() {
   const referralFree = !groupSession?.privateGroupId && !!profile?.referralFreeSessionAvailable
 
   async function handleCancel() {
-    if (!confirm('Annuler ton inscription à cette séance ?')) return
     setBusy(true)
     setError('')
     try {
       await cancelGroupSessionEnrollment(params.id)
+      setConfirmingCancel(false)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur lors de l\'annulation.')
     } finally {
@@ -225,401 +238,410 @@ export default function ClientGroupSessionDetailPage() {
   // vérification abonnement/remise/inscription (nécessitent une identité client), juste le prix
   // de base et un bouton qui renvoie vers la connexion.
   if (!authLoading && !firebaseUser) {
-    if (publicLoading) {
-      return (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
-          <p style={{ color: '#A09890', fontSize: 14 }}>Chargement…</p>
-        </div>
-      )
-    }
-    if (!publicSession) {
-      return (
-        <div style={{ padding: 40, textAlign: 'center' }}>
-          <p style={{ color: '#A09890', fontSize: 14 }}>Séance introuvable.</p>
-        </div>
-      )
-    }
+    if (publicLoading) return <Shell onBack={goBack}><p style={loadingText}>Chargement…</p></Shell>
+    if (!publicSession) return <Shell onBack={goBack}><p style={loadingText}>Séance introuvable.</p></Shell>
 
-    const confirmedCount = publicSession.confirmedCount
-    const isFull = confirmedCount >= publicSession.maxParticipants
-    const date = format(new Date(publicSession.startAt), 'EEEE d MMMM yyyy · HH:mm', { locale: fr })
+    const isFull = publicSession.confirmedCount >= publicSession.maxParticipants
     const loginHref = `/login?redirect=${encodeURIComponent(`/group-sessions/${params.id}`)}`
 
     return (
-      <>
-        <TopBar
+      <Shell onBack={goBack} level={publicSession.level}>
+        <SessionHeader
           title={publicSession.title}
-          left={
-            <button onClick={() => router.push('/group-sessions' as never)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
-              <ChevronLeft size={20} color="#1A1A18" />
-            </button>
-          }
+          startAt={new Date(publicSession.startAt)}
+          endAt={publicSession.endAt ? new Date(publicSession.endAt) : undefined}
+          coachNames={publicSession.coachNames}
         />
-        <TopBarSpacer />
-
-        <div style={{ padding: '12px 16px 100px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div style={{ background: '#fff', borderRadius: 10, padding: 14 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-              <p style={{ fontSize: 13, color: '#7A7570', margin: 0, textTransform: 'capitalize' }}>{date}</p>
-              {publicSession.level && (
-                <span style={{ fontSize: 11, fontWeight: 600, color: '#1A1A18', background: '#F0EDE8', padding: '2px 8px', borderRadius: 20, flexShrink: 0 }}>
-                  {GROUP_SESSION_LEVEL_LABELS[publicSession.level]}
-                </span>
-              )}
-            </div>
-            {publicSession.coachNames && publicSession.coachNames.length > 0 && (
-              <p style={{ fontSize: 13, color: '#7A7570', margin: '4px 0 0' }}>
-                Avec <span style={{ fontWeight: 600, color: '#1A1A18' }}>{publicSession.coachNames.join(' & ')}</span>
-              </p>
-            )}
-            {publicSession.description && (
-              <p style={{ fontSize: 14, color: '#1A1A18', margin: '8px 0 0' }}>{publicSession.description}</p>
-            )}
-            <div style={{ display: 'flex', gap: 16, marginTop: 12 }}>
-              <div>
-                <p style={{ fontSize: 11, color: '#A09890', margin: 0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Places</p>
-                <p style={{ fontSize: 16, fontWeight: 600, color: isFull ? '#C0392B' : '#1A1A18', margin: '2px 0 0', fontFamily: 'monospace' }}>
-                  {confirmedCount}/{publicSession.maxParticipants}
-                </p>
-              </div>
-              <div>
-                <p style={{ fontSize: 11, color: '#A09890', margin: 0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Prix</p>
-                <p style={{ fontSize: 16, fontWeight: 600, margin: '2px 0 0', fontFamily: 'monospace', color: '#1A1A18' }}>
-                  {publicSession.price.toFixed(2)} CHF
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {(publicSession.accessInstructions || (publicSession.accessPhotos && publicSession.accessPhotos.length > 0)) && (
-            <div id="acces" style={{ background: '#fff', borderRadius: 10, padding: 14 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <MapPin size={15} color="#7A7570" style={{ flexShrink: 0 }} />
-                <span style={{ fontSize: 14, fontWeight: 600, color: '#1A1A18' }}>Comment nous trouver</span>
-              </div>
-              <div style={{ marginTop: 10 }}>
-                {publicSession.accessInstructions && (
-                  <p style={{ fontSize: 13, color: '#1A1A18', margin: 0, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
-                    {publicSession.accessInstructions}
-                  </p>
-                )}
-                {publicSession.accessPhotos && publicSession.accessPhotos.length > 0 && (
-                  <div style={{ display: 'flex', gap: 6, marginTop: 10, overflowX: 'auto' }}>
-                    {publicSession.accessPhotos.map((url, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => setPublicLightboxUrl(url)}
-                        style={{
-                          width: 90, height: 90, borderRadius: 8, flexShrink: 0, border: 'none', padding: 0, cursor: 'zoom-in',
-                          backgroundImage: `url(${url})`, backgroundSize: 'cover', backgroundPosition: 'center',
-                        }}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          <button
-            onClick={() => router.push(loginHref as never)}
-            disabled={isFull}
-            style={{
-              height: 44, borderRadius: 10, border: 'none', cursor: isFull ? 'not-allowed' : 'pointer',
-              background: isFull ? '#D5D1C9' : '#1A1A18', color: '#fff', fontSize: 14, fontWeight: 600,
-            }}
-          >
-            {isFull ? 'Complet' : 'Se connecter pour réserver'}
-          </button>
-        </div>
-
-        {publicLightboxUrl && (
-          <div
-            onClick={() => setPublicLightboxUrl(null)}
-            style={{
-              position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.9)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
-            }}
-          >
-            <button
-              onClick={() => setPublicLightboxUrl(null)}
-              style={{
-                position: 'absolute', top: 16, right: 16, width: 36, height: 36, borderRadius: '50%',
-                background: 'rgba(255,255,255,0.15)', border: 'none', cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}
-            >
-              <X size={18} color="#fff" />
-            </button>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={publicLightboxUrl} alt="" style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 8, objectFit: 'contain' }} />
-          </div>
+        <StatsRow
+          confirmedCount={publicSession.confirmedCount}
+          maxParticipants={publicSession.maxParticipants}
+          price={<PriceValue finalPrice={publicSession.price} />}
+        />
+        {publicSession.description && <DescriptionCard text={publicSession.description} />}
+        {(publicSession.accessInstructions || (publicSession.accessPhotos?.length ?? 0) > 0) && (
+          <AccessCard
+            instructions={publicSession.accessInstructions}
+            photos={publicSession.accessPhotos}
+            open
+            onPhoto={setLightboxUrl}
+          />
         )}
-      </>
+        {isFull ? (
+          <button disabled style={{ ...primaryButton, background: C.soft, color: C.muted, cursor: 'not-allowed' }}>Complet</button>
+        ) : (
+          <Link href={loginHref as never} style={{ ...primaryButton, height: 50 }}>Se connecter pour réserver</Link>
+        )}
+        {lightboxUrl && <Lightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />}
+      </Shell>
     )
   }
 
-  if (loading || profileLoading) {
-    return (
-      <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
-        <p style={{ color: '#A09890', fontSize: 14 }}>Chargement…</p>
-      </div>
-    )
-  }
-
-  if (!groupSession) {
-    return (
-      <div style={{ padding: 40, textAlign: 'center' }}>
-        <p style={{ color: '#A09890', fontSize: 14 }}>Séance introuvable.</p>
-      </div>
-    )
-  }
+  if (loading || profileLoading) return <Shell onBack={goBack}><p style={loadingText}>Chargement…</p></Shell>
+  if (!groupSession) return <Shell onBack={goBack}><p style={loadingText}>Séance introuvable.</p></Shell>
 
   const confirmedCount = groupSession.enrollments.filter(e => e.status !== 'cancelled').length
   const isFull = confirmedCount >= groupSession.maxParticipants
   const myEnrollment = profile
     ? groupSession.enrollments.find(e => e.clientId === profile.clientId && e.status !== 'cancelled')
     : undefined
-  const date = groupSession.startAt?.toDate ? format(groupSession.startAt.toDate(), 'EEEE d MMMM yyyy · HH:mm', { locale: fr }) : '—'
+  const startAt = groupSession.startAt?.toDate?.()
+  const tooLateToCancel = !!startAt && Date.now() > startAt.getTime() - deadlineHours * 3600_000
+  const viaClassPass = !!myEnrollment?.classPassBookingId
+
+  // Prix affiché : même priorité que la route enroll (parrainage > abonnement > pack > 1re
+  // réservation offerte > remise) — ou, une fois inscrit, ce qui a réellement été appliqué.
+  const subscriptionCoveredNow = !referralFree && subscriptionCovers && subscriptionQuotaOk
+  const packNow = !referralFree && !subscriptionCoveredNow && !!coveringPack
+  const priceNode = isPrivate ? (
+    <PriceValue finalPrice={groupSession.price} free={groupSession.price === 0} />
+  ) : (() => {
+    const originalPrice = myEnrollment
+      ? (myEnrollment.clientPackId ? groupSession.price : myEnrollment.originalAmountDue)
+      : (referralFree || subscriptionCoveredNow || packNow || firstBookingFree || clientDiscount) ? groupSession.price : undefined
+    const finalPrice = myEnrollment
+      ? myEnrollment.amountDue
+      : referralFree || subscriptionCoveredNow || packNow || firstBookingFree ? 0 : clientDiscount ? computeDiscountedAmount(groupSession.price, clientDiscount) : groupSession.price
+    const label = myEnrollment
+      ? (myEnrollment.clientPackId ? 'Pack' : myEnrollment.discountLabel)
+      : referralFree ? REFERRAL_FREE_LABEL : subscriptionCoveredNow ? 'Abonnement' : packNow ? 'Pack' : firstBookingFree ? 'Première réservation offerte' : clientDiscount ? discountLabel(clientDiscount) : undefined
+    return <PriceValue finalPrice={finalPrice} originalPrice={originalPrice} label={label && (PLAIN_LABELS.includes(label) ? label : `Remise ${label}`)} />
+  })()
+
+  const enrollLabel = isFull ? 'Complet'
+    : busy ? 'Inscription…'
+    : isPrivate ? (groupSession.price === 0 ? 'S\'inscrire gratuitement' : 'S\'inscrire')
+    : referralFree ? 'Réserver ma séance offerte'
+    : (subscriptionCovers && subscriptionQuotaOk) ? 'Réserver avec mon abonnement'
+    : coveringPack ? `Réserver avec mon pack · ${coveringPack.creditsRemaining} restante${coveringPack.creditsRemaining > 1 ? 's' : ''}`
+    : firstBookingFree ? 'S\'inscrire gratuitement'
+    : 'Réserver'
 
   return (
-    <>
-      <TopBar
+    <Shell onBack={goBack} level={groupSession.level}>
+      <SessionHeader
         title={groupSession.title}
-        left={
-          <button onClick={() => router.push('/group-sessions' as never)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
-            <ChevronLeft size={20} color="#1A1A18" />
-          </button>
-        }
+        subtitle={isPrivate ? groupSession.privateGroupName : undefined}
+        startAt={startAt}
+        endAt={groupSession.endAt?.toDate?.()}
+        coachNames={groupSession.coachNames}
+        status={myEnrollment
+          ? (myEnrollment.status === 'confirmed'
+            ? <Pill tone="green"><Check size={13} strokeWidth={2.5} />Réservation confirmée</Pill>
+            : <Pill tone="amber">Place réservée · paiement en attente</Pill>)
+          : undefined}
       />
-      <TopBarSpacer />
 
-      <div style={{ padding: '12px 16px 100px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <div style={{ background: '#fff', borderRadius: 10, padding: 14 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-            <p style={{ fontSize: 13, color: '#7A7570', margin: 0, textTransform: 'capitalize' }}>{date}</p>
-            {groupSession.level && (
-              <span style={{ fontSize: 11, fontWeight: 600, color: '#1A1A18', background: '#F0EDE8', padding: '2px 8px', borderRadius: 20, flexShrink: 0 }}>
-                {GROUP_SESSION_LEVEL_LABELS[groupSession.level]}
-              </span>
-            )}
-          </div>
-          {groupSession.coachNames && groupSession.coachNames.length > 0 && (
-            <p style={{ fontSize: 13, color: '#7A7570', margin: '4px 0 0' }}>
-              Avec <span style={{ fontWeight: 600, color: '#1A1A18' }}>{groupSession.coachNames.join(' & ')}</span>
-            </p>
-          )}
-          {groupSession.description && (
-            <p style={{ fontSize: 14, color: '#1A1A18', margin: '8px 0 0' }}>{groupSession.description}</p>
-          )}
-          <div style={{ display: 'flex', gap: 16, marginTop: 12 }}>
-            <div>
-              <p style={{ fontSize: 11, color: '#A09890', margin: 0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Places</p>
-              <p style={{ fontSize: 16, fontWeight: 600, color: isFull ? '#C0392B' : '#1A1A18', margin: '2px 0 0', fontFamily: 'monospace' }}>
-                {confirmedCount}/{groupSession.maxParticipants}
-              </p>
-            </div>
-            <div>
-              <p style={{ fontSize: 11, color: '#A09890', margin: 0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{isPrivate ? 'Participation' : 'Prix'}</p>
-              {isPrivate ? (
-                <>
-                  <p style={{ fontSize: 16, fontWeight: 600, margin: '2px 0 0', fontFamily: 'monospace', color: groupSession.price === 0 ? '#2D7A4F' : '#1A1A18' }}>
-                    {groupSession.price === 0 ? 'Gratuit' : `${groupSession.price.toFixed(2)} CHF`}
-                  </p>
-                  <p style={{ fontSize: 11, color: '#7A7570', margin: '2px 0 0' }}>{groupSession.privateGroupName}</p>
-                </>
-              ) : (() => {
-                const subscriptionCoveredNow = !referralFree && subscriptionCovers && subscriptionQuotaOk
-                const packNow = !referralFree && !subscriptionCoveredNow && !!coveringPack
-                const originalPrice = myEnrollment
-                  ? (myEnrollment.clientPackId ? groupSession.price : myEnrollment.originalAmountDue)
-                  : (referralFree || subscriptionCoveredNow || packNow || firstBookingFree || clientDiscount) ? groupSession.price : undefined
-                const finalPrice = myEnrollment
-                  ? myEnrollment.amountDue
-                  : referralFree || subscriptionCoveredNow || packNow ? 0 : firstBookingFree ? 0 : clientDiscount ? computeDiscountedAmount(groupSession.price, clientDiscount) : groupSession.price
-                const label = myEnrollment
-                  ? (myEnrollment.clientPackId ? 'Pack' : myEnrollment.discountLabel)
-                  : referralFree ? REFERRAL_FREE_LABEL : subscriptionCoveredNow ? 'Abonnement' : packNow ? 'Pack' : firstBookingFree ? 'Première réservation offerte' : clientDiscount ? discountLabel(clientDiscount) : undefined
-                return (
-                  <>
-                    <p style={{ fontSize: 16, fontWeight: 600, margin: '2px 0 0', fontFamily: 'monospace' }}>
-                      {originalPrice !== undefined && (
-                        <span style={{ textDecoration: 'line-through', color: '#A09890', marginRight: 6, fontSize: 13 }}>
-                          {originalPrice.toFixed(2)} CHF
-                        </span>
-                      )}
-                      <span style={{ color: originalPrice !== undefined ? '#2D7A4F' : '#1A1A18' }}>{finalPrice.toFixed(2)} CHF</span>
-                    </p>
-                    {label && <p style={{ fontSize: 11, color: '#2D7A4F', margin: '2px 0 0' }}>{label === 'Pack' || label === 'Abonnement' ? label : `Remise ${label}`}</p>}
-                  </>
-                )
-              })()}
-            </div>
-          </div>
-        </div>
+      <StatsRow
+        confirmedCount={confirmedCount}
+        maxParticipants={groupSession.maxParticipants}
+        priceLabel={isPrivate ? 'Participation' : 'Prix'}
+        price={priceNode}
+      />
 
-        {accessBuilding && (accessBuilding.accessInstructions || (accessBuilding.photos && accessBuilding.photos.length > 0)) && (
-          <div id="acces" style={{ background: '#fff', borderRadius: 10, padding: 14 }}>
-            <button
-              onClick={() => setShowAccessInfo(v => !v)}
-              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-            >
-              <MapPin size={15} color="#7A7570" style={{ flexShrink: 0 }} />
-              <span style={{ flex: 1, textAlign: 'left', fontSize: 14, fontWeight: 600, color: '#1A1A18' }}>Comment nous trouver</span>
-              {showAccessInfo ? <ChevronUp size={16} color="#A09890" /> : <ChevronDown size={16} color="#A09890" />}
-            </button>
-            {showAccessInfo && (
-              <div style={{ marginTop: 10 }}>
-                {accessBuilding.accessInstructions && (
-                  <p style={{ fontSize: 13, color: '#1A1A18', margin: 0, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
-                    {accessBuilding.accessInstructions}
-                  </p>
-                )}
-                {accessBuilding.photos && accessBuilding.photos.length > 0 && (
-                  <div style={{ display: 'flex', gap: 6, marginTop: 10, overflowX: 'auto' }}>
-                    {accessBuilding.photos.map((url, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => setLightboxUrl(url)}
-                        style={{
-                          width: 90, height: 90, borderRadius: 8, flexShrink: 0, border: 'none', padding: 0, cursor: 'zoom-in',
-                          backgroundImage: `url(${url})`, backgroundSize: 'cover', backgroundPosition: 'center',
-                        }}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
+      {groupSession.description && <DescriptionCard text={groupSession.description} />}
 
-        {error && (
-          <div style={{ padding: '10px 12px', borderRadius: 8, background: '#FDECEA', color: '#C0392B', fontSize: 13 }}>
-            {error}
-          </div>
-        )}
+      {accessBuilding && (accessBuilding.accessInstructions || (accessBuilding.photos?.length ?? 0) > 0) && (
+        <AccessCard
+          instructions={accessBuilding.accessInstructions}
+          photos={accessBuilding.photos}
+          open={showAccessInfo}
+          onToggle={() => setShowAccessInfo(v => !v)}
+          onPhoto={setLightboxUrl}
+        />
+      )}
 
-        {hasOverlap && !myEnrollment && (
-          <div style={{ padding: '10px 12px', borderRadius: 8, background: '#FFF4E5', color: '#B26A00', fontSize: 13 }}>
-            Tu as déjà une autre séance sur ce créneau. Tu peux quand même t&apos;inscrire, mais vérifie qu&apos;il n&apos;y a pas de conflit.
-          </div>
-        )}
+      {error && <Notice tone="red">{error}</Notice>}
 
-        {!profile ? (
-          <p style={{ fontSize: 13, color: '#A09890', textAlign: 'center' }}>
-            Ton compte n&apos;est pas encore lié à une fiche client. Contacte ton coach.
-          </p>
-        ) : myEnrollment ? (
-          myEnrollment.status === 'confirmed' ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{ padding: '10px 12px', borderRadius: 8, background: '#E8F3EE', color: '#2D7A4F', fontSize: 13, textAlign: 'center' }}>
-                Inscription confirmée ✓
-              </div>
-              <button
-                onClick={handleCancel}
-                disabled={busy}
-                style={{ height: 44, borderRadius: 10, border: 'none', cursor: 'pointer', background: '#FDECEA', color: '#C0392B', fontSize: 14, fontWeight: 600 }}
-              >
-                Se désinscrire
+      {hasOverlap && !myEnrollment && (
+        <Notice tone="amber">
+          Tu as déjà une autre séance sur ce créneau. Tu peux quand même t&apos;inscrire, mais vérifie qu&apos;il n&apos;y a pas de conflit.
+        </Notice>
+      )}
+
+      {!profile ? (
+        <p style={{ ...hint, textAlign: 'center' }}>
+          Ton compte n&apos;est pas encore lié à une fiche client. Contacte ton coach.
+        </p>
+      ) : myEnrollment ? (
+        confirmingCancel ? (
+          <div style={card}>
+            <p style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 600 }}>Annuler ta réservation ?</p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={handleCancel} disabled={busy} style={{ ...primaryButton, flex: 1 }}>
+                {busy ? 'Annulation…' : 'Oui, annuler'}
               </button>
+              <button onClick={() => setConfirmingCancel(false)} disabled={busy} style={secondaryButton}>Garder</button>
             </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{ padding: '10px 12px', borderRadius: 8, background: '#FFF4E5', color: '#B26A00', fontSize: 13, textAlign: 'center' }}>
-                Place réservée — paiement en attente
-              </div>
-              <button
-                onClick={handlePay}
-                disabled={busy}
-                style={{ height: 44, borderRadius: 10, border: 'none', cursor: 'pointer', background: '#1A1A18', color: '#fff', fontSize: 14, fontWeight: 600 }}
-              >
-                {busy ? 'Chargement...' : 'Payer maintenant'}
-              </button>
-              <button
-                onClick={handleCancel}
-                disabled={busy}
-                style={{ height: 40, borderRadius: 10, border: '1px solid #E5E1DA', cursor: 'pointer', background: '#fff', color: '#7A7570', fontSize: 13, fontWeight: 500 }}
-              >
-                Se désinscrire
-              </button>
-            </div>
-          )
+          </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {activeSubscription && !(subscriptionCovers && subscriptionQuotaOk) && !coveringPack && (
-              <div style={{ display: 'flex', gap: 8, padding: '10px 12px', borderRadius: 8, background: '#F0EDE8', color: '#1A1A18', fontSize: 13 }}>
-                <Repeat size={14} style={{ flexShrink: 0, marginTop: 2, color: '#7A7570' }} />
-                <p style={{ margin: 0 }}>
-                  {subscriptionCovers
-                    ? 'Tu as déjà utilisé toutes tes séances de la semaine avec ton abonnement.'
-                    : 'Cette séance n\'est pas incluse dans ton abonnement actuel.'}
-                  {' '}Tu peux payer le prix normal ci-dessous, ou{' '}
-                  <button onClick={() => router.push('/subscriptions' as never)} style={{ background: 'none', border: 'none', padding: 0, color: '#1A1A18', fontWeight: 600, textDecoration: 'underline', cursor: 'pointer', fontSize: 13 }}>
-                    voir les abonnements
-                  </button>.
-                </p>
-              </div>
-            )}
-            {!isPrivate && !referralFree && !(subscriptionCovers && subscriptionQuotaOk) && !coveringPack && !clientDiscount && !firstBookingFree && !isFull && (
-              showPromoInput ? (
-                <input
-                  autoFocus
-                  value={promoCodeInput}
-                  onChange={(e) => setPromoCodeInput(e.target.value.toUpperCase())}
-                  placeholder="Code promo"
-                  style={{ height: 40, borderRadius: 10, border: '1px solid #E5E1DA', padding: '0 12px', fontSize: 14, background: '#fff', outline: 'none' }}
-                />
+          <div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {myEnrollment.status === 'confirmed' ? (
+                <a href={`/api/group-sessions/calendar/${groupSession.id}`} style={{ ...primaryButton, flex: 1, height: 50 }}>Ajouter au calendrier</a>
               ) : (
-                <button
-                  onClick={() => setShowPromoInput(true)}
-                  style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                    height: 40, borderRadius: 10, border: '1px dashed #C8C4BC', background: '#F9F8F6',
-                    color: '#1A1A18', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-                  }}
-                >
-                  <Tag size={14} style={{ color: '#7A7570' }} />
-                  J&apos;ai un code promo
+                <button onClick={handlePay} disabled={busy} style={{ ...primaryButton, flex: 1, height: 50 }}>
+                  {busy ? 'Chargement…' : 'Payer maintenant'}
                 </button>
-              )
+              )}
+              <button
+                onClick={() => setConfirmingCancel(true)}
+                disabled={busy || tooLateToCancel || viaClassPass}
+                style={{
+                  ...secondaryButton, height: 50,
+                  opacity: tooLateToCancel || viaClassPass ? 0.4 : 1,
+                  cursor: tooLateToCancel || viaClassPass ? 'default' : 'pointer',
+                }}
+              >
+                Annuler
+              </button>
+            </div>
+            {viaClassPass ? (
+              <p style={hint}>Réservée via ClassPass : l&apos;annulation se fait dans l&apos;app ClassPass.</p>
+            ) : tooLateToCancel && (
+              <p style={hint}>Annulation impossible à moins de {deadlineHours} h du début. Contacte ton coach.</p>
             )}
-            <button
-              onClick={handleEnroll}
-              disabled={busy || isFull}
-              style={{
-                height: 44, borderRadius: 10, border: 'none', cursor: isFull ? 'not-allowed' : 'pointer',
-                background: isFull ? '#D5D1C9' : '#1A1A18', color: '#fff', fontSize: 14, fontWeight: 600,
-              }}
-            >
-              {isFull ? 'Complet' : busy ? 'Inscription...' : isPrivate ? (groupSession.price === 0 ? 'S\'inscrire gratuitement' : 'S\'inscrire') : referralFree ? 'Réserver ma séance offerte' : (subscriptionCovers && subscriptionQuotaOk) ? 'Réserver avec mon abonnement' : coveringPack ? `Réserver avec mon pack (${coveringPack.creditsRemaining} séance${coveringPack.creditsRemaining > 1 ? 's' : ''} restante${coveringPack.creditsRemaining > 1 ? 's' : ''})` : firstBookingFree ? 'S\'inscrire gratuitement' : 'S\'inscrire'}
-            </button>
           </div>
-        )}
-      </div>
-
-      {lightboxUrl && (
-        <div
-          onClick={() => setLightboxUrl(null)}
-          style={{
-            position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.9)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
-          }}
-        >
+        )
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {activeSubscription && !referralFree && !(subscriptionCovers && subscriptionQuotaOk) && !coveringPack && (
+            <Notice tone="neutral" icon={<Repeat size={15} strokeWidth={1.75} />}>
+              {subscriptionCovers
+                ? 'Tu as déjà utilisé toutes tes séances de la semaine avec ton abonnement.'
+                : 'Cette séance n\'est pas incluse dans ton abonnement actuel.'}
+              {' '}Tu peux payer le prix normal, ou{' '}
+              <Link href="/subscriptions" style={{ color: C.ink, fontWeight: 600 }}>voir les abonnements</Link>.
+            </Notice>
+          )}
+          {!isPrivate && !referralFree && !(subscriptionCovers && subscriptionQuotaOk) && !coveringPack && !clientDiscount && !firstBookingFree && !isFull && (
+            showPromoInput ? (
+              <input
+                autoFocus
+                value={promoCodeInput}
+                onChange={(e) => setPromoCodeInput(e.target.value.toUpperCase())}
+                placeholder="Code promo"
+                style={{
+                  height: 46, borderRadius: 9999, border: `1px solid ${C.border}`, padding: '0 18px', fontSize: 14,
+                  background: C.card, outline: 'none', fontFamily: 'inherit', color: C.ink,
+                }}
+              />
+            ) : (
+              <button onClick={() => setShowPromoInput(true)} style={{ ...secondaryButton, borderStyle: 'dashed', gap: 8 }}>
+                <Tag size={14} strokeWidth={1.75} />
+                J&apos;ai un code promo
+              </button>
+            )
+          )}
           <button
-            onClick={() => setLightboxUrl(null)}
+            onClick={handleEnroll}
+            disabled={busy || isFull}
             style={{
-              position: 'absolute', top: 16, right: 16, width: 36, height: 36, borderRadius: '50%',
-              background: 'rgba(255,255,255,0.15)', border: 'none', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              ...primaryButton, height: 50,
+              ...(isFull ? { background: C.soft, color: C.muted, cursor: 'not-allowed' } : {}),
             }}
           >
-            <X size={18} color="#fff" />
+            {enrollLabel}
           </button>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={lightboxUrl} alt="" style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 8, objectFit: 'contain' }} />
+        </div>
+      )}
+
+      {lightboxUrl && <Lightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />}
+    </Shell>
+  )
+}
+
+// Libellés de prix affichés tels quels (les autres sont des remises : « Remise -20% … »)
+const PLAIN_LABELS = ['Pack', 'Abonnement', REFERRAL_FREE_LABEL, 'Première réservation offerte']
+
+const loadingText: React.CSSProperties = { color: C.muted, fontSize: 14, textAlign: 'center', padding: '40px 0' }
+
+function Shell({ onBack, level, children }: { onBack: () => void; level?: GroupSession['level']; children: React.ReactNode }) {
+  return (
+    <div style={{ padding: 'calc(16px + env(safe-area-inset-top, 0px)) 20px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 40 }}>
+        <button
+          onClick={onBack}
+          aria-label="Retour"
+          className="press-effect"
+          style={{ width: 38, height: 38, borderRadius: 9999, border: 'none', background: '#E0E0DF', color: C.ink, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >
+          <ChevronLeft size={18} />
+        </button>
+        {level && <Pill tone="neutral">{GROUP_SESSION_LEVEL_LABELS[level]}</Pill>}
+      </header>
+      {children}
+    </div>
+  )
+}
+
+function SessionHeader({ title, subtitle, startAt, endAt, coachNames, status }: {
+  title: string
+  subtitle?: string
+  startAt?: Date
+  endAt?: Date
+  coachNames?: string[]
+  status?: React.ReactNode
+}) {
+  const coaches = coachFirstNames(coachNames)
+  return (
+    <>
+      <div style={{ margin: '20px 0 8px' }}>
+        <h1 style={pageTitle}>{title}</h1>
+        {subtitle && <p style={{ margin: '6px 0 0', fontSize: 15, color: C.muted }}>{subtitle}</p>}
+      </div>
+      {startAt && (
+        <div style={card}>
+          <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+            <DateBox date={startAt} dark />
+            <div style={{ minWidth: 0 }}>
+              <p style={{ margin: 0, fontSize: 17, fontWeight: 600, textTransform: 'capitalize' }}>
+                {format(startAt, 'EEEE d MMMM', { locale: fr })}
+              </p>
+              <p style={{ margin: '3px 0 0', fontSize: 14, color: C.muted }}>
+                {format(startAt, 'HH:mm')}{endAt && ` – ${format(endAt, 'HH:mm')}`}{coaches && ` · avec ${coaches}`}
+              </p>
+            </div>
+          </div>
+          {status && <div style={{ marginTop: 14 }}>{status}</div>}
         </div>
       )}
     </>
   )
 }
+
+function StatsRow({ confirmedCount, maxParticipants, price, priceLabel = 'Prix' }: {
+  confirmedCount: number
+  maxParticipants: number
+  price: React.ReactNode
+  priceLabel?: string
+}) {
+  const spotsLeft = Math.max(0, maxParticipants - confirmedCount)
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+      <div style={{ ...card, padding: 16 }}>
+        <p style={statLabel}>Places</p>
+        {spotsLeft === 0 ? (
+          <p style={{ ...statValue, color: C.red }}>Complet</p>
+        ) : (
+          <p style={statValue}>{spotsLeft} <span style={{ fontSize: 14, fontWeight: 500, color: C.muted }}>restante{spotsLeft > 1 ? 's' : ''}</span></p>
+        )}
+        <p style={{ margin: '2px 0 0', fontSize: 12, color: C.muted }}>{confirmedCount}/{maxParticipants} inscrits</p>
+      </div>
+      <div style={{ ...card, padding: 16 }}>
+        <p style={statLabel}>{priceLabel}</p>
+        {price}
+      </div>
+    </div>
+  )
+}
+
+function PriceValue({ finalPrice, originalPrice, label, free }: { finalPrice: number; originalPrice?: number; label?: string; free?: boolean }) {
+  const discounted = originalPrice !== undefined
+  return (
+    <>
+      <p style={{ ...statValue, color: discounted || free ? C.green : C.ink }}>
+        {free || (discounted && finalPrice === 0) ? 'Gratuit' : `${finalPrice.toFixed(2)} CHF`}
+      </p>
+      {discounted && (
+        <p style={{ margin: '2px 0 0', fontSize: 12, color: C.muted, textDecoration: 'line-through' }}>{originalPrice.toFixed(2)} CHF</p>
+      )}
+      {label && <p style={{ margin: '4px 0 0', fontSize: 12, fontWeight: 600, color: C.green, lineHeight: 1.3 }}>{label}</p>}
+    </>
+  )
+}
+
+function DescriptionCard({ text }: { text: string }) {
+  return (
+    <div style={card}>
+      <p style={statLabel}>À propos</p>
+      <p style={{ margin: 0, fontSize: 15, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{text}</p>
+    </div>
+  )
+}
+
+function AccessCard({ instructions, photos, open, onToggle, onPhoto }: {
+  instructions?: string
+  photos?: string[]
+  open: boolean
+  onToggle?: () => void
+  onPhoto: (url: string) => void
+}) {
+  return (
+    <div id="acces" style={{ ...card, padding: 16 }}>
+      <button
+        onClick={onToggle}
+        disabled={!onToggle}
+        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 14, background: 'none', border: 'none', padding: 0, cursor: onToggle ? 'pointer' : 'default', textAlign: 'left', color: C.ink, fontFamily: 'inherit' }}
+      >
+        <span style={{ ...iconCircle, background: C.soft }}><MapPin size={18} strokeWidth={1.75} /></span>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: 'block', fontSize: 16, fontWeight: 600 }}>Comment nous trouver</span>
+          <span style={{ display: 'block', fontSize: 13, color: C.muted, marginTop: 2 }}>Accès au studio{photos && photos.length > 0 ? ' et photos' : ''}</span>
+        </span>
+        {onToggle && (
+          <span style={{ ...arrowCircle, background: C.bg }}>
+            {open ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+          </span>
+        )}
+      </button>
+      {open && (
+        <div style={{ marginTop: 14 }}>
+          {instructions && <p style={{ margin: 0, fontSize: 14, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{instructions}</p>}
+          {photos && photos.length > 0 && (
+            <div style={{ display: 'flex', gap: 8, marginTop: 12, overflowX: 'auto' }}>
+              {photos.map((url, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => onPhoto(url)}
+                  style={{
+                    width: 96, height: 96, borderRadius: 14, flexShrink: 0, border: 'none', padding: 0, cursor: 'zoom-in',
+                    backgroundImage: `url(${url})`, backgroundSize: 'cover', backgroundPosition: 'center',
+                  }}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function Notice({ tone, icon, children }: { tone: 'red' | 'amber' | 'neutral'; icon?: React.ReactNode; children: React.ReactNode }) {
+  const [bg, fg] = { red: [C.redBg, C.red], amber: [C.amberBg, C.amber], neutral: [C.card, C.ink] }[tone]
+  return (
+    <div style={{ display: 'flex', gap: 10, padding: '12px 16px', borderRadius: 18, background: bg, color: fg, fontSize: 13, lineHeight: 1.45 }}>
+      {icon && <span style={{ flexShrink: 0, marginTop: 1, color: C.muted }}>{icon}</span>}
+      <div>{children}</div>
+    </div>
+  )
+}
+
+function Lightbox({ url, onClose }: { url: string; onClose: () => void }) {
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.9)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+      }}
+    >
+      <button
+        onClick={onClose}
+        aria-label="Fermer"
+        style={{
+          position: 'absolute', top: 'calc(16px + env(safe-area-inset-top, 0px))', right: 16, width: 38, height: 38, borderRadius: 9999,
+          background: 'rgba(255,255,255,0.15)', border: 'none', cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}
+      >
+        <X size={18} color="#fff" />
+      </button>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={url} alt="" style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 14, objectFit: 'contain' }} />
+    </div>
+  )
+}
+
+const statLabel: React.CSSProperties = { margin: '0 0 6px', fontSize: 12, fontWeight: 500, color: C.muted }
+const statValue: React.CSSProperties = { margin: 0, fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em', lineHeight: 1.15 }
