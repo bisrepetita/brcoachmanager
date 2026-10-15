@@ -16,6 +16,7 @@ import { useClientProfile } from '@/lib/hooks/useClientProfile'
 import { useCollection } from '@/lib/hooks/useCollection'
 import { cancelGroupSessionEnrollment, fetchMyPrivateGroupSessions } from '@/lib/services/group-session.service'
 import type { GroupSession, GroupSessionEnrollmentStatus, Location, PrivateSessionView } from '@/types'
+import { BrandLogo } from '@/components/shared/BrandLogo'
 
 const DEFAULT_CANCELLATION_DEADLINE_HOURS = 24
 const PRIVATE_SESSION_MESSAGE = 'Bonjour, j\'aimerais réserver une séance privée.'
@@ -122,7 +123,7 @@ export default function ClientHomePage() {
   return (
     <div style={{ padding: 'calc(16px + env(safe-area-inset-top, 0px)) 20px 24px' }}>
       <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 40 }}>
-        <span style={{ fontSize: 15, fontWeight: 600 }}>Bis Repetita</span>
+        <BrandLogo />
         {signedIn && (
           <Link
             href="/profile"

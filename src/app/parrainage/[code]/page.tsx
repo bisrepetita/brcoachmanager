@@ -6,6 +6,7 @@ import { Gift } from 'lucide-react'
 import { useAuth } from '@/lib/hooks/useAuth'
 import { storeReferralCode } from '@/lib/utils/referral'
 import { CLIENT_HOME } from '@/lib/utils/client-routes'
+import { BrandLogo } from '@/components/shared/BrandLogo'
 
 // Page d'arrivée d'un lien de parrainage. Le code est gardé dans le navigateur jusqu'à la création
 // du compte (cf. lib/utils/referral), qui rattache alors le filleul à son parrain.
@@ -35,7 +36,7 @@ export default function ReferralLandingPage({ params }: { params: Promise<{ code
   return (
     <div className="client-theme" style={{ minHeight: '100dvh', padding: 'calc(16px + env(safe-area-inset-top, 0px)) 20px 32px' }}>
       <header style={{ display: 'flex', alignItems: 'center', height: 40 }}>
-        <span style={{ fontSize: 15, fontWeight: 600 }}>Bis Repetita</span>
+        <BrandLogo />
       </header>
 
       {loading ? null : state === 'invalid' ? (
