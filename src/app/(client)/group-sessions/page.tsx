@@ -198,7 +198,7 @@ export default function ClientGroupSessionsPage() {
 
       {/* Filtre service — seulement s'il y a un vrai choix */}
       {filterableServices.length > 1 && (
-        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', margin: '12px -20px 0', padding: '0 20px' }}>
+        <div className="no-scrollbar" style={{ display: 'flex', gap: 6, overflowX: 'auto', margin: '12px -20px 0', padding: '0 20px' }}>
           <Chip active={!filterServiceId} onClick={() => setFilterServiceId('')}>Tous</Chip>
           {filterableServices.map(s => (
             <Chip key={s.id} active={filterServiceId === s.id} onClick={() => setFilterServiceId(s.id)}>{s.name}</Chip>

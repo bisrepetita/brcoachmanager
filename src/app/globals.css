@@ -179,3 +179,7 @@ body {
 body:has(.client-theme) {
   background-color: #F1F1F0;
 }
+
+/* ── Rangées défilantes horizontalement sans barre visible (pastilles, photos) ── */
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }

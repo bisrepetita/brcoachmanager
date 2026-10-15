@@ -588,7 +588,7 @@ function AccessCard({ instructions, photos, open, onToggle, onPhoto }: {
         <div style={{ marginTop: 14 }}>
           {instructions && <p style={{ margin: 0, fontSize: 14, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{instructions}</p>}
           {photos && photos.length > 0 && (
-            <div style={{ display: 'flex', gap: 8, marginTop: 12, overflowX: 'auto' }}>
+            <div className="no-scrollbar" style={{ display: 'flex', gap: 8, marginTop: 12, overflowX: 'auto' }}>
               {photos.map((url, idx) => (
                 <button
                   key={idx}
