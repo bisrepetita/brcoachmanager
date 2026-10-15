@@ -8,6 +8,7 @@ import { auth } from '@/lib/firebase/auth'
 import { useGoogleAuthRedirect } from '@/lib/hooks/useGoogleAuthRedirect'
 import { Button } from '@/components/ui/button'
 import { Eye, EyeOff } from 'lucide-react'
+import { CLIENT_HOME } from '@/lib/utils/client-routes'
 
 const FIREBASE_ERROR_MESSAGES: Record<string, string> = {
   'auth/email-already-in-use': 'Un compte existe déjà avec cet email. Essaie de te connecter.',
@@ -66,7 +67,7 @@ function SignupPageContent() {
           throw new Error(body.error ?? 'Erreur lors de la création du profil')
         }
         document.cookie = 'br_session=1; path=/; max-age=86400; SameSite=Strict'
-        router.replace((redirectTo || '/group-sessions') as never)
+        router.replace((redirectTo || CLIENT_HOME) as never)
       } catch (linkErr) {
         // Le compte Auth existe mais le profil n'a pas pu être créé : on déconnecte
         // pour éviter un état incohérent, l'utilisateur peut réessayer.

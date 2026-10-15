@@ -10,6 +10,7 @@ import { db } from '@/lib/firebase/firestore'
 import { useGoogleAuthRedirect } from '@/lib/hooks/useGoogleAuthRedirect'
 import { Button } from '@/components/ui/button'
 import { Eye, EyeOff } from 'lucide-react'
+import { CLIENT_HOME } from '@/lib/utils/client-routes'
 
 const FIREBASE_ERROR_MESSAGES: Record<string, string> = {
   'auth/invalid-credential': 'Email ou mot de passe incorrect.',
@@ -77,7 +78,7 @@ function LoginPageContent() {
       const userSnap = await getDoc(doc(db, 'users', cred.user.uid)).catch(() => null)
       const roles = (userSnap?.data()?.['roles'] as string[] | undefined) ?? []
       const isOnlyClient = roles.includes('client') && !roles.includes('coach') && !roles.includes('admin')
-      router.replace((redirectTo || (isOnlyClient ? '/group-sessions' : '/calendar')) as never)
+      router.replace((redirectTo || (isOnlyClient ? CLIENT_HOME : '/calendar')) as never)
     } catch (err) {
       const code = (err as AuthError).code
       setError(FIREBASE_ERROR_MESSAGES[code] ?? 'Une erreur est survenue. Réessaie.')

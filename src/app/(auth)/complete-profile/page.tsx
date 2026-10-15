@@ -8,6 +8,7 @@ import { db } from '@/lib/firebase/firestore'
 import { useClientProfile } from '@/lib/hooks/useClientProfile'
 import { AuthGuard } from '@/components/providers/AuthGuard'
 import { Button } from '@/components/ui/button'
+import { CLIENT_HOME } from '@/lib/utils/client-routes'
 
 export default function CompleteProfilePage() {
   return (
@@ -22,7 +23,7 @@ export default function CompleteProfilePage() {
 function CompleteProfileContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const redirectTo = searchParams.get('redirect') || '/group-sessions'
+  const redirectTo = searchParams.get('redirect') || CLIENT_HOME
   const { profile, loading: profileLoading } = useClientProfile()
   const [phone, setPhone] = React.useState('')
   const [error, setError] = React.useState<string | null>(null)

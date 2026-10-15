@@ -147,3 +147,35 @@ body {
   background: #F0EDE8;
   color: var(--color-text-primary);
 }
+
+/* ── Nouveau design client « Chaleureux monochrome » ──
+   Limité à l'espace client (layout (client)) : les pages coach/admin gardent le thème ci-dessus.
+   Les tokens sont redéfinis sur le conteneur, donc tout ce qui utilise var(--color-…) ou les
+   classes Tailwind correspondantes suit ; les couleurs codées en dur passeront au fil des refontes. */
+.client-theme {
+  --font-sans: var(--font-dm-sans), system-ui, sans-serif;
+
+  --color-background: #F1F1F0;
+  --color-bg-secondary: #E6E6E5;
+  --color-surface: #FAFAFA;
+  --color-surface-elevated: #E6E6E5;
+  --color-border: #E3E3E1;
+  --color-border-strong: #CFCFCC;
+  --color-text-primary: #1C1C1C;
+  --color-text-secondary: #6E6E6B;
+  --color-text-tertiary: #9A9A96;
+  --color-accent: #1C1C1C;
+  --color-accent-hover: #333333;
+  --color-accent-subtle: #E6E6E5;
+
+  /* Barre de navigation flottante : hauteur réservée en bas des pages */
+  --bottom-nav-height: 96px;
+
+  font-family: var(--font-sans);
+  color: var(--color-text-primary);
+  background: var(--color-background);
+}
+
+body:has(.client-theme) {
+  background-color: #F1F1F0;
+}

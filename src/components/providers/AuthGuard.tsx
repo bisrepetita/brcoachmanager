@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/hooks/useAuth'
 import { ListSkeleton } from '@/components/shared/LoadingSkeleton'
+import { CLIENT_HOME } from '@/lib/utils/client-routes'
 
 interface AuthGuardProps {
   children: React.ReactNode
@@ -25,7 +26,7 @@ export function AuthGuard({ children, requireAdmin = false, requireClient = fals
   // La cible de redirection dépend du rôle réel de l'utilisateur refusé, pas du guard qui a
   // déclenché le refus — sinon un coach non-admin refusé sur une page admin atterrissait sur
   // l'espace client au lieu de son propre agenda.
-  const redirectTo = isClient ? '/group-sessions' : '/calendar'
+  const redirectTo = isClient ? CLIENT_HOME : '/calendar'
 
   useEffect(() => {
     if (loading) return
