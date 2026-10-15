@@ -1,15 +1,16 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { collection, query, where, orderBy, onSnapshot, Timestamp } from 'firebase/firestore'
 import {
   format, isToday, isTomorrow, isSameDay,
-  startOfWeek, endOfWeek, addWeeks, subWeeks, isWithinInterval,
+  startOfWeek, endOfWeek, addWeeks, subWeeks, addDays, isWithinInterval,
 } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { Users2, CalendarDays, User, ChevronLeft, ChevronRight, SlidersHorizontal } from 'lucide-react'
-import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
+import { CalendarDays, ChevronLeft, ChevronRight, SlidersHorizontal, Check } from 'lucide-react'
+import { BrandLogo } from '@/components/shared/BrandLogo'
+import { C, card, iconCircle, secondaryButton, pageTitle, Pill, coachFirstNames } from '@/components/client/ClientUI'
 import { db } from '@/lib/firebase/firestore'
 import { useAuth } from '@/lib/hooks/useAuth'
 import { useClientProfile } from '@/lib/hooks/useClientProfile'
@@ -46,7 +47,6 @@ function dayLabel(date: Date): string {
 }
 
 export default function ClientGroupSessionsPage() {
-  const router = useRouter()
   const { firebaseUser, loading: authLoading } = useAuth()
   const { profile } = useClientProfile()
   const [publicItems, setItems] = useState<GroupSessionListItem[]>([])
@@ -61,16 +61,6 @@ export default function ClientGroupSessionsPage() {
   const [onlyAvailable, setOnlyAvailable] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
   const [weekAnchor, setWeekAnchor] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }))
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
-
-  const toggleExpanded = (id: string) => {
-    setExpandedIds(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
 
   useEffect(() => {
     if (authLoading) return
@@ -170,312 +160,243 @@ export default function ClientGroupSessionsPage() {
   }, [filtered, sortMode])
 
   const activeFilterCount = (sortMode !== 'date' ? 1 : 0) + (onlyAvailable ? 1 : 0)
+  const isCurrentWeek = isSameDay(weekStart, startOfWeek(new Date(), { weekStartsOn: 1 }))
+  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
+  const daysWithSessions = new Set(groups.map(g => format(g.date, 'yyyy-MM-dd')))
+
+  function scrollToDay(day: Date) {
+    document.getElementById(`jour-${format(day, 'yyyy-MM-dd')}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
 
   return (
-    <>
-      <TopBar
-        title="Planning"
-        right={
-          <button
-            onClick={() => router.push('/profile' as never)}
-            style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid #E5E1DA', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-          >
-            <User size={16} color="#7A7570" />
-          </button>
-        }
-      />
-      <TopBarSpacer />
-
-      {/* Navigation semaine + filtres */}
-      <div style={{ padding: '10px 16px 0', display: 'flex', gap: 8, alignItems: 'center' }}>
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fff', borderRadius: 10, padding: '8px 10px' }}>
-          <button onClick={() => setWeekAnchor(w => subWeeks(w, 1))} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
-            <ChevronLeft size={18} color="#7A7570" />
-          </button>
-          <p style={{ fontSize: 13, fontWeight: 600, color: '#1A1A18', margin: 0, textTransform: 'capitalize' }}>
-            {isSameDay(weekStart, startOfWeek(new Date(), { weekStartsOn: 1 }))
-              ? 'Cette semaine'
-              : `${format(weekStart, 'd MMM', { locale: fr })} – ${format(weekEnd, 'd MMM', { locale: fr })}`}
-          </p>
-          <button onClick={() => setWeekAnchor(w => addWeeks(w, 1))} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
-            <ChevronRight size={18} color="#7A7570" />
-          </button>
-        </div>
+    <div style={{ padding: 'calc(16px + env(safe-area-inset-top, 0px)) 20px 24px' }}>
+      <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 40 }}>
+        <BrandLogo />
         <button
           onClick={() => setShowFilters(v => !v)}
+          aria-label="Filtres"
+          className="press-effect"
           style={{
-            position: 'relative', width: 36, height: 36, borderRadius: 8, flexShrink: 0,
-            border: `1px solid ${showFilters || activeFilterCount > 0 ? '#1A1A18' : '#E5E1DA'}`,
-            background: showFilters ? '#1A1A18' : '#fff', cursor: 'pointer',
+            position: 'relative', width: 38, height: 38, borderRadius: 9999, border: 'none', cursor: 'pointer',
+            background: showFilters ? C.ink : '#E0E0DF', color: showFilters ? '#fff' : C.ink,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}
         >
-          <SlidersHorizontal size={15} color={showFilters ? '#fff' : '#1A1A18'} />
+          <SlidersHorizontal size={16} strokeWidth={1.75} />
           {activeFilterCount > 0 && !showFilters && (
-            <span style={{ position: 'absolute', top: -3, right: -3, width: 15, height: 15, borderRadius: 8, background: '#C0392B', color: '#fff', fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{
+              position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: 9999, background: C.ink, color: '#fff',
+              fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', border: `2px solid ${C.bg}`,
+            }}>
               {activeFilterCount}
             </span>
           )}
         </button>
+      </header>
+
+      <h1 style={{ ...pageTitle, margin: '40px 0 20px' }}>Planning</h1>
+
+      {/* Semaine : précédente / suivante + jours de la semaine */}
+      <div style={{ ...card, padding: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <button onClick={() => setWeekAnchor(w => subWeeks(w, 1))} aria-label="Semaine précédente" className="press-effect" style={roundButton}>
+            <ChevronLeft size={16} />
+          </button>
+          <p style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>
+            {isCurrentWeek ? 'Cette semaine' : `${format(weekStart, 'd MMM', { locale: fr })} – ${format(weekEnd, 'd MMM', { locale: fr })}`}
+          </p>
+          <button onClick={() => setWeekAnchor(w => addWeeks(w, 1))} aria-label="Semaine suivante" className="press-effect" style={roundButton}>
+            <ChevronRight size={16} />
+          </button>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginTop: 12 }}>
+          {weekDays.map(day => {
+            const key = format(day, 'yyyy-MM-dd')
+            const hasSessions = daysWithSessions.has(key)
+            const today = isToday(day)
+            return (
+              <button
+                key={key}
+                onClick={() => hasSessions && scrollToDay(day)}
+                disabled={!hasSessions}
+                style={{
+                  height: 54, borderRadius: 14, border: 'none', fontFamily: 'inherit',
+                  cursor: hasSessions ? 'pointer' : 'default',
+                  background: today ? C.ink : hasSessions ? C.soft : 'transparent',
+                  color: today ? '#fff' : hasSessions ? C.ink : '#AFAFAB',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1,
+                }}
+              >
+                <span style={{ fontSize: 10, fontWeight: 500, textTransform: 'uppercase', opacity: 0.8 }}>
+                  {format(day, 'EEEEE', { locale: fr })}
+                </span>
+                <span style={{ fontSize: 16, fontWeight: 600, lineHeight: 1.1 }}>{format(day, 'd')}</span>
+                <span style={{ width: 4, height: 4, borderRadius: 9999, background: hasSessions ? (today ? '#fff' : C.ink) : 'transparent' }} />
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       {/* Filtre service — toujours visible */}
-      {filterableServices.length > 0 && (
-        <div style={{ padding: '10px 16px 0', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          <button onClick={() => setFilterServiceId('')}
-            style={{ padding: '6px 12px', borderRadius: 20, border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 600, background: !filterServiceId ? '#1A1A18' : '#F0EDE8', color: !filterServiceId ? '#fff' : '#1A1A18' }}>
-            Tous
-          </button>
+      {filterableServices.length > 1 && (
+        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', margin: '12px -20px 0', padding: '0 20px' }}>
+          <Chip active={!filterServiceId} onClick={() => setFilterServiceId('')}>Tous</Chip>
           {filterableServices.map(s => (
-            <button key={s.id} onClick={() => setFilterServiceId(s.id)}
-              style={{ padding: '6px 12px', borderRadius: 20, border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 600, background: filterServiceId === s.id ? '#1A1A18' : '#F0EDE8', color: filterServiceId === s.id ? '#fff' : '#1A1A18' }}>
-              {s.name}
-            </button>
+            <Chip key={s.id} active={filterServiceId === s.id} onClick={() => setFilterServiceId(s.id)}>{s.name}</Chip>
           ))}
         </div>
       )}
 
       {/* Panneau filtres */}
       {showFilters && (
-        <div style={{ margin: '10px 16px 0', background: '#fff', borderRadius: 10, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ ...card, marginTop: 12, display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div>
-            <p style={{ fontSize: 11, fontWeight: 600, color: '#A09890', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 8px' }}>Trier par</p>
+            <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 500, color: C.muted }}>Trier par</p>
             <div style={{ display: 'flex', gap: 6 }}>
-              {([['date', 'Date'], ['price_asc', 'Prix ↑'], ['price_desc', 'Prix ↓']] as [SortMode, string][]).map(([v, label]) => (
-                <button key={v} onClick={() => setSortMode(v)}
-                  style={{ flex: 1, padding: '6px 0', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 600, background: sortMode === v ? '#1A1A18' : '#F0EDE8', color: sortMode === v ? '#fff' : '#1A1A18' }}>
-                  {label}
-                </button>
+              {([['date', 'Heure'], ['price_asc', 'Prix ↑'], ['price_desc', 'Prix ↓']] as [SortMode, string][]).map(([v, label]) => (
+                <Chip key={v} active={sortMode === v} onClick={() => setSortMode(v)} grow>{label}</Chip>
               ))}
             </div>
           </div>
-
-          <button onClick={() => setOnlyAvailable(v => !v)}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-            <div style={{
-              width: 18, height: 18, borderRadius: 5, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: onlyAvailable ? '#1A1A18' : 'transparent', border: `1.5px solid ${onlyAvailable ? '#1A1A18' : '#C8C4BC'}`,
+          <button
+            onClick={() => setOnlyAvailable(v => !v)}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', color: C.ink }}
+          >
+            <span style={{ fontSize: 14 }}>Uniquement les places disponibles</span>
+            <span style={{
+              width: 44, height: 26, borderRadius: 9999, padding: 3, flexShrink: 0, transition: 'background 160ms ease',
+              background: onlyAvailable ? C.ink : C.border, display: 'flex', justifyContent: onlyAvailable ? 'flex-end' : 'flex-start',
             }}>
-              {onlyAvailable && <span style={{ color: '#fff', fontSize: 11, fontWeight: 700 }}>✓</span>}
-            </div>
-            <span style={{ fontSize: 13, color: '#1A1A18' }}>Uniquement les places disponibles</span>
+              <span style={{ width: 20, height: 20, borderRadius: 9999, background: '#fff' }} />
+            </span>
           </button>
         </div>
       )}
 
       {loading ? (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
-          <p style={{ color: '#A09890', fontSize: 14 }}>Chargement…</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 24 }}>
+          {[0, 1, 2].map(i => <div key={i} style={{ ...card, height: 96, background: C.soft, opacity: 0.6 }} />)}
         </div>
       ) : groups.length === 0 ? (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '64px 32px', gap: 12 }}>
-          <CalendarDays size={44} color="#A09890" strokeWidth={1.5} />
-          <p style={{ fontSize: 16, fontWeight: 600, color: '#1A1A18', margin: 0 }}>Aucune séance à venir</p>
-          <p style={{ fontSize: 14, color: '#7A7570', margin: 0, textAlign: 'center' }}>
-            {items.length > 0
+        <div style={{ ...card, marginTop: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 6, padding: '32px 24px' }}>
+          <span style={{ ...iconCircle, background: C.soft, marginBottom: 6 }}><CalendarDays size={18} strokeWidth={1.75} /></span>
+          <p style={{ margin: 0, fontSize: 17, fontWeight: 600 }}>Aucune séance</p>
+          <p style={{ margin: 0, fontSize: 14, color: C.muted }}>
+            {items.length > 0 && (filterServiceId || onlyAvailable)
               ? 'Aucune séance ne correspond à ces filtres cette semaine.'
-              : 'Aucun cours cette semaine — essaie la semaine suivante.'}
+              : 'Pas de cours cette semaine, regarde la semaine suivante.'}
           </p>
+          <button onClick={() => setWeekAnchor(w => addWeeks(w, 1))} style={{ ...secondaryButton, marginTop: 12, height: 42 }}>
+            Semaine suivante
+          </button>
         </div>
       ) : (
-        <div style={{ padding: '14px 16px 80px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24, marginTop: 24 }}>
           {groups.map(group => (
-            <div key={group.date.toISOString()}>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8, padding: '0 2px' }}>
-                <p style={{ fontSize: 13, fontWeight: 700, color: '#1A1A18', margin: 0, textTransform: 'capitalize' }}>
-                  {dayLabel(group.date)}
-                </p>
-                <div style={{ flex: 1, height: 1, background: '#E5E1DA' }} />
-                <p style={{ fontSize: 11, color: '#A09890', margin: 0 }}>
+            <section key={group.date.toISOString()} id={`jour-${format(group.date, 'yyyy-MM-dd')}`} style={{ scrollMarginTop: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, margin: '0 4px 10px' }}>
+                <p style={{ margin: 0, fontSize: 17, fontWeight: 600, textTransform: 'capitalize' }}>{dayLabel(group.date)}</p>
+                <p style={{ margin: 0, fontSize: 13, color: C.muted }}>
                   {group.items.length} séance{group.items.length > 1 ? 's' : ''}
                 </p>
               </div>
-
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {group.items.map(gs => {
-                  const confirmedCount = gs.confirmedCount
-                  const isFull = confirmedCount >= gs.maxParticipants
-                  const spotsLeft = gs.maxParticipants - confirmedCount
-                  const isAlmostFull = !isFull && spotsLeft <= 2
-                  const isEnrolled = gs.isEnrolled
-                  const sessionDate = gs.startAt
-                  const fillRatio = gs.maxParticipants > 0 ? Math.min(1, confirmedCount / gs.maxParticipants) : 0
-                  const imageUrl = gs.imageUrl ?? (gs.serviceId ? serviceMap.get(gs.serviceId)?.imageUrl : undefined)
-                  const isExpanded = expandedIds.has(gs.id)
-                  const isLongDescription = (gs.description?.length ?? 0) > 60
-
-                  const theme = imageUrl ? {
-                    cardBackground: `linear-gradient(180deg, rgba(10,10,10,0.20) 0%, rgba(10,10,10,0.82) 100%), url(${imageUrl}) center/cover no-repeat`,
-                    border: isEnrolled ? '1px solid rgba(255,255,255,0.85)' : '1px solid rgba(255,255,255,0.12)',
-                    chipBg: 'rgba(255,255,255,0.16)',
-                    chipDay: '#FFFFFF',
-                    chipMonth: 'rgba(255,255,255,0.75)',
-                    title: '#FFFFFF',
-                    secondary: 'rgba(255,255,255,0.82)',
-                    price: '#FFFFFF',
-                    barTrack: 'rgba(255,255,255,0.25)',
-                    badgeBg: '#FFFFFF',
-                    badgeText: '#1A1A18',
-                    neutralFill: '#FFFFFF',
-                    almostFill: '#FFC978',
-                    fullFill: '#FF8A7A',
-                  } : {
-                    cardBackground: '#fff',
-                    border: isEnrolled ? '1px solid #1A1A18' : '1px solid #EEEAE3',
-                    chipBg: '#F5F3F0',
-                    chipDay: '#1A1A18',
-                    chipMonth: '#A09890',
-                    title: '#1A1A18',
-                    secondary: '#7A7570',
-                    price: '#1A1A18',
-                    barTrack: '#F0EDE8',
-                    badgeBg: '#1A1A18',
-                    badgeText: '#FFFFFF',
-                    neutralFill: '#1A1A18',
-                    almostFill: '#B8792E',
-                    fullFill: '#C0392B',
-                  }
-                  const fillColor = isFull ? theme.fullFill : isAlmostFull ? theme.almostFill : theme.neutralFill
-
-                  return (
-                    <div
-                      key={gs.id}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => router.push(`/group-sessions/${gs.id}` as never)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault()
-                          router.push(`/group-sessions/${gs.id}` as never)
-                        }
-                      }}
-                      className="press-effect"
-                      style={{
-                        background: theme.cardBackground, borderRadius: 14, padding: 14,
-                        border: theme.border,
-                        boxShadow: imageUrl ? '0 4px 14px rgba(0,0,0,0.18)' : '0 1px 2px rgba(26,26,24,0.04)',
-                        minHeight: imageUrl ? 118 : undefined,
-                        cursor: 'pointer', textAlign: 'left', width: '100%',
-                        display: 'flex', alignItems: 'stretch', gap: 12,
-                      }}
-                    >
-                      {/* Heure */}
-                      <div style={{
-                        flexShrink: 0, width: 52, borderRadius: 10, background: theme.chipBg,
-                        backdropFilter: imageUrl ? 'blur(4px)' : undefined,
-                        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '8px 0',
-                      }}>
-                        <p style={{ margin: 0, fontSize: 16, fontWeight: 700, color: theme.chipDay, lineHeight: 1.2, fontVariantNumeric: 'tabular-nums' }}>
-                          {sessionDate ? format(sessionDate, 'HH:mm') : '—'}
-                        </p>
-                      </div>
-
-                      {/* Content */}
-                      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 5 }}>
-                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-                          <p style={{ fontSize: 15, fontWeight: 600, color: theme.title, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
-                            {gs.title}
-                          </p>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-                            {gs.privateGroupName && (
-                              <span style={{
-                                fontSize: 10, fontWeight: 600, color: theme.secondary, background: theme.chipBg,
-                                padding: '2px 7px', borderRadius: 20, whiteSpace: 'nowrap',
-                              }}>
-                                {gs.privateGroupName}
-                              </span>
-                            )}
-                            {gs.level && (
-                              <span style={{
-                                fontSize: 10, fontWeight: 600, color: theme.secondary, background: theme.chipBg,
-                                padding: '2px 7px', borderRadius: 20, whiteSpace: 'nowrap',
-                              }}>
-                                {GROUP_SESSION_LEVEL_LABELS[gs.level]}
-                              </span>
-                            )}
-                            {isEnrolled && (
-                              <span style={{
-                                fontSize: 10, fontWeight: 700, color: theme.badgeText, background: theme.badgeBg,
-                                padding: '2px 7px', borderRadius: 20, letterSpacing: 0.2,
-                              }}>
-                                INSCRIT
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        {gs.coachNames && gs.coachNames.length > 0 && (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: theme.secondary, overflow: 'hidden' }}>
-                            <User size={11} strokeWidth={2} style={{ flexShrink: 0 }} />
-                            <span style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {gs.coachNames.join(' & ')}
-                            </span>
-                          </div>
-                        )}
-
-                        {gs.description && (
-                          <div style={{ marginTop: 1 }}>
-                            <p style={{
-                              fontSize: 12.5, color: theme.secondary, margin: 0, lineHeight: 1.4,
-                              ...(isExpanded
-                                ? { whiteSpace: 'pre-wrap' as const }
-                                : {
-                                    display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const,
-                                    overflow: 'hidden',
-                                  }),
-                            }}>
-                              {gs.description}
-                            </p>
-                            {isLongDescription && (
-                              <button
-                                type="button"
-                                onClick={(e) => { e.stopPropagation(); toggleExpanded(gs.id) }}
-                                onKeyDown={(e) => e.stopPropagation()}
-                                style={{
-                                  background: 'none', border: 'none', padding: 0, marginTop: 2,
-                                  fontSize: 11, fontWeight: 600, color: theme.secondary, cursor: 'pointer',
-                                  textDecoration: 'underline', textUnderlineOffset: 2,
-                                }}
-                              >
-                                {isExpanded ? 'Réduire' : 'Lire la suite'}
-                              </button>
-                            )}
-                          </div>
-                        )}
-
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 5, marginTop: 2 }}>
-                          {isFull ? (
-                            <span style={{ fontSize: 11, fontWeight: 600, color: theme.fullFill }}>Complet</span>
-                          ) : isAlmostFull ? (
-                            <span style={{ fontSize: 11, fontWeight: 600, color: theme.almostFill }}>
-                              {spotsLeft} place{spotsLeft > 1 ? 's' : ''}
-                            </span>
-                          ) : null}
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <Users2 size={12} color={fillColor} />
-                            <span style={{ fontSize: 12, color: fillColor, fontVariantNumeric: 'tabular-nums' }}>
-                              {confirmedCount}/{gs.maxParticipants}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Capacity bar */}
-                        <div style={{ height: 3, borderRadius: 2, background: theme.barTrack, overflow: 'hidden', marginTop: 1 }}>
-                          <div style={{ height: '100%', width: `${fillRatio * 100}%`, background: fillColor, borderRadius: 2, transition: 'width 0.2s' }} />
-                        </div>
-                      </div>
-
-                      <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-                        <ChevronRight size={16} color={theme.secondary} strokeWidth={2} />
-                      </div>
-                    </div>
-                  )
-                })}
+                {group.items.map(gs => (
+                  <SessionCard
+                    key={gs.id}
+                    session={gs}
+                    imageUrl={gs.imageUrl ?? (gs.serviceId ? serviceMap.get(gs.serviceId)?.imageUrl : undefined)}
+                  />
+                ))}
               </div>
-            </div>
+            </section>
           ))}
         </div>
       )}
-    </>
+    </div>
   )
+}
+
+function SessionCard({ session: gs, imageUrl }: { session: GroupSessionListItem; imageUrl?: string }) {
+  const spotsLeft = Math.max(0, gs.maxParticipants - gs.confirmedCount)
+  const isFull = spotsLeft === 0
+  const coaches = coachFirstNames(gs.coachNames)
+  return (
+    <Link
+      href={`/group-sessions/${gs.id}` as never}
+      className="press-effect"
+      style={{
+        ...card, padding: 0, overflow: 'hidden', display: 'block', color: C.ink, textDecoration: 'none',
+        outline: gs.isEnrolled ? `1.5px solid ${C.ink}` : undefined, outlineOffset: -1.5,
+      }}
+    >
+      {imageUrl && (
+        <div style={{ height: 112, background: `url(${imageUrl}) center/cover no-repeat`, opacity: isFull && !gs.isEnrolled ? 0.6 : 1 }} />
+      )}
+      <div style={{ display: 'flex', gap: 14, padding: 16, alignItems: 'flex-start' }}>
+        <div style={{
+          width: 58, height: 58, borderRadius: 14, flexShrink: 0,
+          background: gs.isEnrolled ? C.ink : C.soft, color: gs.isEnrolled ? '#fff' : C.ink,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 16, fontWeight: 600, fontVariantNumeric: 'tabular-nums',
+        }}>
+          {format(gs.startAt, 'HH:mm')}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+            <p style={{ margin: 0, fontSize: 16, fontWeight: 600, lineHeight: 1.3 }}>{gs.title}</p>
+            <p style={{ margin: 0, fontSize: 15, fontWeight: 600, flexShrink: 0, color: gs.price === 0 ? C.green : C.ink }}>
+              {gs.price === 0 ? 'Gratuit' : `${formatPrice(gs.price)} CHF`}
+            </p>
+          </div>
+          {coaches && <p style={{ margin: '2px 0 0', fontSize: 13, color: C.muted }}>avec {coaches}</p>}
+          {gs.description && (
+            <p style={{
+              margin: '6px 0 0', fontSize: 13, color: C.muted, lineHeight: 1.4,
+              display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+            }}>
+              {gs.description}
+            </p>
+          )}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+            {gs.isEnrolled ? (
+              <Pill tone="green"><Check size={12} strokeWidth={2.5} />Inscrit</Pill>
+            ) : isFull ? (
+              <Pill tone="red">Complet</Pill>
+            ) : (
+              <Pill tone={spotsLeft <= 2 ? 'amber' : 'neutral'}>{spotsLeft} place{spotsLeft > 1 ? 's' : ''}</Pill>
+            )}
+            {gs.privateGroupName && <Pill tone="neutral">{gs.privateGroupName}</Pill>}
+            {gs.level && <Pill tone="neutral">{GROUP_SESSION_LEVEL_LABELS[gs.level]}</Pill>}
+          </div>
+        </div>
+      </div>
+    </Link>
+  )
+}
+
+function Chip({ active, onClick, grow, children }: { active: boolean; onClick: () => void; grow?: boolean; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        height: 36, padding: '0 16px', borderRadius: 9999, border: 'none', cursor: 'pointer', flexShrink: 0,
+        flex: grow ? 1 : undefined, whiteSpace: 'nowrap', fontFamily: 'inherit', fontSize: 14, fontWeight: 500,
+        background: active ? C.ink : C.soft, color: active ? '#fff' : C.ink,
+      }}
+    >
+      {children}
+    </button>
+  )
+}
+
+/** « 25 » plutôt que « 25.00 », mais « 22.50 » gardé tel quel. */
+function formatPrice(price: number): string {
+  return Number.isInteger(price) ? String(price) : price.toFixed(2)
+}
+
+const roundButton: React.CSSProperties = {
+  width: 36, height: 36, borderRadius: 9999, border: 'none', background: C.soft, color: C.ink, cursor: 'pointer',
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
 }
