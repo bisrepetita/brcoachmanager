@@ -39,6 +39,7 @@ export function toPrivateSessionView(id: string, d: DocumentData, clientId?: str
     title: d['title'],
     description: d['description'],
     coachNames: d['coachNames'],
+    locationId: d['locationId'],
     startAt: (d['startAt'] as Timestamp).toDate().toISOString(),
     endAt: (d['endAt'] as Timestamp).toDate().toISOString(),
     maxParticipants: d['maxParticipants'],

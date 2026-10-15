@@ -588,6 +588,7 @@ export interface PrivateSessionView {
   title: string
   description?: string
   coachNames?: string[]
+  locationId?: string
   startAt: string
   endAt: string
   maxParticipants: number
@@ -661,6 +662,8 @@ export interface AppSettings {
   defaultSessionDuration: number
   twintBaseLink?: string
   groupSessionCancellationDeadlineHours?: number
+  // Numéro joint par la carte « séance privée » de l'accueil client (vide = carte masquée)
+  clientWhatsappPhone?: string
   updatedAt: Timestamp
 }
 
