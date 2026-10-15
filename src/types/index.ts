@@ -48,6 +48,8 @@ export interface Client {
   referredByName?: string
   referredAt?: Timestamp
   referralFreeSessionUsed?: boolean
+  // Renseigné par l'admin quand le parrain de ce filleul a été récompensé (à la main)
+  referralRewardedAt?: Timestamp
   createdAt: Timestamp
   updatedAt: Timestamp
 }

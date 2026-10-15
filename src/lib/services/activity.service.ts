@@ -23,6 +23,7 @@ export type ActivityAction =
   | 'convention_accepted'
   | 'private_group_joined'
   | 'group_session_sponsor_payment'
+  | 'referral_rewarded'
 
 export async function logActivity(params: {
   userId: string

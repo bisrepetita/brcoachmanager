@@ -46,6 +46,7 @@ const ACTION_LABELS: Record<ActivityAction, string> = {
   convention_accepted: 'Convention acceptée',
   private_group_joined: 'Groupe privé rejoint',
   group_session_sponsor_payment: 'Paiement société (séance privée)',
+  referral_rewarded: 'Parrainage récompensé',
 }
 
 const ACTION_COLORS: Record<ActivityAction, string> = {
@@ -70,6 +71,7 @@ const ACTION_COLORS: Record<ActivityAction, string> = {
   convention_accepted: '#2D7A4F',
   private_group_joined: '#0EA5E9',
   group_session_sponsor_payment: '#2D7A4F',
+  referral_rewarded: '#C8A96E',
 }
 
 const PAGE_SIZE = 30

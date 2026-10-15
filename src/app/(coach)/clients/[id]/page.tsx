@@ -5,7 +5,8 @@ import { useRouter, useParams } from 'next/navigation'
 import { doc, getDoc, collection, query, where, getDocs, orderBy } from 'firebase/firestore'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { ChevronLeft, ChevronRight, Phone, Mail, MapPin, CreditCard, Repeat, X, Layers } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Phone, Mail, MapPin, CreditCard, Repeat, X, Layers, Gift } from 'lucide-react'
+import { hasReferralFreeSession } from '@/lib/utils/referral'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { db } from '@/lib/firebase/firestore'
 import { useCollection } from '@/lib/hooks/useCollection'
@@ -67,6 +68,15 @@ export default function ClientDetailPage() {
 
   const { user } = useAuth()
   const isAdmin = user?.roles?.includes('admin') ?? false
+
+  // Filleuls de ce client (admin uniquement : la requête n'est pas filtrée par coach)
+  const [filleuls, setFilleuls] = useState<Client[]>([])
+  useEffect(() => {
+    if (!clientId || !isAdmin) return
+    getDocs(query(collection(db, 'clients'), where('referredByClientId', '==', clientId)))
+      .then(snap => setFilleuls(snap.docs.map(d => ({ id: d.id, ...d.data() } as Client))))
+      .catch(() => {})
+  }, [clientId, isAdmin])
 
   // Packs de séances du client (hors achats en ligne non payés)
   const { data: packPlans } = useCollection<PackPlan>('packPlans', [])
@@ -248,6 +258,43 @@ export default function ClientDetailPage() {
             <p style={{ margin: 0, fontSize: 14, color: '#1A1A18' }}>{client.sessionCredits} crédit{client.sessionCredits !== 1 ? 's' : ''}</p>
           </div>
         </div>
+
+        {/* Parrainage */}
+        {(client.referredByClientId || filleuls.length > 0) && (
+          <div style={{ background: '#fff', borderRadius: 12, padding: '12px 14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <Gift size={14} color="#A09890" />
+              <p style={{ margin: 0, fontSize: 11, fontWeight: 600, color: '#A09890', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Parrainage</p>
+            </div>
+            {client.referredByClientId && (
+              <p style={{ margin: 0, fontSize: 14, color: '#1A1A18' }}>
+                Parrainé par{' '}
+                <button onClick={() => router.push(`/clients/${client.referredByClientId}` as never)}
+                  style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 14, fontWeight: 600, color: '#1A1A18', textDecoration: 'underline' }}>
+                  {client.referredByName || 'un client'}
+                </button>
+                <span style={{ fontSize: 12, color: hasReferralFreeSession(client) ? '#2D7A4F' : '#7A7570' }}>
+                  {' · '}{hasReferralFreeSession(client) ? 'séance offerte disponible' : 'séance offerte utilisée'}
+                </span>
+              </p>
+            )}
+            {filleuls.length > 0 && (
+              <p style={{ margin: client.referredByClientId ? '6px 0 0' : 0, fontSize: 14, color: '#1A1A18' }}>
+                {filleuls.length} filleul{filleuls.length > 1 ? 's' : ''} :{' '}
+                {filleuls.map((f, i) => (
+                  <span key={f.id}>
+                    {i > 0 && ', '}
+                    <button onClick={() => router.push(`/clients/${f.id}` as never)}
+                      style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 14, color: '#1A1A18', textDecoration: 'underline' }}>
+                      {f.firstName} {f.lastName}
+                    </button>
+                    {f.referralRewardedAt && <span style={{ fontSize: 12, color: '#2D7A4F' }}> (récompensé)</span>}
+                  </span>
+                ))}
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Abonnement */}
         <div style={{ background: '#fff', borderRadius: 12, padding: '12px 14px' }}>
