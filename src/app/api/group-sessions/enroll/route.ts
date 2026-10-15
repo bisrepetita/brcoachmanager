@@ -14,6 +14,7 @@ import { notifyGroupSessionBooking } from '@/lib/server/booking-notifications'
 import { isPrivateGroupMemberInTransaction } from '@/lib/server/private-group-admin'
 import { findUsablePackInTransaction, consumePackCreditInTransaction } from '@/lib/server/pack-admin'
 import { enrollmentsUpdate } from '@/lib/server/group-session-enrollments'
+import { hasReferralFreeSession, REFERRAL_FREE_LABEL } from '@/lib/utils/referral'
 
 // Type "loose" côté serveur : le type partagé GroupSessionEnrollment (src/types) pointe sur le
 // Timestamp du SDK client, incompatible avec firebase-admin/firestore côté API route.
@@ -126,10 +127,14 @@ export async function POST(req: NextRequest) {
       const hasEverBooked = clientTxSnap.data()?.['hasEverBooked'] === true
       const serviceId = data['serviceId'] as string | undefined
 
+      // Séance offerte du parrainage : prioritaire sur tout le reste (abonnement, pack, remises),
+      // pour que le filleul ne "paie" jamais avec un crédit alors qu'il a une séance offerte.
+      const referralFree = hasReferralFreeSession(clientTxSnap.data())
+
       // Couverture abonnement : vérifiée avant tout (revenu déjà encaissé à l'achat de
       // l'abonnement) — si couverte, on ne regarde même pas la gratuité "1ère réservation" ni
       // les remises, pas de cumul.
-      const activeSub = await findActiveSubscriptionInTransaction(tx, adminDb, clientId)
+      const activeSub = referralFree ? null : await findActiveSubscriptionInTransaction(tx, adminDb, clientId)
       let subscriptionRef: DocumentReference | null = null
       if (activeSub && matchesCoverage(activeSub.data.planSnapshot, {
         serviceId, dayOfWeek: data['dayOfWeek'] as number | undefined, startTime: data['startTime'] as string | undefined,
@@ -143,7 +148,7 @@ export async function POST(req: NextRequest) {
       // Pack de séances : à défaut d'abonnement qui couvre la séance, 1 crédit du pack couvrant ce
       // service qui expire le plus tôt — prioritaire sur la gratuité "1ère réservation" et les
       // remises (pas de cumul).
-      const pack = !subscriptionRef && serviceId
+      const pack = !referralFree && !subscriptionRef && serviceId
         ? await findUsablePackInTransaction(tx, adminDb, clientId, serviceId)
         : null
 
@@ -151,7 +156,7 @@ export async function POST(req: NextRequest) {
       // un abonnement ou un pack qui couvre déjà la séance).
       let service: { id: string; isPublic?: boolean } | null = null
       let serviceFirstBookingFree = false
-      if (!subscriptionRef && !pack && serviceId) {
+      if (!referralFree && !subscriptionRef && !pack && serviceId) {
         const serviceSnap = await tx.get(adminDb.collection('services').doc(serviceId))
         if (serviceSnap.exists) {
           service = { id: serviceSnap.id, isPublic: serviceSnap.data()!['isPublic'] as boolean | undefined }
@@ -162,14 +167,26 @@ export async function POST(req: NextRequest) {
       const basePrice = data['price'] as number
       const firstBookingFree = !subscriptionRef && !pack && serviceFirstBookingFree && !hasEverBooked
 
-      const discountResult = (subscriptionRef || pack || firstBookingFree)
+      const discountResult = (referralFree || subscriptionRef || pack || firstBookingFree)
         ? null
         : await resolveDiscountInTransaction(tx, adminDb, { clientId, promoCode, service })
       if (discountResult && 'error' in discountResult) {
         throw new HttpError(400, discountResult.error)
       }
 
-      const newEnrollment: ServerEnrollment = subscriptionRef
+      const newEnrollment: ServerEnrollment = referralFree
+        ? {
+            clientId,
+            status: 'confirmed',
+            amountDue: 0,
+            amountPaid: 0,
+            paymentStatus: 'offered',
+            enrolledAt: Timestamp.now(),
+            originalAmountDue: basePrice,
+            discountLabel: REFERRAL_FREE_LABEL,
+            referralFreeSession: true,
+          }
+        : subscriptionRef
         ? {
             clientId,
             status: 'confirmed',
@@ -227,8 +244,12 @@ export async function POST(req: NextRequest) {
         updatedAt: FieldValue.serverTimestamp(),
       })
 
-      if (!hasEverBooked) {
-        tx.update(clientDocRef, { hasEverBooked: true, updatedAt: FieldValue.serverTimestamp() })
+      if (!hasEverBooked || referralFree) {
+        tx.update(clientDocRef, {
+          hasEverBooked: true,
+          ...(referralFree ? { referralFreeSessionUsed: true } : {}),
+          updatedAt: FieldValue.serverTimestamp(),
+        })
       }
 
       if (pack) consumePackCreditInTransaction(tx, pack.ref)

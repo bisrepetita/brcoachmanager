@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { FieldValue } from 'firebase-admin/firestore'
 import { getAdminDb, getAdminAuth } from '@/lib/firebase/admin'
+import { applyReferralOnSignup } from '@/lib/server/referral-admin'
 
 export async function POST(req: NextRequest) {
   const token = req.headers.get('authorization')?.replace('Bearer ', '')
@@ -16,7 +17,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Token invalide' }, { status: 401 })
   }
 
-  const body = (await req.json()) as { firstName: string; lastName?: string; phone?: string }
+  const body = (await req.json()) as { firstName: string; lastName?: string; phone?: string; referralCode?: string }
   const { firstName, phone } = body
   // Nom de famille optionnel : la connexion Google dérive prénom/nom du displayName du compte,
   // qui peut n'avoir qu'un seul mot (pas de nom de famille) — ça ne doit pas bloquer la création
@@ -101,6 +102,12 @@ export async function POST(req: NextRequest) {
       await batch.commit()
     }
 
+    // Parrainage : best-effort, n'empêche jamais la création du compte.
+    const referred = await applyReferralOnSignup(adminDb, clientId, body.referralCode).catch((err) => {
+      console.error('[client-signup] parrainage', err)
+      return false
+    })
+
     await adminDb.collection('users').doc(uid).set({
       firstName,
       lastName,
@@ -118,7 +125,8 @@ export async function POST(req: NextRequest) {
       userFirstName: firstName,
       userLastName: lastName,
       action: 'client_signup',
-      description: linked ? `Compte lié à la fiche client existante ${clientId}` : `Nouvelle fiche client créée (${clientId})`,
+      description: (linked ? `Compte lié à la fiche client existante ${clientId}` : `Nouvelle fiche client créée (${clientId})`)
+        + (referred ? ` — parrainé (code ${body.referralCode})` : ''),
       clientId,
       createdAt: FieldValue.serverTimestamp(),
     })

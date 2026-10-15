@@ -13,6 +13,7 @@ export interface ClientProfile {
   phone?: string
   sessionCredits: number
   hasEverBooked: boolean
+  referralFreeSessionAvailable?: boolean
 }
 
 export function useClientProfile() {

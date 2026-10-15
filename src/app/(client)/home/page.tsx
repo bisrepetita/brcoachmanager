@@ -6,7 +6,10 @@ import { useRouter } from 'next/navigation'
 import { collection, doc, getDoc, limit, onSnapshot, orderBy, query, Timestamp, where } from 'firebase/firestore'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { ArrowRight, MessageSquare } from 'lucide-react'
+import { getAuth } from 'firebase/auth'
+import { ArrowRight, MessageSquare, Share } from 'lucide-react'
+import { firebaseApp } from '@/lib/firebase/config'
+import { useToast } from '@/components/ui/Toast'
 import { db } from '@/lib/firebase/firestore'
 import { useAuth } from '@/lib/hooks/useAuth'
 import { useClientProfile } from '@/lib/hooks/useClientProfile'
@@ -158,7 +161,7 @@ export default function ClientHomePage() {
               onPay={() => router.push(`/group-sessions/${next.id}` as never)}
             />
           ) : (
-            <OpenSlotsCard slots={openSlots} />
+            <OpenSlotsCard slots={openSlots} freeSession={!!profile?.referralFreeSessionAvailable} />
           )}
 
           {whatsappUrl && (
@@ -171,9 +174,50 @@ export default function ClientHomePage() {
               <span style={{ ...arrowCircle, background: C.bg }}><ArrowRight size={14} /></span>
             </a>
           )}
+
+          {profile && <ReferralCard />}
         </div>
       )}
     </div>
+  )
+}
+
+// Partage du lien de parrainage via la feuille de partage du téléphone (WhatsApp, SMS…), ou copie
+// du lien quand le navigateur ne sait pas partager (ordinateur).
+function ReferralCard() {
+  const { showToast } = useToast()
+  const [busy, setBusy] = useState(false)
+
+  async function share() {
+    setBusy(true)
+    try {
+      const token = await getAuth(firebaseApp).currentUser?.getIdToken()
+      const res = await fetch('/api/referral/my-code', { method: 'POST', headers: { Authorization: `Bearer ${token}` } })
+      if (!res.ok) throw new Error()
+      const { url } = (await res.json()) as { url: string }
+      const text = 'Viens t\'entraîner avec moi chez Bis Repetita : ta première séance est offerte avec mon lien !'
+      if (navigator.share) {
+        await navigator.share({ title: 'Bis Repetita', text, url }).catch(() => {})
+      } else {
+        await navigator.clipboard.writeText(`${text} ${url}`)
+        showToast('Lien copié', 'Colle-le dans un message à la personne que tu veux parrainer.')
+      }
+    } catch {
+      showToast('Impossible de récupérer ton lien', 'Réessaie dans un instant.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <button onClick={share} disabled={busy} className="press-effect" style={{ ...card, ...linkCard, background: C.ink, color: '#fff', border: 'none', cursor: 'pointer', textAlign: 'left', width: '100%', fontFamily: 'inherit' }}>
+      <span style={{ ...iconCircle, background: '#333333' }}><Share size={18} strokeWidth={1.75} /></span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: 'block', fontSize: 16, fontWeight: 600 }}>Parraine un proche</span>
+        <span style={{ display: 'block', fontSize: 13, opacity: 0.75, marginTop: 2 }}>Sa première séance est offerte</span>
+      </span>
+      <span style={{ ...arrowCircle, background: '#333333' }}><ArrowRight size={14} /></span>
+    </button>
   )
 }
 
@@ -265,10 +309,11 @@ function NextSessionCard({ session, place, deadlineHours, otherCount, onCancelle
   )
 }
 
-function OpenSlotsCard({ slots }: { slots: HomeSession[] }) {
+function OpenSlotsCard({ slots, freeSession }: { slots: HomeSession[]; freeSession: boolean }) {
   return (
     <div style={{ ...card, paddingBottom: 6 }}>
       <p style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>Aucune séance réservée</p>
+      {freeSession && <p style={{ margin: '4px 0 0', fontSize: 13, fontWeight: 600, color: '#2D7A4F' }}>Ta première séance est offerte grâce au parrainage</p>}
       <p style={{ margin: '2px 0 10px', fontSize: 13, color: C.muted }}>
         {slots.length > 0 ? 'Les prochains créneaux disponibles :' : 'Aucun créneau disponible pour le moment.'}
       </p>

@@ -17,6 +17,7 @@ import {
 } from '@/lib/services/subscription.service'
 import { findClientPacks, isPackUsable } from '@/lib/services/pack.service'
 import { GROUP_SESSION_LEVEL_LABELS, type GroupSession, type Discount, type ClientSubscription, type Building, type ClientPack } from '@/types'
+import { REFERRAL_FREE_LABEL } from '@/lib/utils/referral'
 
 interface PublicGroupSessionView {
   id: string
@@ -203,6 +204,9 @@ export default function ClientGroupSessionDetailPage() {
       setBusy(false)
     }
   }
+
+  // Séance offerte du parrainage : prioritaire sur abonnement/pack (même règle que la route enroll)
+  const referralFree = !groupSession?.privateGroupId && !!profile?.referralFreeSessionAvailable
 
   async function handleCancel() {
     if (!confirm('Annuler ton inscription à cette séance ?')) return
@@ -425,17 +429,17 @@ export default function ClientGroupSessionDetailPage() {
                   <p style={{ fontSize: 11, color: '#7A7570', margin: '2px 0 0' }}>{groupSession.privateGroupName}</p>
                 </>
               ) : (() => {
-                const subscriptionCoveredNow = subscriptionCovers && subscriptionQuotaOk
-                const packNow = !subscriptionCoveredNow && !!coveringPack
+                const subscriptionCoveredNow = !referralFree && subscriptionCovers && subscriptionQuotaOk
+                const packNow = !referralFree && !subscriptionCoveredNow && !!coveringPack
                 const originalPrice = myEnrollment
                   ? (myEnrollment.clientPackId ? groupSession.price : myEnrollment.originalAmountDue)
-                  : (subscriptionCoveredNow || packNow || firstBookingFree || clientDiscount) ? groupSession.price : undefined
+                  : (referralFree || subscriptionCoveredNow || packNow || firstBookingFree || clientDiscount) ? groupSession.price : undefined
                 const finalPrice = myEnrollment
                   ? myEnrollment.amountDue
-                  : subscriptionCoveredNow || packNow ? 0 : firstBookingFree ? 0 : clientDiscount ? computeDiscountedAmount(groupSession.price, clientDiscount) : groupSession.price
+                  : referralFree || subscriptionCoveredNow || packNow ? 0 : firstBookingFree ? 0 : clientDiscount ? computeDiscountedAmount(groupSession.price, clientDiscount) : groupSession.price
                 const label = myEnrollment
                   ? (myEnrollment.clientPackId ? 'Pack' : myEnrollment.discountLabel)
-                  : subscriptionCoveredNow ? 'Abonnement' : packNow ? 'Pack' : firstBookingFree ? 'Première réservation offerte' : clientDiscount ? discountLabel(clientDiscount) : undefined
+                  : referralFree ? REFERRAL_FREE_LABEL : subscriptionCoveredNow ? 'Abonnement' : packNow ? 'Pack' : firstBookingFree ? 'Première réservation offerte' : clientDiscount ? discountLabel(clientDiscount) : undefined
                 return (
                   <>
                     <p style={{ fontSize: 16, fontWeight: 600, margin: '2px 0 0', fontFamily: 'monospace' }}>
@@ -557,7 +561,7 @@ export default function ClientGroupSessionDetailPage() {
                 </p>
               </div>
             )}
-            {!isPrivate && !(subscriptionCovers && subscriptionQuotaOk) && !coveringPack && !clientDiscount && !firstBookingFree && !isFull && (
+            {!isPrivate && !referralFree && !(subscriptionCovers && subscriptionQuotaOk) && !coveringPack && !clientDiscount && !firstBookingFree && !isFull && (
               showPromoInput ? (
                 <input
                   autoFocus
@@ -588,7 +592,7 @@ export default function ClientGroupSessionDetailPage() {
                 background: isFull ? '#D5D1C9' : '#1A1A18', color: '#fff', fontSize: 14, fontWeight: 600,
               }}
             >
-              {isFull ? 'Complet' : busy ? 'Inscription...' : isPrivate ? (groupSession.price === 0 ? 'S\'inscrire gratuitement' : 'S\'inscrire') : (subscriptionCovers && subscriptionQuotaOk) ? 'Réserver avec mon abonnement' : coveringPack ? `Réserver avec mon pack (${coveringPack.creditsRemaining} séance${coveringPack.creditsRemaining > 1 ? 's' : ''} restante${coveringPack.creditsRemaining > 1 ? 's' : ''})` : firstBookingFree ? 'S\'inscrire gratuitement' : 'S\'inscrire'}
+              {isFull ? 'Complet' : busy ? 'Inscription...' : isPrivate ? (groupSession.price === 0 ? 'S\'inscrire gratuitement' : 'S\'inscrire') : referralFree ? 'Réserver ma séance offerte' : (subscriptionCovers && subscriptionQuotaOk) ? 'Réserver avec mon abonnement' : coveringPack ? `Réserver avec mon pack (${coveringPack.creditsRemaining} séance${coveringPack.creditsRemaining > 1 ? 's' : ''} restante${coveringPack.creditsRemaining > 1 ? 's' : ''})` : firstBookingFree ? 'S\'inscrire gratuitement' : 'S\'inscrire'}
             </button>
           </div>
         )}

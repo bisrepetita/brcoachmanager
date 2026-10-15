@@ -9,6 +9,7 @@ import { useGoogleAuthRedirect } from '@/lib/hooks/useGoogleAuthRedirect'
 import { Button } from '@/components/ui/button'
 import { Eye, EyeOff } from 'lucide-react'
 import { CLIENT_HOME } from '@/lib/utils/client-routes'
+import { clearReferralCode, readReferralCode } from '@/lib/utils/referral'
 
 const FIREBASE_ERROR_MESSAGES: Record<string, string> = {
   'auth/email-already-in-use': 'Un compte existe déjà avec cet email. Essaie de te connecter.',
@@ -60,12 +61,13 @@ function SignupPageContent() {
         const res = await fetch('/api/client-signup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-          body: JSON.stringify({ firstName: firstName.trim(), lastName: lastName.trim(), phone: phone.trim() || undefined }),
+          body: JSON.stringify({ firstName: firstName.trim(), lastName: lastName.trim(), phone: phone.trim() || undefined, referralCode: readReferralCode() }),
         })
         if (!res.ok) {
           const body = await res.json().catch(() => ({}))
           throw new Error(body.error ?? 'Erreur lors de la création du profil')
         }
+        clearReferralCode()
         document.cookie = 'br_session=1; path=/; max-age=86400; SameSite=Strict'
         router.replace((redirectTo || CLIENT_HOME) as never)
       } catch (linkErr) {
