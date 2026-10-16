@@ -19,6 +19,7 @@ import { findClientPacks, isPackUsable } from '@/lib/services/pack.service'
 import { GROUP_SESSION_LEVEL_LABELS, type GroupSession, type Discount, type ClientSubscription, type Building, type ClientPack } from '@/types'
 import { REFERRAL_FREE_LABEL } from '@/lib/utils/referral'
 import { useClientSettings } from '@/lib/hooks/useClientSettings'
+import { SavingsOffers } from '@/components/client/SavingsOffers'
 import {
   C, card, iconCircle, arrowCircle, primaryButton, secondaryButton, hint, pageTitle, DateBox, Pill, coachFirstNames,
 } from '@/components/client/ClientUI'
@@ -31,6 +32,7 @@ interface PublicGroupSessionView {
   coachNames?: string[]
   startAt: string
   endAt?: string
+  serviceId?: string
   maxParticipants: number
   price: number
   level?: GroupSession['level']
@@ -267,6 +269,7 @@ export default function ClientGroupSessionDetailPage() {
             onPhoto={setLightboxUrl}
           />
         )}
+        {!isFull && <SavingsOffers serviceId={publicSession.serviceId} unitPrice={publicSession.price} />}
         {isFull ? (
           <button disabled style={{ ...primaryButton, background: C.soft, color: C.muted, cursor: 'not-allowed' }}>Complet</button>
         ) : (
@@ -405,6 +408,14 @@ export default function ClientGroupSessionDetailPage() {
         )
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {!isPrivate && !isFull && !referralFree && !(subscriptionCovers && subscriptionQuotaOk) && !coveringPack && !firstBookingFree && (
+            <SavingsOffers
+              serviceId={groupSession.serviceId}
+              dayOfWeek={groupSession.dayOfWeek}
+              startTime={groupSession.startTime}
+              unitPrice={groupSession.price}
+            />
+          )}
           {activeSubscription && !referralFree && !(subscriptionCovers && subscriptionQuotaOk) && !coveringPack && (
             <Notice tone="neutral" icon={<Repeat size={15} strokeWidth={1.75} />}>
               {subscriptionCovers
