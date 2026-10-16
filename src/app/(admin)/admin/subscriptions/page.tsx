@@ -15,6 +15,8 @@ import { EmptyState } from '@/components/shared/EmptyState'
 import { ListSkeleton } from '@/components/shared/LoadingSkeleton'
 import type { SubscriptionPlan, SubscriptionDurationUnit, Service } from '@/types'
 import { SUBSCRIPTION_DURATION_UNIT_LABELS, DAY_OF_WEEK_LABELS } from '@/types'
+import { useLimitedOfferForm } from '@/components/admin/LimitedOfferForm'
+import { limitedOfferBadge, isLimitedOfferExpired } from '@/lib/utils/limited-offer'
 
 const WEEK_DAYS = [1, 2, 3, 4, 5, 6, 0] // Lundi -> Dimanche pour l'affichage, valeur stockée en convention JS
 
@@ -33,6 +35,11 @@ function PlanRow({ plan, services, onEdit, onDelete }: {
           <p className="text-[14px] font-medium text-[var(--color-text-primary)] truncate">{plan.name}</p>
           {plan.isPublic ? <Badge variant="paid">Public</Badge> : <Badge variant="muted">Caché</Badge>}
           {!plan.active && <Badge variant="cancelled">Inactif</Badge>}
+          {limitedOfferBadge(plan) && (
+            <Badge variant={isLimitedOfferExpired(plan) ? 'muted' : 'gold'}>
+              {isLimitedOfferExpired(plan) ? 'Offre terminée' : limitedOfferBadge(plan)}
+            </Badge>
+          )}
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <span className="amount-mono text-[13px] font-semibold text-[var(--color-text-primary)]">CHF {plan.price.toFixed(2)}</span>
@@ -83,12 +90,14 @@ export default function SubscriptionPlansPage() {
   const [price, setPrice] = useState('')
   const [isPublic, setIsPublic] = useState(true)
   const [active, setActive] = useState(true)
+  const limitedOffer = useLimitedOfferForm()
 
   function resetForm() {
     setName(''); setDescription(''); setDurationValue('1'); setDurationUnit('months')
     setServiceIds([]); setSessionsPerWeek('1')
     setFixedSlotEnabled(false); setFixedDayOfWeek(1); setFixedStartTime('18:30'); setFixedServiceId('')
     setPrice(''); setIsPublic(true); setActive(true); setError(null)
+    limitedOffer.reset()
   }
 
   function openCreate() { resetForm(); setEditing(null); setSheet('create') }
@@ -103,6 +112,7 @@ export default function SubscriptionPlansPage() {
     setFixedStartTime(plan.fixedSlot?.startTime ?? '18:30')
     setFixedServiceId(plan.fixedSlot?.serviceId ?? '')
     setPrice(String(plan.price)); setIsPublic(plan.isPublic); setActive(plan.active)
+    limitedOffer.load(plan)
     setError(null)
     setSheet('edit')
   }
@@ -149,6 +159,7 @@ export default function SubscriptionPlansPage() {
           ? { fixedSlot: { dayOfWeek: fixedDayOfWeek, startTime: fixedStartTime, serviceId: fixedServiceId } }
           : (sheet === 'edit' ? { fixedSlot: deleteField() } : {})),
         price: numPrice, isPublic, active,
+        ...limitedOffer.data(sheet === 'edit'),
       }
       if (sheet === 'create') {
         await createDoc('subscriptionPlans', data)
@@ -296,6 +307,8 @@ export default function SubscriptionPlansPage() {
                 <span className="text-[13px] font-medium text-[var(--color-text-primary)]">Visible pour le client (self-service)</span>
               </button>
             </FormField>
+
+            {limitedOffer.fields}
 
             <FormField label="Statut">
               <button type="button" onClick={() => setActive(v => !v)}

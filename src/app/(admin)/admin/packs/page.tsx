@@ -15,6 +15,8 @@ import { EmptyState } from '@/components/shared/EmptyState'
 import { ListSkeleton } from '@/components/shared/LoadingSkeleton'
 import type { PackPlan, SubscriptionDurationUnit, Service } from '@/types'
 import { SUBSCRIPTION_DURATION_UNIT_LABELS } from '@/types'
+import { useLimitedOfferForm } from '@/components/admin/LimitedOfferForm'
+import { limitedOfferBadge, isLimitedOfferExpired } from '@/lib/utils/limited-offer'
 
 function servicesSummary(plan: PackPlan, services: Service[]): string {
   const names = plan.serviceIds.map(id => services.find(s => s.id === id)?.name).filter(Boolean)
@@ -45,6 +47,11 @@ function PackRow({ plan, services, onEdit, onDelete }: {
           <p className="text-[14px] font-medium text-[var(--color-text-primary)] truncate">{plan.name}</p>
           {plan.isPublic ? <Badge variant="paid">Public</Badge> : <Badge variant="muted">Caché</Badge>}
           {!plan.active && <Badge variant="cancelled">Inactif</Badge>}
+          {limitedOfferBadge(plan) && (
+            <Badge variant={isLimitedOfferExpired(plan) ? 'muted' : 'gold'}>
+              {isLimitedOfferExpired(plan) ? 'Offre terminée' : limitedOfferBadge(plan)}
+            </Badge>
+          )}
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <span className="amount-mono text-[13px] font-semibold text-[var(--color-text-primary)]">CHF {plan.price.toFixed(2)}</span>
@@ -89,11 +96,13 @@ export default function PackPlansPage() {
   const [serviceIds, setServiceIds] = useState<string[]>([])
   const [isPublic, setIsPublic] = useState(true)
   const [active, setActive] = useState(true)
+  const limitedOffer = useLimitedOfferForm()
 
   function resetForm() {
     setName(''); setDescription(''); setSessionCount('10'); setPrice('')
     setValidityValue('6'); setValidityUnit('months'); setServiceIds([])
     setIsPublic(true); setActive(true); setError(null)
+    limitedOffer.reset()
   }
 
   function openCreate() { resetForm(); setEditing(null); setSheet('create') }
@@ -104,6 +113,7 @@ export default function PackPlansPage() {
     setSessionCount(String(plan.sessionCount)); setPrice(String(plan.price))
     setValidityValue(String(plan.validityValue)); setValidityUnit(plan.validityUnit)
     setServiceIds(plan.serviceIds); setIsPublic(plan.isPublic); setActive(plan.active)
+    limitedOffer.load(plan)
     setError(null)
     setSheet('edit')
   }
@@ -133,6 +143,7 @@ export default function PackPlansPage() {
         sessionCount: numCount, price: numPrice,
         validityValue: valVal, validityUnit,
         serviceIds, isPublic, active,
+        ...limitedOffer.data(sheet === 'edit'),
       }
       if (sheet === 'create') {
         await createDoc('packPlans', data)
@@ -221,6 +232,8 @@ export default function PackPlansPage() {
             <FormField label="Visibilité" hint="Public = le client peut l'acheter lui-même. Caché = attribution manuelle uniquement.">
               <CheckRow checked={isPublic} onClick={() => setIsPublic(v => !v)} label="Visible pour le client (achat en ligne)" />
             </FormField>
+
+            {limitedOffer.fields}
 
             <FormField label="Statut">
               <CheckRow checked={active} onClick={() => setActive(v => !v)} label="Actif" />

@@ -13,7 +13,8 @@ import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { BrandLoader } from '@/components/shared/BrandLoader'
 import { ClientPage, SectionTitle, EmptyCard, ErrorNotice } from '@/components/client/ClientPage'
-import { C, card, primaryButton, Pill } from '@/components/client/ClientUI'
+import { C, card, primaryButton, Pill, LimitedOfferBadge } from '@/components/client/ClientUI'
+import { isLimitedOfferExpired, limitedOfferBadge } from '@/lib/utils/limited-offer'
 
 export default function ClientSubscriptionsPage() {
   const router = useRouter()
@@ -55,6 +56,9 @@ export default function ClientSubscriptionsPage() {
   }
 
   const loading = profileLoading || plansLoading || subLoading
+  // Offres temporaires terminées : plus proposées (sauf la formule en cours du client, pour
+  // qu'il la retrouve ; l'achat est de toute façon refusé côté serveur)
+  const offeredPlans = plans.filter(p => !isLimitedOfferExpired(p) || p.id === activeSubscription?.planId)
 
   return (
     <ClientPage title="Abonnements" subtitle="Viens t'entraîner chaque semaine." back backFallback="/profile">
@@ -75,7 +79,7 @@ export default function ClientSubscriptionsPage() {
 
           {error && <ErrorNotice>{error}</ErrorNotice>}
 
-          {plans.length === 0 ? (
+          {offeredPlans.length === 0 ? (
             <EmptyCard
               icon={<Repeat size={18} strokeWidth={1.75} />}
               title="Aucun abonnement disponible"
@@ -84,10 +88,11 @@ export default function ClientSubscriptionsPage() {
           ) : (
             <>
               {activeSubscription && <SectionTitle>Les formules</SectionTitle>}
-              {plans.map(plan => {
+              {offeredPlans.map(plan => {
                 const isThisOne = activeSubscription?.planId === plan.id
                 return (
                   <div key={plan.id} style={{ ...card, outline: isThisOne ? `1.5px solid ${C.charcoal}` : undefined, outlineOffset: -1.5 }}>
+                    {!isThisOne && limitedOfferBadge(plan) && <div style={{ marginBottom: 10 }}><LimitedOfferBadge text={limitedOfferBadge(plan)!} /></div>}
                     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
                       <p style={{ margin: 0, fontSize: 17, fontWeight: 600, lineHeight: 1.3 }}>{plan.name}</p>
                       <p style={{ margin: 0, fontSize: 20, fontWeight: 600, letterSpacing: '-0.02em', flexShrink: 0 }}>

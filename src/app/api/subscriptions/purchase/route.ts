@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Timestamp, FieldValue } from 'firebase-admin/firestore'
 import { getAdminDb, getAdminAuth } from '@/lib/firebase/admin'
+import { isLimitedOfferExpired, type LimitedOfferFields } from '@/lib/utils/limited-offer'
 import { createSubscriptionCheckout } from '@/lib/server/subscription-stripe'
 
 function computeEndDate(start: Date, value: number, unit: 'weeks' | 'months'): Date {
@@ -39,6 +40,9 @@ export async function POST(req: NextRequest) {
     const plan = planSnap.data()!
     if (plan['isPublic'] !== true || plan['active'] !== true) {
       return NextResponse.json({ error: 'Cet abonnement n\'est pas disponible à l\'achat.' }, { status: 412 })
+    }
+    if (isLimitedOfferExpired(plan as LimitedOfferFields)) {
+      return NextResponse.json({ error: 'Cette offre est terminée.' }, { status: 412 })
     }
 
     // Pré-vérification (UX, pas la garantie réelle — l'invariant "un seul abonnement actif" est

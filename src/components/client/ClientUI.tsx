@@ -104,3 +104,17 @@ export function GoogleIcon() {
     </svg>
   )
 }
+
+/** Badge « Offre limitée · jusqu'au … » d'un pack ou d'une formule d'abonnement temporaire. */
+export function LimitedOfferBadge({ text, onDark }: { text: string; onDark?: boolean }) {
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 9999,
+      background: onDark ? '#F2C374' : C.graphite, color: onDark ? C.ink : '#fff',
+      fontSize: 12, fontWeight: 600, lineHeight: 1.3,
+    }}>
+      <span aria-hidden style={{ width: 6, height: 6, borderRadius: 9999, background: onDark ? C.ink : '#F2C374' }} />
+      {text}
+    </span>
+  )
+}

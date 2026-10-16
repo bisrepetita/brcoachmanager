@@ -1,4 +1,5 @@
 import type { PackPlan, SubscriptionPlan } from '@/types'
+import { isLimitedOfferExpired, limitedOfferBadge } from './limited-offer'
 
 // Économie par séance qu'apporterait un pack ou un abonnement par rapport au prix d'une séance à
 // l'unité — affichée sur la fiche d'une séance collective pour inciter à passer à une formule.
@@ -14,6 +15,8 @@ export interface SavingOffer {
   /** Économie en pourcentage du prix à l'unité (arrondi) */
   savingPct: number
   detail: string
+  /** Badge d'offre temporaire, le cas échéant */
+  badge?: string
 }
 
 const WEEKS_PER_MONTH = 52 / 12
@@ -31,9 +34,9 @@ function toOffer(base: Omit<SavingOffer, 'saving' | 'savingPct'>, unitPrice: num
 export function packOffers(plans: PackPlan[], serviceId: string | undefined, unitPrice: number): SavingOffer[] {
   if (!serviceId) return []
   return plans
-    .filter(p => p.serviceIds.includes(serviceId) && p.sessionCount > 0)
+    .filter(p => p.serviceIds.includes(serviceId) && p.sessionCount > 0 && !isLimitedOfferExpired(p))
     .map(p => toOffer({
-      kind: 'pack', id: p.id, name: p.name,
+      kind: 'pack', id: p.id, name: p.name, badge: limitedOfferBadge(p) ?? undefined,
       perSession: round2(p.price / p.sessionCount),
       detail: `${p.sessionCount} séances à utiliser quand tu veux`,
     }, unitPrice))
@@ -52,7 +55,7 @@ export function subscriptionOffers(
 ): SavingOffer[] {
   if (!session.serviceId) return []
   return plans
-    .filter(p => p.serviceIds.includes(session.serviceId!))
+    .filter(p => p.serviceIds.includes(session.serviceId!) && !isLimitedOfferExpired(p))
     .filter(p => !p.fixedSlot || (
       p.fixedSlot.serviceId === session.serviceId &&
       p.fixedSlot.dayOfWeek === session.dayOfWeek &&
@@ -62,7 +65,7 @@ export function subscriptionOffers(
       const weeks = p.durationUnit === 'weeks' ? p.durationValue : p.durationValue * WEEKS_PER_MONTH
       const sessions = Math.max(1, Math.round(p.sessionsPerWeek * weeks))
       return toOffer({
-        kind: 'subscription', id: p.id, name: p.name,
+        kind: 'subscription', id: p.id, name: p.name, badge: limitedOfferBadge(p) ?? undefined,
         perSession: round2(p.price / sessions),
         detail: `${p.sessionsPerWeek}x par semaine, si tu viens chaque semaine`,
       }, unitPrice)

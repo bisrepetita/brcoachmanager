@@ -13,7 +13,8 @@ import { findClientPacks, isPackUsable, purchasePackPlan } from '@/lib/services/
 import { SUBSCRIPTION_DURATION_UNIT_LABELS, type PackPlan, type ClientPack, type Service } from '@/types'
 import { BrandLoader } from '@/components/shared/BrandLoader'
 import { ClientPage, SectionTitle, EmptyCard, ErrorNotice } from '@/components/client/ClientPage'
-import { C, card, primaryButton, Pill } from '@/components/client/ClientUI'
+import { C, card, primaryButton, Pill, LimitedOfferBadge } from '@/components/client/ClientUI'
+import { isLimitedOfferExpired, limitedOfferBadge } from '@/lib/utils/limited-offer'
 
 
 export default function ClientPacksPage() {
@@ -56,6 +57,8 @@ export default function ClientPacksPage() {
     }
   }
 
+  // Offres temporaires terminées : plus proposées (l'achat est aussi refusé côté serveur)
+  const offeredPlans = plans.filter(p => !isLimitedOfferExpired(p))
   const serviceNames = (ids: string[]) => ids.map(id => services.find(s => s.id === id)?.name).filter(Boolean).join(', ')
   const loading = profileLoading || plansLoading || packsLoading
 
@@ -90,7 +93,7 @@ export default function ClientPacksPage() {
 
           {error && <ErrorNotice>{error}</ErrorNotice>}
 
-          {plans.length === 0 ? (
+          {offeredPlans.length === 0 ? (
             <EmptyCard
               icon={<Ticket size={18} strokeWidth={1.75} />}
               title="Aucun pack disponible"
@@ -99,8 +102,9 @@ export default function ClientPacksPage() {
           ) : (
             <>
               {myPacks.length > 0 && <SectionTitle>Acheter un pack</SectionTitle>}
-              {plans.map(plan => (
+              {offeredPlans.map(plan => (
                 <div key={plan.id} style={card}>
+                  {limitedOfferBadge(plan) && <div style={{ marginBottom: 10 }}><LimitedOfferBadge text={limitedOfferBadge(plan)!} /></div>}
                   <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
                     <p style={{ margin: 0, fontSize: 17, fontWeight: 600, lineHeight: 1.3 }}>{plan.name}</p>
                     <p style={{ margin: 0, fontSize: 20, fontWeight: 600, letterSpacing: '-0.02em', flexShrink: 0 }}>

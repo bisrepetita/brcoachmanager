@@ -7,7 +7,7 @@ import { ArrowRight } from 'lucide-react'
 import { useCollection } from '@/lib/hooks/useCollection'
 import { packOffers, subscriptionOffers } from '@/lib/utils/savings'
 import type { PackPlan, SubscriptionPlan } from '@/types'
-import { C, card, arrowCircle } from './ClientUI'
+import { C, card, arrowCircle, LimitedOfferBadge } from './ClientUI'
 
 const MAX_OFFERS = 3
 
@@ -56,6 +56,7 @@ export function SavingsOffers({ serviceId, dayOfWeek, startTime, unitPrice }: {
               {formatChf(o.perSession)} CHF / séance · <span style={{ color: '#9BD3AE', fontWeight: 600 }}>tu économises {formatChf(o.saving)} CHF</span>
             </p>
             <p style={{ margin: '1px 0 0', fontSize: 12, color: onDarkMuted }}>{o.detail}</p>
+            {o.badge && <div style={{ marginTop: 6 }}><LimitedOfferBadge text={o.badge} onDark /></div>}
           </div>
           <span style={{
             flexShrink: 0, padding: '4px 10px', borderRadius: 9999, background: C.greenBg, color: C.green,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Timestamp, FieldValue } from 'firebase-admin/firestore'
 import { getAdminDb, getAdminAuth } from '@/lib/firebase/admin'
+import { isLimitedOfferExpired, type LimitedOfferFields } from '@/lib/utils/limited-offer'
 import { computePackExpiry, createPackCheckout } from '@/lib/server/pack-admin'
 
 // Achat d'un pack en self-service : crée le pack client en 'pending_payment' puis renvoie l'URL
@@ -34,6 +35,9 @@ export async function POST(req: NextRequest) {
     const plan = planSnap.data()!
     if (plan['isPublic'] !== true || plan['active'] !== true) {
       return NextResponse.json({ error: 'Ce pack n\'est pas disponible à l\'achat.' }, { status: 412 })
+    }
+    if (isLimitedOfferExpired(plan as LimitedOfferFields)) {
+      return NextResponse.json({ error: 'Cette offre est terminée.' }, { status: 412 })
     }
 
     // Dates provisoires — recalculées à partir du paiement effectif par le webhook.

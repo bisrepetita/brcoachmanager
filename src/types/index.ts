@@ -354,6 +354,10 @@ export interface SubscriptionPlan {
   price: number
   isPublic: boolean
   active: boolean
+  // Offre temporaire : badge affiché au client et date de fin facultative (cf. lib/utils/limited-offer)
+  limitedOffer?: boolean
+  limitedOfferLabel?: string
+  limitedOfferEndsAt?: Timestamp
   createdBy: string
   createdAt: Timestamp
   updatedAt: Timestamp
@@ -418,6 +422,10 @@ export interface PackPlan {
   serviceIds: string[]
   isPublic: boolean
   active: boolean
+  // Offre temporaire : badge affiché au client et date de fin facultative (cf. lib/utils/limited-offer)
+  limitedOffer?: boolean
+  limitedOfferLabel?: string
+  limitedOfferEndsAt?: Timestamp
   createdAt: Timestamp
   updatedAt: Timestamp
 }
