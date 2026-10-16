@@ -103,8 +103,8 @@ function SignupPageContent() {
         <p style={{ margin: '0 0 24px', fontSize: 15, color: C.muted }}>Pour réserver tes séances en quelques secondes.</p>
 
         {hasReferral && (
-          <div style={{ ...card, background: C.ink, color: '#fff', display: 'flex', alignItems: 'center', gap: 14, padding: 16, marginBottom: 20 }}>
-            <span style={{ ...iconCircle, background: '#333333' }}><Gift size={18} strokeWidth={1.75} /></span>
+          <div style={{ ...card, background: C.graphite, color: '#fff', display: 'flex', alignItems: 'center', gap: 14, padding: 16, marginBottom: 20 }}>
+            <span style={{ ...iconCircle, background: 'rgba(255,255,255,0.12)' }}><Gift size={18} strokeWidth={1.75} /></span>
             <span>
               <span style={{ display: 'block', fontSize: 15, fontWeight: 600 }}>Ta première séance est offerte</span>
               <span style={{ display: 'block', fontSize: 13, opacity: 0.75, marginTop: 2 }}>Grâce au parrainage, elle sera gratuite.</span>
@@ -177,7 +177,7 @@ function SignupPageContent() {
           {googleLoading ? 'Connexion…' : 'Continuer avec Google'}
         </button>
 
-        <div style={{ ...card, marginTop: 28, display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ ...card, marginTop: 28, display: 'flex', alignItems: 'center', gap: 12, background: C.stone }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <p style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Déjà un compte ?</p>
             <p style={{ margin: '2px 0 0', fontSize: 13, color: C.muted }}>Connecte-toi pour retrouver tes réservations.</p>

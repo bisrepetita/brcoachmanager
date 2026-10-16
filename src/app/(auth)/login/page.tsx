@@ -186,7 +186,7 @@ function LoginPageContent() {
               {googleLoading ? 'Connexion…' : 'Continuer avec Google'}
             </button>
 
-            <div style={{ ...card, marginTop: 28, display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ ...card, marginTop: 28, display: 'flex', alignItems: 'center', gap: 12, background: C.stone }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Pas encore de compte ?</p>
                 <p style={{ margin: '2px 0 0', fontSize: 13, color: C.muted }}>Crée-le en une minute pour réserver.</p>

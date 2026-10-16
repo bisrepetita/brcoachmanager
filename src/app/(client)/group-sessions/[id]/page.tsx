@@ -491,14 +491,14 @@ function SessionHeader({ title, subtitle, startAt, endAt, coachNames, status }: 
         {subtitle && <p style={{ margin: '6px 0 0', fontSize: 15, color: C.muted }}>{subtitle}</p>}
       </div>
       {startAt && (
-        <div style={card}>
+        <div style={{ ...card, background: C.charcoal, color: '#fff' }}>
           <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
-            <DateBox date={startAt} dark />
+            <DateBox date={startAt} light />
             <div style={{ minWidth: 0 }}>
               <p style={{ margin: 0, fontSize: 17, fontWeight: 600, textTransform: 'capitalize' }}>
                 {format(startAt, 'EEEE d MMMM', { locale: fr })}
               </p>
-              <p style={{ margin: '3px 0 0', fontSize: 14, color: C.muted }}>
+              <p style={{ margin: '3px 0 0', fontSize: 14, color: 'rgba(255,255,255,0.65)' }}>
                 {format(startAt, 'HH:mm')}{endAt && ` – ${format(endAt, 'HH:mm')}`}{coaches && ` · avec ${coaches}`}
               </p>
             </div>
@@ -519,7 +519,7 @@ function StatsRow({ confirmedCount, maxParticipants, price, priceLabel = 'Prix' 
   const spotsLeft = Math.max(0, maxParticipants - confirmedCount)
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-      <div style={{ ...card, padding: 16 }}>
+      <div style={{ ...card, padding: 16, background: C.stone }}>
         <p style={statLabel}>Places</p>
         {spotsLeft === 0 ? (
           <p style={{ ...statValue, color: C.red }}>Complet</p>
@@ -528,7 +528,7 @@ function StatsRow({ confirmedCount, maxParticipants, price, priceLabel = 'Prix' 
         )}
         <p style={{ margin: '2px 0 0', fontSize: 12, color: C.muted }}>{confirmedCount}/{maxParticipants} inscrits</p>
       </div>
-      <div style={{ ...card, padding: 16 }}>
+      <div style={{ ...card, padding: 16, background: C.stone }}>
         <p style={statLabel}>{priceLabel}</p>
         {price}
       </div>
@@ -574,7 +574,7 @@ function AccessCard({ instructions, photos, open, onToggle, onPhoto }: {
         disabled={!onToggle}
         style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 14, background: 'none', border: 'none', padding: 0, cursor: onToggle ? 'pointer' : 'default', textAlign: 'left', color: C.ink, fontFamily: 'inherit' }}
       >
-        <span style={{ ...iconCircle, background: C.soft }}><MapPin size={18} strokeWidth={1.75} /></span>
+        <span style={{ ...iconCircle, background: C.stone }}><MapPin size={18} strokeWidth={1.75} /></span>
         <span style={{ flex: 1, minWidth: 0 }}>
           <span style={{ display: 'block', fontSize: 16, fontWeight: 600 }}>Comment nous trouver</span>
           <span style={{ display: 'block', fontSize: 13, color: C.muted, marginTop: 2 }}>Accès au studio{photos && photos.length > 0 ? ' et photos' : ''}</span>
@@ -609,7 +609,7 @@ function AccessCard({ instructions, photos, open, onToggle, onPhoto }: {
 }
 
 function Notice({ tone, icon, children }: { tone: 'red' | 'amber' | 'neutral'; icon?: React.ReactNode; children: React.ReactNode }) {
-  const [bg, fg] = { red: [C.redBg, C.red], amber: [C.amberBg, C.amber], neutral: [C.card, C.ink] }[tone]
+  const [bg, fg] = { red: [C.redBg, C.red], amber: [C.amberBg, C.amber], neutral: [C.stone, C.ink] }[tone]
   return (
     <div style={{ display: 'flex', gap: 10, padding: '12px 16px', borderRadius: 18, background: bg, color: fg, fontSize: 13, lineHeight: 1.45 }}>
       {icon && <span style={{ flexShrink: 0, marginTop: 1, color: C.muted }}>{icon}</span>}

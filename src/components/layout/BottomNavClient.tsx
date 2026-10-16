@@ -39,7 +39,7 @@ export function BottomNavClient() {
               style={{
                 height: 48, borderRadius: 9999, gap: 8,
                 padding: isActive ? '0 18px' : '0 16px',
-                background: isActive ? '#1C1C1C' : 'transparent',
+                background: isActive ? '#2C2C2A' : 'transparent',
                 color: isActive ? '#FFFFFF' : '#1C1C1C',
                 transition: 'background 160ms ease, padding 160ms ease',
               }}

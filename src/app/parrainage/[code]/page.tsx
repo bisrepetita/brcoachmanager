@@ -49,8 +49,8 @@ export default function ReferralLandingPage({ params }: { params: Promise<{ code
         <>
           <h1 style={title}>{referrerFirstName} t&apos;invite chez Bis Repetita</h1>
 
-          <div style={{ background: '#1C1C1C', color: '#fff', borderRadius: 22, padding: 20, display: 'flex', gap: 14, alignItems: 'center', margin: '0 0 16px' }}>
-            <span style={{ width: 44, height: 44, borderRadius: 9999, background: '#333333', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <div style={{ background: '#4A4A47', color: '#fff', borderRadius: 22, padding: 20, display: 'flex', gap: 14, alignItems: 'center', margin: '0 0 16px' }}>
+            <span style={{ width: 44, height: 44, borderRadius: 9999, background: 'rgba(255,255,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               <Gift size={18} strokeWidth={1.75} />
             </span>
             <span>
@@ -82,7 +82,7 @@ export default function ReferralLandingPage({ params }: { params: Promise<{ code
 const title: React.CSSProperties = { margin: '40px 0 24px', fontSize: 34, fontWeight: 400, letterSpacing: '-0.035em', lineHeight: 1.1 }
 const text: React.CSSProperties = { margin: '0 0 20px', fontSize: 15, color: '#6E6E6B', lineHeight: 1.5 }
 const primaryButton: React.CSSProperties = {
-  height: 48, borderRadius: 9999, background: '#1C1C1C', color: '#fff', textDecoration: 'none',
+  height: 48, borderRadius: 9999, background: '#2C2C2A', color: '#fff', textDecoration: 'none',
   display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 600,
 }
 const secondaryButton: React.CSSProperties = {

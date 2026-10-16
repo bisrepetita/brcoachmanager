@@ -23,7 +23,7 @@ export const arrowCircle: React.CSSProperties = {
 }
 
 export const primaryButton: React.CSSProperties = {
-  height: 46, borderRadius: 9999, border: 'none', background: C.ink, color: '#fff', cursor: 'pointer',
+  height: 46, borderRadius: 9999, border: 'none', background: C.charcoal, color: '#fff', cursor: 'pointer',
   display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 600,
   textDecoration: 'none', fontFamily: 'inherit',
 }
@@ -47,7 +47,7 @@ export function DateBox({ date, dark, light }: { date: Date; dark?: boolean; lig
   return (
     <div style={{
       width: size.width, height: size.height, borderRadius: size.radius, flexShrink: 0,
-      background: light ? C.card : dark ? C.ink : C.soft, color: dark ? '#fff' : C.ink,
+      background: light ? C.card : dark ? C.charcoal : C.soft, color: dark ? '#fff' : C.ink,
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
     }}>
       <span style={{ fontSize: dark ? 11 : 9, fontWeight: 500, textTransform: 'uppercase', opacity: dark ? 0.85 : 0.7, lineHeight: 1.2 }}>
@@ -61,7 +61,7 @@ export function DateBox({ date, dark, light }: { date: Date; dark?: boolean; lig
 /** Pastille de statut (réservation confirmée, paiement en attente, remise…). */
 export function Pill({ tone, children }: { tone: 'green' | 'amber' | 'red' | 'neutral'; children: React.ReactNode }) {
   const colors = {
-    green: [C.greenBg, C.green], amber: [C.amberBg, C.amber], red: [C.redBg, C.red], neutral: [C.soft, C.ink],
+    green: [C.greenBg, C.green], amber: [C.amberBg, C.amber], red: [C.redBg, C.red], neutral: [C.stone, C.ink],
   }[tone]
   return (
     <span style={{

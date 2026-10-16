@@ -170,7 +170,7 @@ export default function ClientGroupSessionsPage() {
       <h1 style={{ ...pageTitle, margin: '40px 0 20px' }}>Planning</h1>
 
       {/* Semaine : précédente / suivante + jours de la semaine */}
-      <div style={{ ...card, padding: 14 }}>
+      <div style={{ ...card, padding: 14, background: C.charcoal, color: '#fff' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <button onClick={() => setWeekAnchor(w => subWeeks(w, 1))} aria-label="Semaine précédente" className="press-effect" style={roundButton}>
             <ChevronLeft size={16} />
@@ -181,12 +181,12 @@ export default function ClientGroupSessionsPage() {
             aria-label={showDays ? 'Masquer les jours' : 'Afficher les jours'}
             style={{
               display: 'flex', alignItems: 'center', gap: 6, height: 36, padding: '0 12px', borderRadius: 9999,
-              border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit', color: C.ink,
+              border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit', color: '#fff',
               fontSize: 15, fontWeight: 600,
             }}
           >
             {isCurrentWeek ? 'Cette semaine' : `${format(weekStart, 'd MMM', { locale: fr })} – ${format(weekEnd, 'd MMM', { locale: fr })}`}
-            {showDays ? <ChevronUp size={15} color={C.muted} /> : <ChevronDown size={15} color={C.muted} />}
+            {showDays ? <ChevronUp size={15} color={onDarkMuted} /> : <ChevronDown size={15} color={onDarkMuted} />}
           </button>
           <button onClick={() => setWeekAnchor(w => addWeeks(w, 1))} aria-label="Semaine suivante" className="press-effect" style={roundButton}>
             <ChevronRight size={16} />
@@ -205,8 +205,8 @@ export default function ClientGroupSessionsPage() {
                 style={{
                   height: 54, borderRadius: 14, border: 'none', fontFamily: 'inherit',
                   cursor: hasSessions ? 'pointer' : 'default',
-                  background: today ? C.ink : hasSessions ? C.soft : 'transparent',
-                  color: today ? '#fff' : hasSessions ? C.ink : '#AFAFAB',
+                  background: today ? C.card : hasSessions ? 'rgba(255,255,255,0.12)' : 'transparent',
+                  color: today ? C.ink : hasSessions ? '#fff' : 'rgba(255,255,255,0.35)',
                   display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1,
                 }}
               >
@@ -214,7 +214,7 @@ export default function ClientGroupSessionsPage() {
                   {format(day, 'EEEEE', { locale: fr })}
                 </span>
                 <span style={{ fontSize: 16, fontWeight: 600, lineHeight: 1.1 }}>{format(day, 'd')}</span>
-                <span style={{ width: 4, height: 4, borderRadius: 9999, background: hasSessions ? (today ? '#fff' : C.ink) : 'transparent' }} />
+                <span style={{ width: 4, height: 4, borderRadius: 9999, background: hasSessions ? (today ? C.ink : '#fff') : 'transparent' }} />
               </button>
             )
           })}
@@ -304,7 +304,7 @@ function SessionRow({ session: gs, anchorId, divider }: { session: GroupSessionL
       {isPast ? (
         <span style={{ fontSize: 13, color: '#AFAFAB', flexShrink: 0 }}>Terminée</span>
       ) : reserved ? (
-        <span style={{ ...pill, background: pending ? C.amberBg : C.ink, color: pending ? C.amber : '#fff', border: 'none' }}>
+        <span style={{ ...pill, background: pending ? C.amberBg : C.charcoal, color: pending ? C.amber : '#fff', border: 'none' }}>
           {pending ? 'À payer' : 'Réservé'}
         </span>
       ) : isFull ? (
@@ -323,7 +323,7 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
       style={{
         height: 36, padding: '0 16px', borderRadius: 9999, border: 'none', cursor: 'pointer', flexShrink: 0,
         whiteSpace: 'nowrap', fontFamily: 'inherit', fontSize: 14, fontWeight: 500,
-        background: active ? C.ink : C.soft, color: active ? '#fff' : C.ink,
+        background: active ? C.charcoal : C.stone, color: active ? '#fff' : C.ink,
       }}
     >
       {children}
@@ -336,7 +336,10 @@ const pill: React.CSSProperties = {
   display: 'inline-flex', alignItems: 'center', fontSize: 14, fontWeight: 600, color: C.ink,
 }
 
+// Texte secondaire sur la carte anthracite de la semaine
+const onDarkMuted = 'rgba(255,255,255,0.65)'
+
 const roundButton: React.CSSProperties = {
-  width: 36, height: 36, borderRadius: 9999, border: 'none', background: C.soft, color: C.ink, cursor: 'pointer',
+  width: 36, height: 36, borderRadius: 9999, border: 'none', background: 'rgba(255,255,255,0.14)', color: '#fff', cursor: 'pointer',
   display: 'flex', alignItems: 'center', justifyContent: 'center',
 }
