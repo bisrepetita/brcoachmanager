@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter, DM_Sans } from 'next/font/google'
 import { ClientProviders } from '@/components/providers/ClientProviders'
+import { rootMetadata } from '@/lib/site-metadata'
 import './globals.css'
 
 const inter = Inter({
@@ -19,8 +20,7 @@ const dmSans = DM_Sans({
 })
 
 export const metadata: Metadata = {
-  title: 'Bis Repetita',
-  description: 'Agenda interne Bis Repetita — gestion coachs, séances, paiements',
+  ...rootMetadata,
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
