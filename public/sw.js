@@ -1,10 +1,12 @@
-const CACHE = 'br-coach-v2'
+const CACHE = 'br-coach-v3'
 const OFFLINE_URL = '/offline'
+// Logos affichés par la page hors connexion : doivent être en cache avant toute coupure réseau
+const PRECACHED_ASSETS = ['/logo-bis-repetita.png', '/logo-icon.png']
 const IMMUTABLE_PATTERN = /\/_next\/static\//
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
-    caches.open(CACHE).then(c => c.addAll([OFFLINE_URL, '/'])).then(() => self.skipWaiting())
+    caches.open(CACHE).then(c => c.addAll([OFFLINE_URL, '/', ...PRECACHED_ASSETS])).then(() => self.skipWaiting())
   )
 })
 
