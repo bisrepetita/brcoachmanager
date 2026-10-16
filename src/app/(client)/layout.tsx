@@ -9,7 +9,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   return (
     <ToastProvider>
       <PhoneCompletionGuard />
-      <div style={{ minHeight: '100dvh', background: 'var(--color-background)' }}>
+      <div className="client-theme" style={{ minHeight: '100dvh' }}>
         <main style={{ paddingBottom: 'calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px))' }}>
           {children}
           <BottomNavClient />

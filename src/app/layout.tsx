@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
-import { Inter } from 'next/font/google'
+import { Inter, DM_Sans } from 'next/font/google'
 import { ClientProviders } from '@/components/providers/ClientProviders'
+import { rootMetadata } from '@/lib/site-metadata'
 import './globals.css'
 
 const inter = Inter({
@@ -10,9 +11,16 @@ const inter = Inter({
   display: 'swap',
 })
 
+// Police du nouveau design client — appliquée uniquement dans l'espace client (.client-theme).
+const dmSans = DM_Sans({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-dm-sans',
+  display: 'swap',
+})
+
 export const metadata: Metadata = {
-  title: 'Bis Repetita',
-  description: 'Agenda interne Bis Repetita — gestion coachs, séances, paiements',
+  ...rootMetadata,
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
@@ -35,7 +43,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="fr" className={inter.variable}>
+    <html lang="fr" className={`${inter.variable} ${dmSans.variable}`}>
       <body suppressHydrationWarning>
         <ClientProviders>
           {children}

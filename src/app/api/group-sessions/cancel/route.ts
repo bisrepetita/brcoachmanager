@@ -4,6 +4,7 @@ import { getAdminDb, getAdminAuth } from '@/lib/firebase/admin'
 import { findConsumptionRefsInTransaction, removeConsumptionsInTransaction } from '@/lib/server/subscription-admin'
 import { enrollmentsUpdate } from '@/lib/server/group-session-enrollments'
 import { preparePackCreditRefundInTransaction } from '@/lib/server/pack-admin'
+import { restoreReferralFreeSessionInTransaction } from '@/lib/server/referral-admin'
 
 // Type "loose" côté serveur : le type partagé GroupSessionEnrollment (src/types) pointe sur le
 // Timestamp du SDK client, incompatible avec firebase-admin/firestore côté API route.
@@ -79,6 +80,7 @@ export async function POST(req: NextRequest) {
       })
       removeConsumptionsInTransaction(tx, consumptionRefs)
       refundPackCredit?.()
+      restoreReferralFreeSessionInTransaction(tx, adminDb, entry)
 
       return entry
     })

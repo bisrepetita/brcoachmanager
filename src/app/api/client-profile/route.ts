@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { hasReferralFreeSession } from '@/lib/utils/referral'
 import { getAdminDb, getAdminAuth } from '@/lib/firebase/admin'
 
 export async function GET(req: NextRequest) {
@@ -23,6 +24,7 @@ export async function GET(req: NextRequest) {
       phone: data['phone'] as string | undefined,
       sessionCredits: data['sessionCredits'] as number,
       hasEverBooked: data['hasEverBooked'] === true,
+      referralFreeSessionAvailable: hasReferralFreeSession(data),
     })
   } catch (err) {
     console.error('[client-profile]', err)

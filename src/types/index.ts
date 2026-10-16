@@ -40,6 +40,16 @@ export interface Client {
   uid?: string
   hasEverBooked?: boolean
   activeSubscriptionId?: string
+  // Parrainage : code personnel partagé par ce client (généré à la 1re demande), et pour un
+  // filleul, son parrain (renseigné uniquement par /api/client-signup). Le filleul a droit à une
+  // séance offerte tant que referralFreeSessionUsed n'est pas vrai (cf. lib/utils/referral).
+  referralCode?: string
+  referredByClientId?: string
+  referredByName?: string
+  referredAt?: Timestamp
+  referralFreeSessionUsed?: boolean
+  // Renseigné par l'admin quand le parrain de ce filleul a été récompensé (à la main)
+  referralRewardedAt?: Timestamp
   createdAt: Timestamp
   updatedAt: Timestamp
 }
@@ -237,6 +247,9 @@ export interface GroupSessionEnrollment {
   // les statistiques comptent dans le CA (reconnaissance du revenu à l'usage).
   clientPackId?: string
   packCreditValue?: number
+  // Séance offerte au filleul d'un parrainage — rendue (referralFreeSessionUsed repasse à false)
+  // si l'inscription est annulée.
+  referralFreeSession?: boolean
   // Renseigné si cette inscription vient de l'import automatique des mails de réservation
   // ClassPass (voir src/lib/server/classpass-import.ts) — sert à afficher le badge "ClassPass".
   classPassBookingId?: string
@@ -341,6 +354,10 @@ export interface SubscriptionPlan {
   price: number
   isPublic: boolean
   active: boolean
+  // Offre temporaire : badge affiché au client et date de fin facultative (cf. lib/utils/limited-offer)
+  limitedOffer?: boolean
+  limitedOfferLabel?: string
+  limitedOfferEndsAt?: Timestamp
   createdBy: string
   createdAt: Timestamp
   updatedAt: Timestamp
@@ -405,6 +422,10 @@ export interface PackPlan {
   serviceIds: string[]
   isPublic: boolean
   active: boolean
+  // Offre temporaire : badge affiché au client et date de fin facultative (cf. lib/utils/limited-offer)
+  limitedOffer?: boolean
+  limitedOfferLabel?: string
+  limitedOfferEndsAt?: Timestamp
   createdAt: Timestamp
   updatedAt: Timestamp
 }
@@ -661,6 +682,8 @@ export interface AppSettings {
   defaultSessionDuration: number
   twintBaseLink?: string
   groupSessionCancellationDeadlineHours?: number
+  // Numéro joint par la carte « séance privée » de l'accueil client (vide = carte masquée)
+  clientWhatsappPhone?: string
   updatedAt: Timestamp
 }
 

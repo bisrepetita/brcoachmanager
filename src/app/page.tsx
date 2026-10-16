@@ -3,6 +3,8 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/hooks/useAuth'
+import { CLIENT_HOME } from '@/lib/utils/client-routes'
+import { BrandLoader } from '@/components/shared/BrandLoader'
 
 // Pas de redirection en dur : avant de connaître le rôle réel (ou l'absence de session),
 // envoyer tout le monde vers /calendar faisait clignoter le shell coach/admin (BottomNav compris)
@@ -19,8 +21,8 @@ export default function RootPage() {
       router.replace('/group-sessions')
       return
     }
-    router.replace(isClient ? '/group-sessions' : '/calendar')
+    router.replace(isClient ? CLIENT_HOME : '/calendar')
   }, [firebaseUser, isClient, loading, router])
 
-  return null
+  return <BrandLoader fullScreen />
 }

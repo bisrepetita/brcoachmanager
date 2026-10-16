@@ -4,6 +4,7 @@ import { getAdminDb, getAdminAuth } from '@/lib/firebase/admin'
 import { findConsumptionRefsInTransaction, removeConsumptionsInTransaction } from '@/lib/server/subscription-admin'
 import { enrollmentsUpdate } from '@/lib/server/group-session-enrollments'
 import { preparePackCreditRefundInTransaction } from '@/lib/server/pack-admin'
+import { restoreReferralFreeSessionInTransaction } from '@/lib/server/referral-admin'
 
 type ServerEnrollment = Record<string, unknown> & { id?: string; clientId?: string; status: string; paymentStatus: string; amountPaid: number; subscriptionId?: string }
 
@@ -64,6 +65,7 @@ export async function POST(req: NextRequest) {
       tx.update(groupSessionRef, { ...enrollmentsUpdate(updated), updatedAt: FieldValue.serverTimestamp() })
       removeConsumptionsInTransaction(tx, consumptionRefs)
       refundPackCredit?.()
+      restoreReferralFreeSessionInTransaction(tx, adminDb, entry)
 
       return entry
     })

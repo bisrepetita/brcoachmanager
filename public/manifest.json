@@ -1,7 +1,7 @@
 {
   "name": "Bis Repetita",
   "short_name": "Bis Repetita",
-  "description": "Agenda interne Bis Repetita — gestion coachs, séances, paiements",
+  "description": "Consulte le planning et réserve tes séances chez Bis Repetita en quelques secondes.",
   "start_url": "/calendar",
   "display": "standalone",
   "orientation": "portrait",
@@ -31,8 +31,16 @@
     {
       "name": "Nouvelle séance",
       "url": "/calendar?action=new",
-      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
     }
   ],
-  "categories": ["productivity", "utilities"]
+  "categories": [
+    "productivity",
+    "utilities"
+  ]
 }

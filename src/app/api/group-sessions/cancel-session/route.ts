@@ -3,6 +3,7 @@ import { FieldValue, type DocumentReference } from 'firebase-admin/firestore'
 import { getAdminDb, getAdminAuth } from '@/lib/firebase/admin'
 import { findConsumptionRefsInTransaction, removeConsumptionsInTransaction } from '@/lib/server/subscription-admin'
 import { preparePackCreditRefundInTransaction } from '@/lib/server/pack-admin'
+import { restoreReferralFreeSessionInTransaction } from '@/lib/server/referral-admin'
 
 type ServerEnrollment = Record<string, unknown> & { status: string; subscriptionId?: string }
 
@@ -64,6 +65,7 @@ export async function POST(req: NextRequest) {
       })
       removeConsumptionsInTransaction(tx, consumptionRefs)
       packRefunds.forEach((r) => r.apply())
+      for (const e of enrollments) if (e.status !== 'cancelled') restoreReferralFreeSessionInTransaction(tx, adminDb, e)
       return packRefunds.length
     })
 

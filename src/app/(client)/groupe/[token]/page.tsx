@@ -1,15 +1,17 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { useParams } from 'next/navigation'
 import { getAuth } from 'firebase/auth'
 import { format } from 'date-fns'
-import { fr } from 'date-fns/locale'
-import { ChevronRight, Building } from 'lucide-react'
-import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
+import { CalendarDays } from 'lucide-react'
 import { firebaseApp } from '@/lib/firebase/config'
 import { useAuth } from '@/lib/hooks/useAuth'
 import type { PrivateSessionView } from '@/types'
+import { BrandLoader } from '@/components/shared/BrandLoader'
+import { ClientPage, SectionTitle, EmptyCard } from '@/components/client/ClientPage'
+import { C, card, primaryButton, secondaryButton, DateBox, coachFirstNames } from '@/components/client/ClientUI'
 
 interface GroupPageData {
   group: { id: string; name: string }
@@ -23,7 +25,6 @@ interface GroupPageData {
 // un visiteur anonyme est invité à se connecter / créer un compte, puis revient ici.
 export default function PrivateGroupLinkPage() {
   const params = useParams<{ token: string }>()
-  const router = useRouter()
   const { firebaseUser, user, loading: authLoading } = useAuth()
   const [data, setData] = useState<GroupPageData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -55,20 +56,13 @@ export default function PrivateGroupLinkPage() {
 
   const redirect = encodeURIComponent(`/groupe/${params.token}`)
 
-  if (loading || authLoading) {
-    return (
-      <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
-        <p style={{ color: '#A09890', fontSize: 14 }}>Chargement…</p>
-      </div>
-    )
-  }
+  if (loading || authLoading) return <BrandLoader fullScreen />
 
   if (notFound || !data) {
     return (
-      <div style={{ padding: 40, textAlign: 'center' }}>
-        <p style={{ color: '#1A1A18', fontSize: 15, fontWeight: 600, margin: 0 }}>Lien invalide ou expiré</p>
-        <p style={{ color: '#A09890', fontSize: 13, margin: '6px 0 0' }}>Demande un nouveau lien à la personne qui te l&apos;a envoyé.</p>
-      </div>
+      <ClientPage title="Lien invalide" subtitle="Ce lien est invalide ou a expiré. Demande un nouveau lien à la personne qui te l'a envoyé.">
+        <Link href="/group-sessions" style={primaryButton}>Voir le planning</Link>
+      </ClientPage>
     )
   }
 
@@ -76,91 +70,87 @@ export default function PrivateGroupLinkPage() {
   const isStaff = !!user?.roles?.some(r => r === 'coach' || r === 'admin')
 
   return (
-    <>
-      <TopBar title={data.group.name} />
-      <TopBarSpacer />
-
-      <div style={{ padding: '12px 16px 100px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <div style={{ background: '#fff', borderRadius: 10, padding: 14, display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-          <Building size={20} color="#7A7570" style={{ flexShrink: 0, marginTop: 2 }} />
-          <div>
-            <p style={{ fontSize: 15, fontWeight: 600, color: '#1A1A18', margin: 0 }}>Séances {data.group.name}</p>
-            <p style={{ fontSize: 13, color: '#7A7570', margin: '4px 0 0' }}>
-              {canBook
-                ? 'Tu fais partie du groupe : ses séances apparaissent aussi dans ton planning. Choisis une séance pour t\'inscrire.'
-                : 'Séances réservées aux membres du groupe.'}
-            </p>
+    <ClientPage
+      title={data.group.name}
+      subtitle={canBook
+        ? 'Tu fais partie du groupe : ses séances apparaissent aussi dans ton planning.'
+        : 'Séances réservées aux membres du groupe.'}
+    >
+      {!firebaseUser && (
+        <div style={{ ...card, background: C.charcoal, color: '#fff' }}>
+          <p style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Inscris-toi aux séances</p>
+          <p style={{ margin: '4px 0 16px', fontSize: 14, color: 'rgba(255,255,255,0.65)' }}>Connecte-toi ou crée ton compte en une minute.</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <Link href={`/signup?redirect=${redirect}` as never} style={{ ...primaryButton, background: C.card, color: C.ink }}>Créer mon compte</Link>
+            <Link href={`/login?redirect=${redirect}` as never} style={{ ...secondaryButton, color: '#fff', border: '1px solid rgba(255,255,255,0.28)' }}>J&apos;ai déjà un compte</Link>
           </div>
         </div>
+      )}
 
-        {!firebaseUser && (
-          <div style={{ background: '#fff', borderRadius: 10, padding: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <p style={{ fontSize: 13, color: '#1A1A18', margin: 0 }}>Pour t&apos;inscrire, connecte-toi ou crée ton compte (1 minute) :</p>
-            <button
-              onClick={() => router.push(`/signup?redirect=${redirect}` as never)}
-              style={{ height: 44, borderRadius: 10, border: 'none', cursor: 'pointer', background: '#1A1A18', color: '#fff', fontSize: 14, fontWeight: 600 }}
-            >
-              Créer mon compte
-            </button>
-            <button
-              onClick={() => router.push(`/login?redirect=${redirect}` as never)}
-              style={{ height: 40, borderRadius: 10, border: '1px solid #E5E1DA', cursor: 'pointer', background: '#fff', color: '#1A1A18', fontSize: 13, fontWeight: 500 }}
-            >
-              J&apos;ai déjà un compte
-            </button>
-          </div>
-        )}
+      {/* Compte connecté sans fiche client : soit un coach/admin qui consulte le lien (cas typique
+          en interne), soit un compte client dont le profil n'a pas été finalisé. */}
+      {firebaseUser && !data.hasClientProfile && (isStaff ? (
+        <div style={{ padding: '12px 16px', borderRadius: 18, background: C.stone, fontSize: 13, lineHeight: 1.45 }}>
+          Tu es connecté avec un compte coach : voici ce que voit un participant. Pour tester l&apos;inscription, ouvre le lien en navigation privée.
+        </div>
+      ) : (
+        <Link href={`/complete-profile?redirect=${redirect}` as never} style={primaryButton}>
+          Finaliser mon profil pour m&apos;inscrire
+        </Link>
+      ))}
 
-        {/* Compte connecté sans fiche client : soit un coach/admin qui consulte le lien (cas typique
-            en interne), soit un compte client dont le profil n'a pas été finalisé. */}
-        {firebaseUser && !data.hasClientProfile && (isStaff ? (
-          <div style={{ padding: '10px 12px', borderRadius: 8, background: '#F0EDE8', color: '#7A7570', fontSize: 13 }}>
-            Tu es connecté avec un compte coach : voici ce que voit un participant. Pour tester l&apos;inscription, ouvre le lien en navigation privée.
-          </div>
-        ) : (
-          <button
-            onClick={() => router.push(`/complete-profile?redirect=${redirect}` as never)}
-            style={{ height: 44, borderRadius: 10, border: 'none', cursor: 'pointer', background: '#1A1A18', color: '#fff', fontSize: 14, fontWeight: 600 }}
-          >
-            Finaliser mon profil pour m&apos;inscrire
-          </button>
-        ))}
+      <SectionTitle aside={data.sessions.length > 0 ? `${data.sessions.length}` : undefined}>Prochaines séances</SectionTitle>
 
-        <p style={{ fontSize: 11, fontWeight: 600, color: '#A09890', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '6px 0 0' }}>
-          Prochaines séances
-        </p>
-
-        {data.sessions.length === 0 ? (
-          <p style={{ fontSize: 13, color: '#A09890', margin: 0 }}>Aucune séance planifiée pour le moment.</p>
-        ) : data.sessions.map(s => {
-          const isFull = s.confirmedCount >= s.maxParticipants
-          const status = s.myStatus === 'confirmed' ? 'Inscrit ✓' : s.myStatus === 'pending_payment' ? 'Paiement en attente' : isFull ? 'Complet' : undefined
-          return (
-            <button
-              key={s.id}
-              onClick={() => router.push((canBook ? `/group-sessions/${s.id}` : `/login?redirect=${redirect}`) as never)}
-              style={{ background: '#fff', borderRadius: 10, padding: '12px 14px', border: 'none', cursor: 'pointer', textAlign: 'left', width: '100%', display: 'flex', alignItems: 'center', gap: 10 }}
-            >
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: 13, color: '#7A7570', margin: 0, textTransform: 'capitalize' }}>
-                  {format(new Date(s.startAt), 'EEEE d MMMM · HH:mm', { locale: fr })}
-                </p>
-                <p style={{ fontSize: 15, fontWeight: 600, color: '#1A1A18', margin: '2px 0 0' }}>{s.title}</p>
-                <p style={{ fontSize: 12, color: '#A09890', margin: '2px 0 0' }}>
-                  {s.coachNames && s.coachNames.length > 0 ? `Avec ${s.coachNames.join(' & ')} · ` : ''}
-                  {s.confirmedCount}/{s.maxParticipants} places · {s.price === 0 ? 'Gratuit' : `Participation ${s.price.toFixed(2)} CHF`}
-                </p>
-              </div>
-              {status && (
-                <span style={{ fontSize: 11, fontWeight: 600, color: s.myStatus === 'confirmed' ? '#2D7A4F' : s.myStatus ? '#B26A00' : '#C0392B', flexShrink: 0 }}>
-                  {status}
-                </span>
-              )}
-              <ChevronRight size={16} color="#C8C4BC" style={{ flexShrink: 0 }} />
-            </button>
-          )
-        })}
-      </div>
-    </>
+      {data.sessions.length === 0 ? (
+        <EmptyCard icon={<CalendarDays size={18} strokeWidth={1.75} />} title="Aucune séance planifiée" text="Les prochaines séances apparaîtront ici." />
+      ) : (
+        <div style={{ ...card, padding: '6px 18px' }}>
+          {data.sessions.map((s, idx) => {
+            const start = new Date(s.startAt)
+            const end = new Date(s.endAt)
+            const spotsLeft = Math.max(0, s.maxParticipants - s.confirmedCount)
+            const reserved = !!s.myStatus
+            const pending = s.myStatus === 'pending_payment'
+            const coaches = coachFirstNames(s.coachNames)
+            return (
+              <Link
+                key={s.id}
+                href={(canBook ? `/group-sessions/${s.id}` : `/login?redirect=${redirect}`) as never}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 14, padding: '12px 0', color: C.ink, textDecoration: 'none',
+                  borderTop: idx > 0 ? `1px solid ${C.line}` : undefined,
+                }}
+              >
+                <DateBox date={start} dark={reserved} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>{format(start, 'HH:mm')} – {format(end, 'HH:mm')}</p>
+                  <p style={{ margin: '1px 0 0', fontSize: 13, color: C.muted, lineHeight: 1.35 }}>
+                    {s.title}{coaches && ` · ${coaches}`}
+                  </p>
+                  <p style={{ margin: '1px 0 0', fontSize: 12, fontWeight: 500, color: s.price === 0 ? C.green : C.muted }}>
+                    {s.price === 0 ? 'Gratuit' : `Participation ${s.price.toFixed(2)} CHF`}
+                    {!reserved && spotsLeft > 0 && spotsLeft <= 3 && <span style={{ color: C.amber }}> · plus que {spotsLeft} place{spotsLeft > 1 ? 's' : ''}</span>}
+                  </p>
+                </div>
+                {reserved ? (
+                  <span style={{ ...pill, background: pending ? C.amberBg : C.charcoal, color: pending ? C.amber : '#fff', border: 'none' }}>
+                    {pending ? 'À payer' : 'Inscrit'}
+                  </span>
+                ) : spotsLeft === 0 ? (
+                  <span style={{ fontSize: 13, color: C.muted, flexShrink: 0 }}>Complet</span>
+                ) : (
+                  <span style={pill}>{canBook ? 'S\'inscrire' : 'Voir'}</span>
+                )}
+              </Link>
+            )
+          })}
+        </div>
+      )}
+    </ClientPage>
   )
+}
+
+const pill: React.CSSProperties = {
+  height: 38, padding: '0 16px', borderRadius: 9999, border: `1px solid ${C.border}`, flexShrink: 0,
+  display: 'inline-flex', alignItems: 'center', fontSize: 14, fontWeight: 600, color: C.ink,
 }

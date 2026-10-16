@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
-import { Save, MessageCircle, Info, CalendarClock } from 'lucide-react'
+import { Save, MessageCircle, Info, CalendarClock, Smartphone } from 'lucide-react'
 import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/button'
 import { db } from '@/lib/firebase/firestore'
@@ -14,6 +14,7 @@ const DEFAULT_CANCELLATION_DEADLINE_HOURS = 24
 export default function AdminSettingsPage() {
   const [template, setTemplate] = useState('')
   const [cancellationDeadlineHours, setCancellationDeadlineHours] = useState(DEFAULT_CANCELLATION_DEADLINE_HOURS)
+  const [clientWhatsappPhone, setClientWhatsappPhone] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -23,6 +24,7 @@ export default function AdminSettingsPage() {
       const data = snap.exists() ? snap.data() : undefined
       setTemplate(data?.whatsappTemplate || DEFAULT_TEMPLATE)
       setCancellationDeadlineHours(data?.groupSessionCancellationDeadlineHours ?? DEFAULT_CANCELLATION_DEADLINE_HOURS)
+      setClientWhatsappPhone(data?.clientWhatsappPhone ?? '')
     }).finally(() => setLoading(false))
   }, [])
 
@@ -32,6 +34,7 @@ export default function AdminSettingsPage() {
       await setDoc(doc(db, 'settings', 'global'), {
         whatsappTemplate: template,
         groupSessionCancellationDeadlineHours: cancellationDeadlineHours,
+        clientWhatsappPhone: clientWhatsappPhone.trim(),
         updatedAt: serverTimestamp(),
       }, { merge: true })
       setSaved(true)
@@ -164,6 +167,31 @@ export default function AdminSettingsPage() {
             />
             <span style={{ fontSize: 14, color: '#1A1A18' }}>heures avant le début</span>
           </div>
+        </section>
+
+        {/* Espace client */}
+        <section>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <Smartphone size={16} color="#7A7570" />
+            <p style={{ fontSize: 12, fontWeight: 600, color: '#7A7570', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>
+              Espace client
+            </p>
+          </div>
+
+          <p style={{ fontSize: 13, color: '#7A7570', margin: '0 0 12px' }}>
+            Numéro WhatsApp joint par la carte « Envie d&apos;une séance privée ? » de l&apos;accueil client. Laisser vide pour masquer la carte.
+          </p>
+
+          <input
+            type="tel"
+            placeholder="+41 79 123 45 67"
+            value={clientWhatsappPhone}
+            onChange={e => setClientWhatsappPhone(e.target.value)}
+            style={{
+              width: '100%', height: 40, borderRadius: 8, border: '1px solid #E5E1DA',
+              padding: '0 10px', fontSize: 14, color: '#1A1A18', background: '#fff', outline: 'none',
+            }}
+          />
         </section>
 
         <div>

@@ -6,6 +6,8 @@ import { getRedirectResult, signInWithPopup, signOut, type AuthError, type User 
 import { doc, getDoc } from 'firebase/firestore'
 import { auth, googleProvider } from '@/lib/firebase/auth'
 import { db } from '@/lib/firebase/firestore'
+import { CLIENT_HOME } from '@/lib/utils/client-routes'
+import { clearReferralCode, readReferralCode } from '@/lib/utils/referral'
 
 const GOOGLE_ERROR_MESSAGES: Record<string, string> = {
   'auth/account-exists-with-different-credential': 'Un compte existe déjà avec cet email via un autre mode de connexion — connecte-toi avec ton mot de passe.',
@@ -24,7 +26,7 @@ async function finishGoogleSignIn(user: User, router: ReturnType<typeof useRoute
     document.cookie = 'br_session=1; path=/; max-age=86400; SameSite=Strict'
     const roles = (userSnap.data()?.['roles'] as string[] | undefined) ?? []
     const isOnlyClient = roles.includes('client') && !roles.includes('coach') && !roles.includes('admin')
-    router.replace((redirectTo || (isOnlyClient ? '/group-sessions' : '/calendar')) as never)
+    router.replace((redirectTo || (isOnlyClient ? CLIENT_HOME : '/calendar')) as never)
     return null
   }
 
@@ -34,14 +36,15 @@ async function finishGoogleSignIn(user: User, router: ReturnType<typeof useRoute
     const res = await fetch('/api/client-signup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-      body: JSON.stringify({ firstName: firstName || 'Client', lastName: rest.join(' ') }),
+      body: JSON.stringify({ firstName: firstName || 'Client', lastName: rest.join(' '), referralCode: readReferralCode() }),
     })
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
       throw new Error(body.error ?? 'Erreur lors de la création du profil.')
     }
+    clearReferralCode()
     document.cookie = 'br_session=1; path=/; max-age=86400; SameSite=Strict'
-    router.replace((redirectTo || '/group-sessions') as never)
+    router.replace((redirectTo || CLIENT_HOME) as never)
     return null
   } catch (err) {
     await signOut(auth).catch(() => {})

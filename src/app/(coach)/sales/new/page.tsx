@@ -15,6 +15,7 @@ import {
   lookupPromoCode, checkUsageLimits, recordRedemption, discountLabel,
 } from '@/lib/services/discount.service'
 import type { Service, Client, ClientGroup, PricingMode, ClientPayment, Discount } from '@/types'
+import { hasReferralFreeSession, REFERRAL_FREE_LABEL } from '@/lib/utils/referral'
 
 const label: React.CSSProperties = {
   fontSize: 11, fontWeight: 600, color: '#A09890',
@@ -28,6 +29,13 @@ const input: React.CSSProperties = {
   padding: '9px 12px', fontSize: 14, color: '#1A1A18',
   background: '#F9F8F6', outline: 'none', boxSizing: 'border-box',
   fontFamily: 'inherit',
+}
+
+// Séance offerte du parrainage consommée par cette séance/vente
+async function markReferralFreeSessionsUsed(distribution: ClientPayment[]): Promise<void> {
+  await Promise.all(distribution
+    .filter(p => p.discountLabel === REFERRAL_FREE_LABEL)
+    .map(p => updateDocById('clients', p.clientId, { referralFreeSessionUsed: true })))
 }
 
 export default function NewSalePage() {
@@ -161,6 +169,12 @@ export default function NewSalePage() {
       const serviceBasePrice = isCustomService ? (parseFloat(customServicePrice) || 0) : selectedService!.price
 
       const distribution: ClientPayment[] = await Promise.all(effectiveClientIds.map(async (cId) => {
+        if (hasReferralFreeSession(clients.find(c => c.id === cId))) {
+          return {
+            clientId: cId, amountDue: 0, amountPaid: 0, paymentStatus: 'offered' as const,
+            originalAmountDue: pricePerClient, discountLabel: REFERRAL_FREE_LABEL,
+          }
+        }
         if (!isCustomService && selectedService?.firstBookingFree && !clients.find(c => c.id === cId)?.hasEverBooked) {
           return {
             clientId: cId, amountDue: 0, amountPaid: 0, paymentStatus: 'offered' as const,
@@ -213,6 +227,7 @@ export default function NewSalePage() {
 
       const toMark = effectiveClientIds.filter(id => !clients.find(c => c.id === id)?.hasEverBooked)
       await Promise.all(toMark.map(id => updateDocById('clients', id, { hasEverBooked: true })))
+      await markReferralFreeSessionsUsed(distribution)
 
       router.replace(`/sales/${ref.id}` as never)
     } catch {
@@ -484,9 +499,21 @@ export default function NewSalePage() {
         {!isCustomService && serviceId && effectiveClientIds.length > 0 && (
           <div style={card}>
             <p style={label}>Remise</p>
+            {effectiveClientIds.some(id => hasReferralFreeSession(clients.find(c => c.id === id))) && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 8 }}>
+                {effectiveClientIds.filter(id => hasReferralFreeSession(clients.find(c => c.id === id))).map(id => {
+                  const c = clients.find(cl => cl.id === id)
+                  return (
+                    <p key={id} style={{ fontSize: 13, color: '#2D7A4F', margin: 0 }}>
+                      {c ? `${c.firstName} ${c.lastName}` : id} — séance offerte (parrainage)
+                    </p>
+                  )
+                })}
+              </div>
+            )}
             {selectedService?.firstBookingFree && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 8 }}>
-                {effectiveClientIds.filter(id => !clients.find(c => c.id === id)?.hasEverBooked).map(id => {
+                {effectiveClientIds.filter(id => !clients.find(c => c.id === id)?.hasEverBooked && !hasReferralFreeSession(clients.find(c => c.id === id))).map(id => {
                   const c = clients.find(cl => cl.id === id)
                   return (
                     <p key={id} style={{ fontSize: 13, color: '#2D7A4F', margin: 0 }}>

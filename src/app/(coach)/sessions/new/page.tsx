@@ -20,6 +20,7 @@ import {
 import { format as formatDate } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { GROUP_SESSION_LEVEL_LABELS, type Service, type Location, type User, type Client, type ClientGroup, type ClientPayment, type Discount, type GroupSessionLevel, type PrivateGroup } from '@/types'
+import { hasReferralFreeSession, REFERRAL_FREE_LABEL } from '@/lib/utils/referral'
 
 // ─── Styles partagés ─────────────────────────────────────────────────────────
 
@@ -129,6 +130,13 @@ function generateOccurrenceDates(
 async function markClientsAsBooked(clientIds: string[], clients: Client[]): Promise<void> {
   const toMark = clientIds.filter(id => !clients.find(c => c.id === id)?.hasEverBooked)
   await Promise.all(toMark.map(id => updateDocById('clients', id, { hasEverBooked: true })))
+}
+
+// Séance offerte du parrainage consommée par cette séance/vente
+async function markReferralFreeSessionsUsed(distribution: ClientPayment[]): Promise<void> {
+  await Promise.all(distribution
+    .filter(p => p.discountLabel === REFERRAL_FREE_LABEL)
+    .map(p => updateDocById('clients', p.clientId, { referralFreeSessionUsed: true })))
 }
 
 const DURATIONS = [30, 45, 50, 60, 75, 90, 120] as const
@@ -549,6 +557,12 @@ function NewSessionForm() {
         // qu'ici, jamais aux séances récurrentes générées ci-dessous (éviterait d'épuiser en
         // quelques semaines une limite d'usage prévue pour une seule séance).
         const paymentDistribution: ClientPayment[] = await Promise.all(finalClientIds.map(async (cId) => {
+          if (hasReferralFreeSession(clients.find(c => c.id === cId))) {
+            return {
+              clientId: cId, amountDue: 0, amountPaid: 0, paymentStatus: 'offered' as const,
+              originalAmountDue: pricePerClient, discountLabel: REFERRAL_FREE_LABEL,
+            }
+          }
           if (selectedService!.firstBookingFree && !clients.find(c => c.id === cId)?.hasEverBooked) {
             return {
               clientId: cId, amountDue: 0, amountPaid: 0, paymentStatus: 'offered' as const,
@@ -585,6 +599,7 @@ function NewSessionForm() {
           })))
 
         await markClientsAsBooked(finalClientIds, clients)
+        await markReferralFreeSessionsUsed(paymentDistribution)
 
         // Notifier les coachs assignés (sauf celui qui crée)
         const otherCoachIds = coachIds.filter(id => id !== user?.id)
@@ -957,9 +972,21 @@ function NewSessionForm() {
         {/* Remise — mode standard uniquement, quand service + client(s) sélectionnés */}
         {!isTraining && !isPublic && serviceId && finalClientIds.length > 0 && (
           <Section title="Remise">
+            {finalClientIds.some(id => hasReferralFreeSession(clients.find(c => c.id === id))) && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 8 }}>
+                {finalClientIds.filter(id => hasReferralFreeSession(clients.find(c => c.id === id))).map(id => {
+                  const c = clients.find(cl => cl.id === id)
+                  return (
+                    <p key={id} style={{ fontSize: 13, color: '#2D7A4F', margin: 0 }}>
+                      {c ? `${c.firstName} ${c.lastName}` : id} — séance offerte (parrainage)
+                    </p>
+                  )
+                })}
+              </div>
+            )}
             {selectedService?.firstBookingFree && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 8 }}>
-                {finalClientIds.filter(id => !clients.find(c => c.id === id)?.hasEverBooked).map(id => {
+                {finalClientIds.filter(id => !clients.find(c => c.id === id)?.hasEverBooked && !hasReferralFreeSession(clients.find(c => c.id === id))).map(id => {
                   const c = clients.find(cl => cl.id === id)
                   return (
                     <p key={id} style={{ fontSize: 13, color: '#2D7A4F', margin: 0 }}>
