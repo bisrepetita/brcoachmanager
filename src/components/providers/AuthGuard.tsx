@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/hooks/useAuth'
 import { ListSkeleton } from '@/components/shared/LoadingSkeleton'
 import { CLIENT_HOME } from '@/lib/utils/client-routes'
+import { BrandLoader } from '@/components/shared/BrandLoader'
 
 interface AuthGuardProps {
   children: React.ReactNode
@@ -40,7 +41,7 @@ export function AuthGuard({ children, requireAdmin = false, requireClient = fals
     }
   }, [firebaseUser, deniedAdmin, denied, redirectTo, loading, router])
 
-  if (loading) return <ListSkeleton count={5} />
+  if (loading) return requireClient ? <BrandLoader fullScreen /> : <ListSkeleton count={5} />
   if (!firebaseUser) return null
   if (deniedAdmin || denied) return null
 

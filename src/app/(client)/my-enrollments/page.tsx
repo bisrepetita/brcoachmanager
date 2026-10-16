@@ -17,6 +17,7 @@ import { findClientPacks, isPackUsable } from '@/lib/services/pack.service'
 import { GROUP_SESSION_ENROLLMENT_STATUS_LABELS, DAY_OF_WEEK_LABELS } from '@/types'
 import type { GroupSession, GroupSessionEnrollmentStatus, ClientSubscription, PrivateSessionView, ClientPack } from '@/types'
 import { AuthGuard } from '@/components/providers/AuthGuard'
+import { BrandLoader } from '@/components/shared/BrandLoader'
 
 // Vue commune aux séances publiques (lecture Firestore) et aux séances de groupe privé (route API)
 interface MyEnrollmentItem {
@@ -182,7 +183,7 @@ function MyEnrollmentsContent() {
 
       {loading || profileLoading ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
-          <p style={{ color: '#A09890', fontSize: 14 }}>Chargement…</p>
+          <BrandLoader />
         </div>
       ) : myEnrollments.length === 0 ? (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '64px 32px', gap: 12 }}>

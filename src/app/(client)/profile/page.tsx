@@ -6,6 +6,7 @@ import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { useAuth } from '@/lib/hooks/useAuth'
 import { useClientProfile } from '@/lib/hooks/useClientProfile'
 import { AuthGuard } from '@/components/providers/AuthGuard'
+import { BrandLoader } from '@/components/shared/BrandLoader'
 
 export default function ClientProfilePage() {
   return (
@@ -34,7 +35,7 @@ function ClientProfileContent() {
 
       <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
         {loading ? (
-          <p style={{ color: '#A09890', fontSize: 14 }}>Chargement…</p>
+          <BrandLoader />
         ) : profile ? (
           <div style={{ background: '#fff', borderRadius: 10, padding: 14, display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#1A1A18', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>

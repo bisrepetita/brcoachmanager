@@ -12,6 +12,7 @@ import { useAuth } from '@/lib/hooks/useAuth'
 import { useCollection } from '@/lib/hooks/useCollection'
 import { findClientPacks, isPackUsable, purchasePackPlan } from '@/lib/services/pack.service'
 import { SUBSCRIPTION_DURATION_UNIT_LABELS, type PackPlan, type ClientPack, type Service } from '@/types'
+import { BrandLoader } from '@/components/shared/BrandLoader'
 
 const chip: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: '#1A1A18', background: '#F0EDE8', padding: '3px 8px', borderRadius: 20 }
 
@@ -72,7 +73,7 @@ export default function ClientPacksPage() {
 
       <div style={{ padding: '12px 16px 100px', display: 'flex', flexDirection: 'column', gap: 10 }}>
         {loading ? (
-          <p style={{ color: '#A09890', fontSize: 14, textAlign: 'center', padding: 40 }}>Chargement…</p>
+          <BrandLoader />
         ) : (
           <>
             {myPacks.map(pack => (

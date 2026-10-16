@@ -22,6 +22,7 @@ import { useClientSettings } from '@/lib/hooks/useClientSettings'
 import {
   C, card, iconCircle, arrowCircle, primaryButton, secondaryButton, hint, pageTitle, DateBox, Pill, coachFirstNames,
 } from '@/components/client/ClientUI'
+import { BrandLoader } from '@/components/shared/BrandLoader'
 
 interface PublicGroupSessionView {
   id: string
@@ -238,7 +239,7 @@ export default function ClientGroupSessionDetailPage() {
   // vérification abonnement/remise/inscription (nécessitent une identité client), juste le prix
   // de base et un bouton qui renvoie vers la connexion.
   if (!authLoading && !firebaseUser) {
-    if (publicLoading) return <Shell onBack={goBack}><p style={loadingText}>Chargement…</p></Shell>
+    if (publicLoading) return <Shell onBack={goBack}><BrandLoader fullScreen /></Shell>
     if (!publicSession) return <Shell onBack={goBack}><p style={loadingText}>Séance introuvable.</p></Shell>
 
     const isFull = publicSession.confirmedCount >= publicSession.maxParticipants
@@ -276,7 +277,7 @@ export default function ClientGroupSessionDetailPage() {
     )
   }
 
-  if (loading || profileLoading) return <Shell onBack={goBack}><p style={loadingText}>Chargement…</p></Shell>
+  if (loading || profileLoading) return <Shell onBack={goBack}><BrandLoader fullScreen /></Shell>
   if (!groupSession) return <Shell onBack={goBack}><p style={loadingText}>Séance introuvable.</p></Shell>
 
   const confirmedCount = groupSession.enrollments.filter(e => e.status !== 'cancelled').length

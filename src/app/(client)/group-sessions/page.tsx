@@ -17,6 +17,7 @@ import { fetchMyPrivateGroupSessions } from '@/lib/services/group-session.servic
 import { BrandLogo } from '@/components/shared/BrandLogo'
 import { C, card, secondaryButton, pageTitle, DateBox, coachFirstNames } from '@/components/client/ClientUI'
 import type { GroupSession, GroupSessionEnrollmentStatus, Service } from '@/types'
+import { BrandLoader } from '@/components/shared/BrandLoader'
 
 // Vue normalisée commune aux deux sources de données : lecture Firestore directe (client connecté,
 // voit `enrollments` en direct) ou route publique redacted (visiteur non connecté — jamais accès
@@ -233,7 +234,7 @@ export default function ClientGroupSessionsPage() {
       {/* Séances de la semaine */}
       <div style={{ ...card, marginTop: 12, padding: '6px 18px' }}>
         {loading ? (
-          <p style={{ margin: 0, padding: '28px 0', textAlign: 'center', fontSize: 14, color: C.muted }}>Chargement…</p>
+          <BrandLoader size={40} />
         ) : weekItems.length === 0 ? (
           <div style={{ padding: '24px 0 18px', textAlign: 'center' }}>
             <p style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Aucune séance cette semaine</p>

@@ -12,6 +12,7 @@ import { findActiveSubscriptionForClient, purchaseSubscriptionPlan } from '@/lib
 import { SUBSCRIPTION_DURATION_UNIT_LABELS, DAY_OF_WEEK_LABELS, type SubscriptionPlan, type ClientSubscription } from '@/types'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
+import { BrandLoader } from '@/components/shared/BrandLoader'
 
 export default function ClientSubscriptionsPage() {
   const router = useRouter()
@@ -68,7 +69,7 @@ export default function ClientSubscriptionsPage() {
 
       <div style={{ padding: '12px 16px 100px', display: 'flex', flexDirection: 'column', gap: 10 }}>
         {loading ? (
-          <p style={{ color: '#A09890', fontSize: 14, textAlign: 'center', padding: 40 }}>Chargement…</p>
+          <BrandLoader />
         ) : (
           <>
             {activeSubscription && (

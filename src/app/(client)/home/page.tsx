@@ -16,6 +16,7 @@ import type { GroupSession, GroupSessionEnrollmentStatus, PrivateSessionView } f
 import { BrandLogo } from '@/components/shared/BrandLogo'
 import { useClientSettings } from '@/lib/hooks/useClientSettings'
 import { C, card, iconCircle, arrowCircle, primaryButton, secondaryButton, pageTitle, DateBox, coachFirstNames } from '@/components/client/ClientUI'
+import { BrandLoader } from '@/components/shared/BrandLoader'
 
 const PRIVATE_SESSION_MESSAGE = 'Bonjour, j\'aimerais réserver une séance privée.'
 
@@ -126,7 +127,7 @@ export default function ClientHomePage() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {loading ? (
-            <div style={{ ...card, height: 170, background: C.soft, opacity: 0.6 }} />
+            <BrandLoader />
           ) : next ? (
             <NextSessionCard session={next} otherCount={myUpcoming.length - 1} />
           ) : (

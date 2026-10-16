@@ -10,6 +10,7 @@ import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
 import { firebaseApp } from '@/lib/firebase/config'
 import { useAuth } from '@/lib/hooks/useAuth'
 import type { PrivateSessionView } from '@/types'
+import { BrandLoader } from '@/components/shared/BrandLoader'
 
 interface GroupPageData {
   group: { id: string; name: string }
@@ -58,7 +59,7 @@ export default function PrivateGroupLinkPage() {
   if (loading || authLoading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
-        <p style={{ color: '#A09890', fontSize: 14 }}>Chargement…</p>
+        <BrandLoader />
       </div>
     )
   }
