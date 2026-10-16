@@ -6,6 +6,8 @@ import { fr } from 'date-fns/locale'
 
 export const C = {
   bg: '#F1F1F0', card: '#FAFAFA', soft: '#E6E6E5', ink: '#1C1C1C', muted: '#6E6E6B', line: '#E3E3E1',
+  // Nuances intermédiaires pour éviter un rendu tout noir / tout blanc
+  charcoal: '#2C2C2A', graphite: '#4A4A47', stone: '#DEDEDB',
   border: '#CFCFCC', green: '#2D7A4F', greenBg: '#E3EFE8', amber: '#B26A00', amberBg: '#FBEFD9',
   red: '#C0392B', redBg: '#F8E3E0',
 }
@@ -39,12 +41,13 @@ export const pageTitle: React.CSSProperties = {
 }
 
 /** Bloc jour (« VEN. 16 ») — noir pour la séance mise en avant, gris clair dans les listes. */
-export function DateBox({ date, dark }: { date: Date; dark?: boolean }) {
-  const size = dark ? { width: 64, height: 68, radius: 14, day: 26 } : { width: 46, height: 50, radius: 10, day: 19 }
+export function DateBox({ date, dark, light }: { date: Date; dark?: boolean; light?: boolean }) {
+  const big = dark || light
+  const size = big ? { width: 64, height: 68, radius: 14, day: 26 } : { width: 46, height: 50, radius: 10, day: 19 }
   return (
     <div style={{
       width: size.width, height: size.height, borderRadius: size.radius, flexShrink: 0,
-      background: dark ? C.ink : C.soft, color: dark ? '#fff' : C.ink,
+      background: light ? C.card : dark ? C.ink : C.soft, color: dark ? '#fff' : C.ink,
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
     }}>
       <span style={{ fontSize: dark ? 11 : 9, fontWeight: 500, textTransform: 'uppercase', opacity: dark ? 0.85 : 0.7, lineHeight: 1.2 }}>

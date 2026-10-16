@@ -144,13 +144,13 @@ export default function ClientHomePage() {
           )}
 
           {whatsappUrl && (
-            <a href={whatsappUrl} target="_blank" rel="noreferrer" className="press-effect" style={{ ...card, ...linkCard }}>
-              <span style={{ ...iconCircle, background: C.soft }}><MessageSquare size={18} strokeWidth={1.75} /></span>
+            <a href={whatsappUrl} target="_blank" rel="noreferrer" className="press-effect" style={{ ...card, ...linkCard, background: C.stone }}>
+              <span style={{ ...iconCircle, background: C.card }}><MessageSquare size={18} strokeWidth={1.75} /></span>
               <span style={{ flex: 1, minWidth: 0 }}>
                 <span style={{ display: 'block', fontSize: 16, fontWeight: 600 }}>Envie d&apos;une séance privée ?</span>
                 <span style={{ display: 'block', fontSize: 13, color: C.muted, marginTop: 2 }}>Écris-nous sur WhatsApp</span>
               </span>
-              <span style={{ ...arrowCircle, background: C.bg }}><ArrowRight size={14} /></span>
+              <span style={{ ...arrowCircle, background: C.card }}><ArrowRight size={14} /></span>
             </a>
           )}
 
@@ -189,13 +189,13 @@ function ReferralCard() {
   }
 
   return (
-    <button onClick={share} disabled={busy} className="press-effect" style={{ ...card, ...linkCard, background: C.ink, color: '#fff', border: 'none', cursor: 'pointer', textAlign: 'left', width: '100%', fontFamily: 'inherit' }}>
-      <span style={{ ...iconCircle, background: '#333333' }}><Share size={18} strokeWidth={1.75} /></span>
+    <button onClick={share} disabled={busy} className="press-effect" style={{ ...card, ...linkCard, background: C.graphite, color: '#fff', border: 'none', cursor: 'pointer', textAlign: 'left', width: '100%', fontFamily: 'inherit' }}>
+      <span style={{ ...iconCircle, background: 'rgba(255,255,255,0.12)' }}><Share size={18} strokeWidth={1.75} /></span>
       <span style={{ flex: 1, minWidth: 0 }}>
         <span style={{ display: 'block', fontSize: 16, fontWeight: 600 }}>Parraine un proche</span>
         <span style={{ display: 'block', fontSize: 13, opacity: 0.75, marginTop: 2 }}>Sa première séance est offerte</span>
       </span>
-      <span style={{ ...arrowCircle, background: '#333333' }}><ArrowRight size={14} /></span>
+      <span style={{ ...arrowCircle, background: 'rgba(255,255,255,0.12)' }}><ArrowRight size={14} /></span>
     </button>
   )
 }
@@ -229,56 +229,59 @@ function NextSessionCard({ session, deadlineHours, otherCount, onCancelled, onPa
   }
 
   return (
-    <div style={card}>
+    <div style={{ ...card, background: C.charcoal, color: '#fff' }}>
+      <p style={{ margin: '0 0 12px', fontSize: 12, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: onDarkMuted }}>
+        Ta prochaine séance
+      </p>
       <Link href={`/group-sessions/${session.id}` as never} style={{ display: 'flex', gap: 14, color: 'inherit', textDecoration: 'none' }}>
-        <DateBox date={session.startAt} dark />
+        <DateBox date={session.startAt} light />
         <div style={{ minWidth: 0, flex: 1 }}>
           <p style={{ margin: 0, fontSize: 18, fontWeight: 600, lineHeight: 1.25 }}>{session.title}</p>
-          <p style={{ margin: '3px 0 0', fontSize: 14, color: C.muted }}>
+          <p style={{ margin: '3px 0 0', fontSize: 14, color: onDarkMuted }}>
             {format(session.startAt, 'HH:mm')} – {format(session.endAt, 'HH:mm')}{coaches && ` · avec ${coaches}`}
           </p>
-          {pending && <p style={{ margin: '6px 0 0', fontSize: 13, fontWeight: 600, color: '#B26A00' }}>Paiement en attente</p>}
+          {pending && <p style={{ margin: '6px 0 0', fontSize: 13, fontWeight: 600, color: '#F2C374' }}>Paiement en attente</p>}
         </div>
       </Link>
 
-      {error && <p style={{ margin: '12px 0 0', fontSize: 13, color: '#C0392B' }}>{error}</p>}
+      {error && <p style={{ margin: '12px 0 0', fontSize: 13, color: '#F4A79C' }}>{error}</p>}
 
       {confirming ? (
         <div style={{ marginTop: 16 }}>
           <p style={{ margin: '0 0 10px', fontSize: 14, fontWeight: 500 }}>Annuler ta réservation ?</p>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={cancel} disabled={busy} style={{ ...primaryButton, flex: 1 }}>
+            <button onClick={cancel} disabled={busy} style={{ ...lightButton, flex: 1 }}>
               {busy ? 'Annulation…' : 'Oui, annuler'}
             </button>
-            <button onClick={() => setConfirming(false)} disabled={busy} style={secondaryButton}>Garder</button>
+            <button onClick={() => setConfirming(false)} disabled={busy} style={ghostButton}>Garder</button>
           </div>
         </div>
       ) : (
         <>
           <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
             {pending ? (
-              <button onClick={onPay} style={{ ...primaryButton, flex: 1 }}>Payer</button>
+              <button onClick={onPay} style={{ ...lightButton, flex: 1 }}>Payer</button>
             ) : (
-              <a href={`/api/group-sessions/calendar/${session.id}`} style={{ ...primaryButton, flex: 1 }}>Ajouter au calendrier</a>
+              <a href={`/api/group-sessions/calendar/${session.id}`} style={{ ...lightButton, flex: 1 }}>Ajouter au calendrier</a>
             )}
             <button
               onClick={() => setConfirming(true)}
               disabled={tooLate || session.viaClassPass}
-              style={{ ...secondaryButton, opacity: tooLate || session.viaClassPass ? 0.4 : 1, cursor: tooLate || session.viaClassPass ? 'default' : 'pointer' }}
+              style={{ ...ghostButton, opacity: tooLate || session.viaClassPass ? 0.4 : 1, cursor: tooLate || session.viaClassPass ? 'default' : 'pointer' }}
             >
               Annuler
             </button>
           </div>
           {session.viaClassPass ? (
-            <p style={hint}>Réservée via ClassPass : l&apos;annulation se fait dans l&apos;app ClassPass.</p>
+            <p style={{ ...hint, color: onDarkMuted }}>Réservée via ClassPass : l&apos;annulation se fait dans l&apos;app ClassPass.</p>
           ) : tooLate && (
-            <p style={hint}>Annulation impossible à moins de {deadlineHours} h du début. Contacte ton coach.</p>
+            <p style={{ ...hint, color: onDarkMuted }}>Annulation impossible à moins de {deadlineHours} h du début. Contacte ton coach.</p>
           )}
         </>
       )}
 
       {otherCount > 0 && (
-        <Link href="/my-enrollments" style={footerLink}>
+        <Link href="/my-enrollments" style={{ ...footerLink, color: '#fff', borderTop: '1px solid rgba(255,255,255,0.12)', marginTop: 14 }}>
           {otherCount === 1 ? 'Voir mon autre réservation' : `Voir mes ${otherCount} autres réservations`}
         </Link>
       )}
@@ -323,6 +326,11 @@ function whatsappLink(phone: string): string | null {
 }
 
 const linkCard: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 14, padding: 16, color: C.ink, textDecoration: 'none' }
+// Boutons et texte secondaire sur la carte anthracite de la prochaine séance
+const onDarkMuted = 'rgba(255,255,255,0.65)'
+const lightButton: React.CSSProperties = { ...primaryButton, background: C.card, color: C.ink }
+const ghostButton: React.CSSProperties = { ...secondaryButton, color: '#fff', border: '1px solid rgba(255,255,255,0.28)' }
+
 const footerLink: React.CSSProperties = {
   display: 'block', textAlign: 'center', padding: '12px 0 4px', marginTop: 4, fontSize: 14, color: C.ink, textDecoration: 'none',
 }
