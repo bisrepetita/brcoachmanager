@@ -6,7 +6,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { doc, onSnapshot, getDoc } from 'firebase/firestore'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { ChevronLeft, Tag, Repeat, MapPin, ChevronDown, ChevronUp, X, Check } from 'lucide-react'
+import { ChevronLeft, Tag, Repeat, MapPin, ChevronDown, ChevronUp, X, Check, Users } from 'lucide-react'
 import { db } from '@/lib/firebase/firestore'
 import { useClientProfile } from '@/lib/hooks/useClientProfile'
 import { useAuth } from '@/lib/hooks/useAuth'
@@ -521,6 +521,7 @@ function SessionHeader({ title, subtitle, startAt, endAt, coachNames, status }: 
   )
 }
 
+// Bande compacte places / prix sous la carte date
 function StatsRow({ confirmedCount, maxParticipants, price, priceLabel = 'Prix' }: {
   confirmedCount: number
   maxParticipants: number
@@ -529,18 +530,19 @@ function StatsRow({ confirmedCount, maxParticipants, price, priceLabel = 'Prix' 
 }) {
   const spotsLeft = Math.max(0, maxParticipants - confirmedCount)
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-      <div style={{ ...card, padding: 16, background: C.stone }}>
-        <p style={statLabel}>Places</p>
+    <div style={{ ...card, background: C.stone, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+      <Users size={16} strokeWidth={1.75} style={{ flexShrink: 0, color: C.muted }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
         {spotsLeft === 0 ? (
-          <p style={{ ...statValue, color: C.red }}>Complet</p>
+          <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: C.red }}>Complet</p>
         ) : (
-          <p style={statValue}>{spotsLeft} <span style={{ fontSize: 14, fontWeight: 500, color: C.muted }}>restante{spotsLeft > 1 ? 's' : ''}</span></p>
+          <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: spotsLeft <= 2 ? C.amber : C.ink }}>
+            {spotsLeft} place{spotsLeft > 1 ? 's' : ''} restante{spotsLeft > 1 ? 's' : ''}
+          </p>
         )}
-        <p style={{ margin: '2px 0 0', fontSize: 12, color: C.muted }}>{confirmedCount}/{maxParticipants} inscrits</p>
+        <p style={{ margin: 0, fontSize: 12, color: C.muted }}>{confirmedCount}/{maxParticipants} inscrits</p>
       </div>
-      <div style={{ ...card, padding: 16, background: C.stone }}>
-        <p style={statLabel}>{priceLabel}</p>
+      <div style={{ textAlign: 'right', flexShrink: 0 }} aria-label={priceLabel}>
         {price}
       </div>
     </div>
@@ -551,15 +553,22 @@ function PriceValue({ finalPrice, originalPrice, label, free }: { finalPrice: nu
   const discounted = originalPrice !== undefined
   return (
     <>
-      <p style={{ ...statValue, color: discounted || free ? C.green : C.ink }}>
-        {free || (discounted && finalPrice === 0) ? 'Gratuit' : `${finalPrice.toFixed(2)} CHF`}
+      <p style={{ margin: 0, fontSize: 17, fontWeight: 600, letterSpacing: '-0.01em', color: discounted || free ? C.green : C.ink }}>
+        {discounted && (
+          <span style={{ fontSize: 13, fontWeight: 500, color: C.muted, textDecoration: 'line-through', marginRight: 6 }}>
+            {formatChf(originalPrice)}
+          </span>
+        )}
+        {free || (discounted && finalPrice === 0) ? 'Gratuit' : `${formatChf(finalPrice)} CHF`}
       </p>
-      {discounted && (
-        <p style={{ margin: '2px 0 0', fontSize: 12, color: C.muted, textDecoration: 'line-through' }}>{originalPrice.toFixed(2)} CHF</p>
-      )}
-      {label && <p style={{ margin: '4px 0 0', fontSize: 12, fontWeight: 600, color: C.green, lineHeight: 1.3 }}>{label}</p>}
+      {label && <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: C.green, maxWidth: 170 }}>{label}</p>}
     </>
   )
+}
+
+/** « 25 » plutôt que « 25.00 », mais « 22.50 » gardé tel quel. */
+function formatChf(price: number): string {
+  return Number.isInteger(price) ? String(price) : price.toFixed(2)
 }
 
 function DescriptionCard({ text }: { text: string }) {
@@ -656,4 +665,3 @@ function Lightbox({ url, onClose }: { url: string; onClose: () => void }) {
 }
 
 const statLabel: React.CSSProperties = { margin: '0 0 6px', fontSize: 12, fontWeight: 500, color: C.muted }
-const statValue: React.CSSProperties = { margin: 0, fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em', lineHeight: 1.15 }
