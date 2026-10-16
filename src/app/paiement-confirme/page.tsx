@@ -1,8 +1,12 @@
 'use client'
 
 import { Suspense, useEffect } from 'react'
+import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { CheckCircle2 } from 'lucide-react'
+import { Check } from 'lucide-react'
+import { BrandLogo } from '@/components/shared/BrandLogo'
+import { C, pageTitle, primaryButton } from '@/components/client/ClientUI'
+import { CLIENT_HOME } from '@/lib/utils/client-routes'
 
 const REDIRECT_DELAY_MS = 2500
 
@@ -31,19 +35,27 @@ function PaiementConfirmeContent() {
   }, [destination, router])
 
   return (
-    <div style={{
-      minHeight: '100dvh', display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center', gap: 16,
-      background: '#F9F8F6', padding: 24, textAlign: 'center',
-    }}>
-      <div style={{ width: 64, height: 64, borderRadius: '50%', backgroundColor: '#EAF7EF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <CheckCircle2 size={30} color="#2D7A4F" />
-      </div>
-      <div>
-        <p style={{ fontSize: 18, fontWeight: 700, color: '#1A1A18', margin: '0 0 6px' }}>Paiement confirmé</p>
-        <p style={{ fontSize: 14, color: '#7A7570', margin: 0, maxWidth: 280 }}>
-          {message}
-        </p>
+    <div className="client-theme" style={{ minHeight: '100dvh', display: 'flex', justifyContent: 'center' }}>
+      <div style={{ width: '100%', maxWidth: 420, padding: 'calc(16px + env(safe-area-inset-top, 0px)) 20px 32px', display: 'flex', flexDirection: 'column' }}>
+        <header style={{ display: 'flex', alignItems: 'center', height: 40 }}>
+          <BrandLogo />
+        </header>
+
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', paddingBottom: 40 }}>
+          <span style={{
+            width: 72, height: 72, borderRadius: 9999, background: C.charcoal, color: '#fff', marginBottom: 24,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <Check size={32} strokeWidth={2.5} />
+          </span>
+          <h1 style={{ ...pageTitle, margin: '0 0 10px' }}>Paiement confirmé</h1>
+          <p style={{ margin: 0, fontSize: 16, color: C.muted, lineHeight: 1.5 }}>{message}</p>
+          {destination ? (
+            <p style={{ margin: '24px 0 0', fontSize: 13, color: C.muted }}>Redirection en cours…</p>
+          ) : (
+            <Link href={CLIENT_HOME} style={{ ...primaryButton, height: 50, marginTop: 28 }}>Retour à l&apos;accueil</Link>
+          )}
+        </div>
       </div>
     </div>
   )

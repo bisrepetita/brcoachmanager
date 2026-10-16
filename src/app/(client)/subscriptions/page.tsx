@@ -3,8 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { where } from 'firebase/firestore'
-import { ChevronLeft, Repeat, Check } from 'lucide-react'
-import { TopBar, TopBarSpacer } from '@/components/layout/TopBar'
+import { Repeat, Check } from 'lucide-react'
 import { useClientProfile } from '@/lib/hooks/useClientProfile'
 import { useAuth } from '@/lib/hooks/useAuth'
 import { useCollection } from '@/lib/hooks/useCollection'
@@ -13,6 +12,8 @@ import { SUBSCRIPTION_DURATION_UNIT_LABELS, DAY_OF_WEEK_LABELS, type Subscriptio
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { BrandLoader } from '@/components/shared/BrandLoader'
+import { ClientPage, SectionTitle, EmptyCard, ErrorNotice } from '@/components/client/ClientPage'
+import { C, card, primaryButton, Pill } from '@/components/client/ClientUI'
 
 export default function ClientSubscriptionsPage() {
   const router = useRouter()
@@ -56,104 +57,80 @@ export default function ClientSubscriptionsPage() {
   const loading = profileLoading || plansLoading || subLoading
 
   return (
-    <>
-      <TopBar
-        title="Abonnements"
-        left={
-          <button onClick={() => router.back()} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
-            <ChevronLeft size={20} color="#1A1A18" />
-          </button>
-        }
-      />
-      <TopBarSpacer />
+    <ClientPage title="Abonnements" subtitle="Viens t'entraîner chaque semaine." back backFallback="/profile">
+      {loading ? (
+        <BrandLoader />
+      ) : (
+        <>
+          {activeSubscription && (
+            <div style={{ ...card, background: C.charcoal, color: '#fff' }}>
+              <p style={{ ...overline, color: 'rgba(255,255,255,0.65)' }}>Ton abonnement</p>
+              <p style={{ margin: 0, fontSize: 20, fontWeight: 600 }}>{activeSubscription.planSnapshot.name}</p>
+              <p style={{ margin: '4px 0 0', fontSize: 14, color: 'rgba(255,255,255,0.65)' }}>
+                Jusqu&apos;au {format(activeSubscription.endAt.toDate(), 'd MMMM yyyy', { locale: fr })} · {activeSubscription.planSnapshot.sessionsPerWeek}x/semaine
+                {activeSubscription.planSnapshot.fixedSlot && ` · ${DAY_OF_WEEK_LABELS[activeSubscription.planSnapshot.fixedSlot.dayOfWeek]} ${activeSubscription.planSnapshot.fixedSlot.startTime}`}
+              </p>
+            </div>
+          )}
 
-      <div style={{ padding: '12px 16px 100px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {loading ? (
-          <BrandLoader />
-        ) : (
-          <>
-            {activeSubscription && (
-              <div style={{ background: '#1A1A18', borderRadius: 12, padding: 16, color: '#fff' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Repeat size={16} />
-                  <p style={{ margin: 0, fontSize: 13, fontWeight: 600, opacity: 0.8 }}>Abonnement actif</p>
-                </div>
-                <p style={{ margin: '8px 0 0', fontSize: 16, fontWeight: 700 }}>{activeSubscription.planSnapshot.name}</p>
-                <p style={{ margin: '4px 0 0', fontSize: 13, opacity: 0.75 }}>
-                  Jusqu&apos;au {format(activeSubscription.endAt.toDate(), 'd MMMM yyyy', { locale: fr })} · {activeSubscription.planSnapshot.sessionsPerWeek}x/semaine
-                  {activeSubscription.planSnapshot.fixedSlot && ` · ${DAY_OF_WEEK_LABELS[activeSubscription.planSnapshot.fixedSlot.dayOfWeek]} ${activeSubscription.planSnapshot.fixedSlot.startTime}`}
-                </p>
-              </div>
-            )}
+          {error && <ErrorNotice>{error}</ErrorNotice>}
 
-            {error && (
-              <div style={{ padding: '10px 12px', borderRadius: 8, background: '#FDECEA', color: '#C0392B', fontSize: 13 }}>
-                {error}
-              </div>
-            )}
-
-            {plans.length === 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '64px 32px', gap: 12 }}>
-                <Repeat size={44} color="#A09890" strokeWidth={1.5} />
-                <p style={{ fontSize: 16, fontWeight: 600, color: '#1A1A18', margin: 0 }}>Aucun abonnement disponible</p>
-                <p style={{ fontSize: 14, color: '#7A7570', margin: 0, textAlign: 'center' }}>
-                  Contacte ton coach pour plus d&apos;informations.
-                </p>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {plans.map(plan => {
-                  const isThisOne = activeSubscription?.planId === plan.id
-                  return (
-                    <div key={plan.id} style={{ background: '#fff', borderRadius: 12, padding: 14, border: isThisOne ? '1px solid #1A1A18' : '1px solid #EEEAE3' }}>
-                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-                        <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: '#1A1A18' }}>{plan.name}</p>
-                        <p style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#1A1A18', fontFamily: 'monospace', flexShrink: 0 }}>
-                          {plan.price.toFixed(2)} CHF
-                        </p>
-                      </div>
-                      {plan.description && (
-                        <p style={{ margin: '4px 0 0', fontSize: 13, color: '#7A7570' }}>{plan.description}</p>
-                      )}
-                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-                        <span style={{ fontSize: 11, fontWeight: 600, color: '#1A1A18', background: '#F0EDE8', padding: '3px 8px', borderRadius: 20 }}>
-                          {plan.durationValue} {SUBSCRIPTION_DURATION_UNIT_LABELS[plan.durationUnit]}
-                        </span>
-                        <span style={{ fontSize: 11, fontWeight: 600, color: '#1A1A18', background: '#F0EDE8', padding: '3px 8px', borderRadius: 20 }}>
-                          {plan.sessionsPerWeek}x/semaine
-                        </span>
-                        {plan.fixedSlot && (
-                          <span style={{ fontSize: 11, fontWeight: 600, color: '#1A1A18', background: '#F0EDE8', padding: '3px 8px', borderRadius: 20 }}>
-                            {DAY_OF_WEEK_LABELS[plan.fixedSlot.dayOfWeek]} {plan.fixedSlot.startTime}
-                          </span>
-                        )}
-                      </div>
-
-                      {isThisOne ? (
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 40, borderRadius: 10, background: '#E8F3EE', color: '#2D7A4F', fontSize: 13, fontWeight: 600, marginTop: 12 }}>
-                          <Check size={14} /> Abonnement en cours
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => handlePurchase(plan.id)}
-                          disabled={!!activeSubscription || busyPlanId === plan.id}
-                          style={{
-                            width: '100%', height: 40, borderRadius: 10, border: 'none', marginTop: 12,
-                            cursor: activeSubscription ? 'not-allowed' : 'pointer',
-                            background: activeSubscription ? '#D5D1C9' : '#1A1A18', color: '#fff', fontSize: 13, fontWeight: 600,
-                          }}
-                        >
-                          {busyPlanId === plan.id ? 'Chargement...' : activeSubscription ? 'Déjà un abonnement actif' : !firebaseUser ? 'Se connecter pour souscrire' : 'Souscrire'}
-                        </button>
-                      )}
+          {plans.length === 0 ? (
+            <EmptyCard
+              icon={<Repeat size={18} strokeWidth={1.75} />}
+              title="Aucun abonnement disponible"
+              text="Contacte ton coach pour plus d'informations."
+            />
+          ) : (
+            <>
+              {activeSubscription && <SectionTitle>Les formules</SectionTitle>}
+              {plans.map(plan => {
+                const isThisOne = activeSubscription?.planId === plan.id
+                return (
+                  <div key={plan.id} style={{ ...card, outline: isThisOne ? `1.5px solid ${C.charcoal}` : undefined, outlineOffset: -1.5 }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                      <p style={{ margin: 0, fontSize: 17, fontWeight: 600, lineHeight: 1.3 }}>{plan.name}</p>
+                      <p style={{ margin: 0, fontSize: 20, fontWeight: 600, letterSpacing: '-0.02em', flexShrink: 0 }}>
+                        {formatChf(plan.price)} <span style={{ fontSize: 13, fontWeight: 500, color: C.muted }}>CHF</span>
+                      </p>
                     </div>
-                  )
-                })}
-              </div>
-            )}
-          </>
-        )}
-      </div>
-    </>
+                    {plan.description && <p style={{ margin: '6px 0 0', fontSize: 14, color: C.muted, lineHeight: 1.45 }}>{plan.description}</p>}
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 12 }}>
+                      <Pill tone="neutral">{plan.durationValue} {SUBSCRIPTION_DURATION_UNIT_LABELS[plan.durationUnit]}</Pill>
+                      <Pill tone="neutral">{plan.sessionsPerWeek}x/semaine</Pill>
+                      {plan.fixedSlot && <Pill tone="neutral">{DAY_OF_WEEK_LABELS[plan.fixedSlot.dayOfWeek]} {plan.fixedSlot.startTime}</Pill>}
+                    </div>
+
+                    {isThisOne ? (
+                      <div style={{ ...primaryButton, marginTop: 16, background: C.greenBg, color: C.green, gap: 6, cursor: 'default' }}>
+                        <Check size={15} strokeWidth={2.5} /> Abonnement en cours
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => handlePurchase(plan.id)}
+                        disabled={!!activeSubscription || busyPlanId === plan.id}
+                        style={{
+                          ...primaryButton, width: '100%', marginTop: 16,
+                          ...(activeSubscription ? { background: C.soft, color: C.muted, cursor: 'not-allowed' } : {}),
+                        }}
+                      >
+                        {busyPlanId === plan.id ? 'Chargement…' : activeSubscription ? 'Déjà un abonnement actif' : !firebaseUser ? 'Se connecter pour souscrire' : 'Souscrire'}
+                      </button>
+                    )}
+                  </div>
+                )
+              })}
+            </>
+          )}
+        </>
+      )}
+    </ClientPage>
   )
 }
+
+/** « 120 » plutôt que « 120.00 », mais « 99.50 » gardé tel quel. */
+function formatChf(price: number): string {
+  return Number.isInteger(price) ? String(price) : price.toFixed(2)
+}
+
+const overline: React.CSSProperties = { margin: '0 0 8px', fontSize: 12, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' }
