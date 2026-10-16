@@ -7,7 +7,8 @@ import { doc, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase/firestore'
 import { useClientProfile } from '@/lib/hooks/useClientProfile'
 import { AuthGuard } from '@/components/providers/AuthGuard'
-import { Button } from '@/components/ui/button'
+import { BrandLogo } from '@/components/shared/BrandLogo'
+import { C, primaryButton, pageTitle, inputStyle, Field } from '@/components/client/ClientUI'
 import { CLIENT_HOME } from '@/lib/utils/client-routes'
 
 export default function CompleteProfilePage() {
@@ -53,43 +54,36 @@ function CompleteProfileContent() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6" style={{ background: 'var(--color-background)' }}>
-      <div className="w-full max-w-sm">
-        <div className="mb-10 text-center">
-          <img
-            src="/icons/icon-512.png"
-            alt="Bis Repetita"
-            className="w-14 h-14 mb-5 mx-auto"
-            style={{ borderRadius: 'var(--radius-lg)' }}
-          />
-          <h1 className="text-[20px] font-semibold tracking-tight" style={{ color: 'var(--color-text-primary)' }}>
-            Encore une étape
-          </h1>
-          <p className="text-[13px] mt-1" style={{ color: 'var(--color-text-tertiary)' }}>
-            Ton coach a besoin de ton numéro de téléphone pour te contacter si besoin.
-          </p>
-        </div>
+    <div className="client-theme" style={{ minHeight: '100dvh', display: 'flex', justifyContent: 'center' }}>
+      <div style={{ width: '100%', maxWidth: 420, padding: 'calc(16px + env(safe-area-inset-top, 0px)) 20px 32px', display: 'flex', flexDirection: 'column' }}>
+        <header style={{ display: 'flex', alignItems: 'center', height: 40 }}>
+          <BrandLogo />
+        </header>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-1.5">
-            <label htmlFor="phone" className="block text-[13px] font-medium" style={{ color: 'var(--color-text-secondary)' }}>Téléphone</label>
+        <h1 style={{ ...pageTitle, margin: '40px 0 8px' }}>
+          {profile?.firstName ? `Bienvenue ${profile.firstName}` : 'Encore une étape'}
+        </h1>
+        <p style={{ margin: '0 0 28px', fontSize: 15, color: C.muted, lineHeight: 1.5 }}>
+          Ton coach a besoin de ton numéro de téléphone pour te contacter si besoin.
+        </p>
+
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <Field id="phone" label="Téléphone">
             <input
               id="phone" type="tel" autoComplete="tel" required autoFocus value={phone} onChange={(e) => setPhone(e.target.value)}
-              placeholder="+41 79 000 00 00"
-              style={{ borderRadius: 'var(--radius-input)', borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}
-              className="w-full h-12 px-4 border text-[14px] outline-none transition-colors focus:border-[var(--color-border-strong)] placeholder:text-[var(--color-text-disabled)]"
+              placeholder="+41 79 000 00 00" style={inputStyle}
             />
-          </div>
+          </Field>
 
           {error && (
-            <div className="px-4 py-3" style={{ borderRadius: 'var(--radius-md)', background: 'var(--color-danger-bg)', border: '1px solid #FBBCB8' }}>
-              <p className="text-[13px] leading-snug" style={{ color: 'var(--color-danger)' }}>{error}</p>
+            <div style={{ padding: '12px 16px', borderRadius: 16, background: C.redBg, color: C.red, fontSize: 14, lineHeight: 1.4 }}>
+              {error}
             </div>
           )}
 
-          <Button type="submit" size="lg" loading={loading} className="w-full mt-2">
-            Continuer
-          </Button>
+          <button type="submit" disabled={loading} style={{ ...primaryButton, height: 52, marginTop: 4, opacity: loading ? 0.7 : 1 }}>
+            {loading ? 'Enregistrement…' : 'Continuer'}
+          </button>
         </form>
       </div>
     </div>
