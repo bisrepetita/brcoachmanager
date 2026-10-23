@@ -23,10 +23,16 @@ export async function sendEmail(opts: {
     return false
   }
   try {
-    await resend.emails.send({
+    // Resend ne lève pas d'exception sur un refus de l'API (adresse invalide, quota…) : il
+    // renvoie { error } — sans ce contrôle, l'échec passerait totalement inaperçu.
+    const { error } = await resend.emails.send({
       from: FROM, to: opts.to, subject: opts.subject, html: opts.html,
       attachments: opts.attachments,
     })
+    if (error) {
+      console.error('[email] envoi refusé:', opts.subject, '→', opts.to, error)
+      return false
+    }
     return true
   } catch (err) {
     console.error('[email] échec envoi:', opts.subject, '→', opts.to, err)

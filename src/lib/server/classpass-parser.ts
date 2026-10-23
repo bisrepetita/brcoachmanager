@@ -58,7 +58,11 @@ function parseClassPassDateTime(str: string): Date | null {
 // "Nouveau(elle)/Client(e) existant(e)") et l'email. L'initiale de l'avatar est parfois séparée du
 // prénom par un espace (ex: "G Giovanni"), parfois collée sans aucun séparateur (ex: "GGiovanni",
 // observé en production) — les deux cas sont gérés.
-function extractMember(block: string): { name: string; email: string } | null {
+// La mention "Nouveau(elle) client(e)" / "Client(e) existant(e)" arrive collée à l'email sans
+// espace (ex: "x@gmail.comNouveau(elle) client(e)", observé en production) — sans séparateur
+// ajouté ici, EMAIL_RE l'avale dans le domaine et l'email devient invalide.
+function extractMember(rawBlock: string): { name: string; email: string } | null {
+  const block = rawBlock.replace(/(Nouveau\(elle\) client\(e\)|Client\(e\) existant\(e\))/gi, ' $1 ')
   const emailMatch = block.match(EMAIL_RE)
   if (!emailMatch) return null
   const email = emailMatch[0]
