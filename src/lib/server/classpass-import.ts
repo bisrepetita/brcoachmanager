@@ -83,6 +83,11 @@ export async function importClassPassBooking(
     })
   }
 
+  // Lu AVANT l'inscription : toute séance collective où le client est déjà inscrit (passée ou à
+  // venir, via ClassPass ou en direct) signifie qu'il connaît déjà le studio.
+  const isFirstVisit = (await adminDb.collection('groupSessions')
+    .where('enrolledClientIds', 'array-contains', clientId).limit(1).get()).empty
+
   const enrollResult = await adminDb.runTransaction(async (tx) => {
     const snap = await tx.get(groupSessionRef)
     if (!snap.exists) return { ok: false as const, reason: 'seance_supprimee' }
@@ -125,7 +130,8 @@ export async function importClassPassBooking(
     `${parsed.memberName} inscrit(e) via ClassPass à "${parsed.serviceTitle}" (${parsed.bookingId})`, groupSessionRef.id, clientId)
 
   // Le membre a déjà reçu sa confirmation de ClassPass — pas de doublon de confirmation, seulement
-  // la notification coach habituelle et, côté membre, les infos d'accès que ClassPass n'a pas.
+  // la notification coach habituelle et, côté membre, les infos d'accès que ClassPass n'a pas
+  // (uniquement à sa première venue).
   await Promise.all([
     notifyGroupSessionBooking(adminDb, {
       groupSessionId: groupSessionRef.id,
@@ -136,7 +142,7 @@ export async function importClassPassBooking(
       paymentLabel: 'Payé (ClassPass)',
       baseUrl,
     }),
-    notifyClassPassAccessInfo(adminDb, { groupSessionId: groupSessionRef.id, clientId, baseUrl }),
+    isFirstVisit && notifyClassPassAccessInfo(adminDb, { groupSessionId: groupSessionRef.id, clientId, baseUrl }),
   ])
 
   return { status: 'matched', importId: importRef.id, groupSessionId: groupSessionRef.id, clientId }
