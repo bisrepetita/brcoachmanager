@@ -682,7 +682,22 @@ function NewSessionForm() {
       router.replace(`/sessions/${firstSessionId}` as never)
     } catch (e) {
       console.error(e)
-      setError('Erreur lors de la création. Réessaie.')
+      // Trace dans le journal admin : sans elle, l'erreur réelle (règle Firestore, champ invalide…)
+      // n'est visible que dans la console du navigateur du coach.
+      const code = (e as { code?: string })?.code
+      const message = e instanceof Error ? e.message : String(e)
+      if (user) logActivity({
+        userId: user.id, userFirstName: user.firstName, userLastName: user.lastName,
+        action: 'session_create_failed',
+        description: `${code ? `[${code}] ` : ''}${message}`.slice(0, 500),
+        meta: {
+          mode: isTraining ? 'training' : isPublic ? 'public' : 'standard',
+          serviceId, locationId, recurrence, clientMode,
+          clientIds: finalClientIds.join(','), coachIds: coachIds.join(','),
+          date, startTime, duration: String(duration),
+        },
+      })
+      setError(`Erreur lors de la création. Réessaie.${code ? ` (${code})` : ''}`)
       setSaving(false)
     }
   }, [canSubmit, isTraining, isPublic, selectedPrivateGroup, sponsorAmount, title, description, maxParticipants, price, selectedService, date, startTime, duration, selectedClientIds, selectedGroupId, clientMode, groups, coachIds, locationId, serviceId, isIndependent, recurrence, recurrenceEndType, recurrenceCount, router, user, finalClientIds, clientDiscounts, appliedPromoCode, clients])

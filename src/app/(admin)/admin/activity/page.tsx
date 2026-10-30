@@ -26,6 +26,7 @@ interface ActivityLog {
 
 const ACTION_LABELS: Record<ActivityAction, string> = {
   session_created: 'Séance créée',
+  session_create_failed: 'Échec de création de séance',
   session_edited: 'Séance modifiée',
   session_cancelled: 'Séance annulée',
   session_deleted: 'Séance supprimée',
@@ -51,6 +52,7 @@ const ACTION_LABELS: Record<ActivityAction, string> = {
 
 const ACTION_COLORS: Record<ActivityAction, string> = {
   session_created: '#2D7A4F',
+  session_create_failed: '#C0392B',
   session_edited: '#4285F4',
   session_cancelled: '#C0392B',
   session_deleted: '#7A7570',

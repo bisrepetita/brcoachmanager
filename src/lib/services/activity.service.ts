@@ -3,6 +3,7 @@ import { db } from '@/lib/firebase/firestore'
 
 export type ActivityAction =
   | 'session_created'
+  | 'session_create_failed'
   | 'session_edited'
   | 'session_cancelled'
   | 'session_deleted'
