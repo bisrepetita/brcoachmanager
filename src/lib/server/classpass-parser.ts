@@ -65,7 +65,10 @@ function extractMember(rawBlock: string): { name: string; email: string } | null
   const block = rawBlock.replace(/(Nouveau\(elle\) client\(e\)|Client\(e\) existant\(e\))/gi, ' $1 ')
   const emailMatch = block.match(EMAIL_RE)
   if (!emailMatch) return null
-  const email = emailMatch[0]
+  // Filet de sécurité si la mention n'a pas exactement le libellé attendu (le cas "client existant"
+  // est passé à travers le remplacement ci-dessus en production : "x@gmail.comClient…") : une
+  // extension de domaine est en minuscules, une majuscule collée juste après marque le mot suivant.
+  const email = emailMatch[0].replace(/(\.[a-z]{2,})[A-Z][\w.-]*$/, '$1')
   const nameTokens = block
     .slice(0, emailMatch.index)
     .replace(/Nouveau\(elle\) client\(e\)/gi, '')
